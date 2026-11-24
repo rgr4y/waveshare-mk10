@@ -563,3 +563,17 @@ Verification
 - Follow-up
   - `fb_gc9107t` stays loaded on `spi0.1` until reboot. `KeyboardDevice` was last started without the chip; restart it once checked.
   - The wifi shim lets the app relaunch `wpa_supplicant`/`udhcpc` (Wi-Fi drop on app start); that's a LilAlpine change.
+
+## 2026-11-24 (late): fb_gc9107 validated from power-on; GC9307 handed off
+
+- Outcome
+  - All ten key panels run on the reconstructed `fb_gc9107t` from power-on. The earlier dark panels came from runtime rebinding (no reset GPIO), which also failed with the vendor driver.
+  - Temporary validation setup on the device:
+    - The u-boot `setargs_mmc` has `initcall_blacklist=fbtft_driver_module_init` appended. This also blocks fb_gc9307, so the info screen is dark.
+    - `/etc/init.d/mk10-fbtft` (default runlevel) loads `/lib/modules/5.4.61/extra/fb_gc9107t.ko`.
+    - The test module exposes `init_module`, because the blacklist name matches every `FBTFT_REGISTER_DRIVER` init, the module's included. The first boot attempt hit exactly that.
+  - Env backups: `backups/` (gitignored) and `/root/mk10-bak/` on the device (raw p2/p3 plus text, sha `78c862b6…`).
+  - Handoff written for the GC9307 reconstruction: `docs/handoff-fb-gc9307.md`.
+- Verification
+  - dmesg shows the blacklist at 0.35 s and fb1..fb10 = spi0.1..spi1.6 on `fb_gc9107t` at 14.3 s. Rob confirmed all ten keys lit.
+  - Not done: rotations other than 0, a persistent install via LilAlpine, restoring the env.
