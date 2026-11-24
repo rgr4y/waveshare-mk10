@@ -503,3 +503,63 @@ Verification
 - IMU: none. The only I2C device on the T113 is an `atsha204a` (0x64), and there are no IIO devices.
 - Device IP: it is now `10.0.1.48` (udhcpc). The app's ssh default, the checklist, the scope doc and `tools/fbcap.py` are updated. Historical logs in `docs/theme-format.md` still say 10.0.0.10.
 - Phase 3a was split into 8 beads (`waveshare-mk10-phase-3a-pv0`; `.beads/` is gitignored). MCP stays off by default and is offered in a first-run dialog. The typing plan prefers the device (`keyboardInput` not yet probed).
+
+## 2026-11-24 (later still): phase 3a beads, typing plan, HID test, device IP
+
+- Outcome
+  - **Phase 3a planned, nothing built.** Epic `waveshare-mk10-phase-3a-pv0` with 8 chained beads (.1 → .8, only .1 ready). `.beads/` is gitignored, so they exist only on this machine.
+    - .1 device link (one long-lived serial owner, reconnect, test)
+    - .2 USB push goes through the link
+    - .3 key events on connect, opt-in (getInfo, then reload of the last-pushed theme)
+    - .4 menu-bar tray, close-to-tray, single instance
+    - .5 first-run onboarding dialog asking about MCP (off by default)
+    - .6 start at login
+    - .7 read-only permission status in Settings
+    - .8 docs
+  - **Decisions:**
+    - Reload on connect only targets the theme the app last pushed, since nothing on the device reports the active theme and a reload rewrites `config.json`.
+    - Key events are opt-in because getInfo blanks the panel for about 4 s.
+    - Permission prompts at first use go to 3b.
+    - The stats feed goes to Phase 4.
+  - **Permissions:** no George-style wizard. Status checks are passive and prompts fire only on an explicit click. Never probe screen capture. Saved memory `george-permissions-reference.md`.
+  - **Typing plan:** prefer device-side typing (`qmk_string` is verified on device). `keyboardInput` is untested, so probe it with an empty-params call once the serial port is free. macOS Accessibility is only a fallback for text the device can't type. ScreenKey's Accessibility prompt when typing is recorded in the docs.
+  - **HID launch keys on macOS:** tested via a temporary theme pushed over serial.
+    - Worked: Search (Siri/Spotlight), Mission Control, Launchpad.
+    - Did nothing: WWW Home, Mail, Calculator, My Computer, Control Panel, Assistant. Whether macOS ignored them or the firmware never sent them is not determined.
+    - QMK has no keycode for AL Internet Browser (0x196). URLs and apps stay with the Mac app (`shell.openExternal`, no permission needed).
+    - The device was switched back to `defaultTheme.Theme` and `hidtest.Theme` deleted.
+  - **IMU:** none on the board.
+  - **Device IP:** now `10.0.1.48`. DHCP via `udhcpc`; nothing is static on the device.
+- Changed
+  - Commits: `746a9cd` (docs: Accessibility note on typing), `13d6a04` (HID results in `docs/theme-format.md`, IP swapped in `app/lib/session.js`, `docs/mk10-studio-validation.md`, `docs/screenkey-rewrite-scope.md`, `tools/fbcap.py`).
+  - The 3a bead descriptions also use the new IP.
+- Verification
+  - 19/19 tests pass after the IP change.
+  - HID results are Rob's hands-on observation on macOS; Karabiner-EventViewer was not used.
+  - Not verified:
+    - `keyboardInput` (no probe yet).
+    - Any 3a code (none written).
+- Follow-up
+  - Rob's saved studio Device popover still holds `root@10.0.0.10` and must be changed, or ssh pushes time out. `~/.ssh/config` line 116 still lists the old IP (not touched).
+  - Quit studio and ScreenKey, then run the `keyboardInput` probe.
+  - Pick the next build: 3a first (recommended), or 3c then 3d.
+  - Rob asked not to `open` PROGRESS.md until this thread is done.
+
+## 2026-11-24 (evening): fb_gc9107 driver review, build and device test; atsha204a
+
+- Outcome
+  - Reviewed another agent's reconstruction of `fb_gc9107.c` (`/tmp/waveshare-kernel/`) against the vendor vmlinux.
+    - Init sequence, set_addr_win (+2/+3), set_var and the `fbtft_display` descriptor all match.
+    - One fix: the post-sleep-out delay is `mdelay(20)` (20 x `__const_udelay(1000*UDELAY_MULT)`, no 0x11 replay), not `mdelay(2)` x21.
+  - Committed the fixed driver plus Kconfig/Makefile entries on chonk: `~/build/mk10/kernel` (Rob's fork `rgr4y/tina-t113-linux-5.4-new`), commit `50e671d`. Not pushed. The clone is shallow.
+  - Device test: unbound `spi0.1` from the built-in driver, insmod `fb_gc9107t.ko` (renamed test build). It drives `fb1` correctly under the vendor app (Rob's visual check).
+    - Ten GC9107 key panels: `spi0.1`-`spi1.6` = `fb1`-`fb10`. The GC9307 on `spi0.0` is `fb11`.
+  - atsha204a: `KeyboardDevice` runs `Key(11) verify OK` at every start. With the chip unbound, the app still started. Mainline `atmel-sha204a` is RNG only (master adds `otp`) and has no `/dev/atsha204a`.
+  - Vendor firmware upgrades are inert on LilAlpine: no swupdate, no `swu_*` env, and the app runs no `fw_setenv`. Rob keeps `/data/DeviceUpgradeFirmware`.
+  - Handoff written: `docs/handoff-atsha204a-hwrng.md` (mainline atmel-sha204a as modules, temporary unbind, hwrng test).
+- Verification
+  - `W=1` cross-build clean (Bootlin gcc 7.3, vendor `.config` from IKCFG). Module vermagic equals the vendor's.
+  - Not verified: full kernel build or link, rotations other than 0, all ten panels on our driver.
+- Follow-up
+  - `fb_gc9107t` stays loaded on `spi0.1` until reboot. `KeyboardDevice` was last started without the chip; restart it once checked.
+  - The wifi shim lets the app relaunch `wpa_supplicant`/`udhcpc` (Wi-Fi drop on app start); that's a LilAlpine change.
