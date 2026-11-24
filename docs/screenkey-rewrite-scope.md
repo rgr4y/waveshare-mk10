@@ -100,10 +100,10 @@ assets itself on load). Details are in `docs/theme-format.md` § Device verifica
   `mainwindow.cpp:565`). Verified on MK10: one frame per press and one per release, `{col,row,pressed}`,
   after `getInfo` switches the device to "V2" mode [verified, 2026-11-24].
 - **`getInfo` blanks fb0 and kills the video player** [verified]. Closing the port doesn't undo it.
-  A V1 reload (cmd 2) restores the layout, even while still in V2 [verified]. Untested: whether
-  getInfo → reload keeps V2 key events flowing with the layout up. That is the remaining risk for host actions.
-- To verify: run `python3 tools/mklisten.py --getinfo --reload --seconds 60` and press keys. The layout
-  should come back about 1 s in; key frames should still print. Needs Rob.
+  A V1 reload (cmd 2) restores the layout, even while still in V2 [verified]. getInfo → reload
+  keeps V2 key events flowing with the layout up [verified 2026-11-24]. Host actions are unblocked.
+- App recipe: open port, send `getInfo`, then reload the active theme, then listen. Presses during the ~3.5 s
+  reload are delivered late, not lost.
 
 ## 5. Stack: Electron
 
@@ -154,9 +154,8 @@ v2 option: a replacement renderer on Alpine (fb0 + fbtft panels directly, own JS
 
 ## Open risks
 
-1. **Key events + layout together.** Key events flow after `getInfo` [verified]. `getInfo` blanks the layout
-   [verified], and reload restores it [verified]. Unknown whether key events still flow after that reload. If they don't, host actions need
-   another path (VIA raw HID on `FF60`?).
+1. ~~**Key events + layout together.**~~ Solved: getInfo → V1 reload gives the layout and key events [verified].
+   Watch for: anything else that sends getInfo (vendor app) blanks the layout again.
 2. ~~Theme switch over protocol~~ is solved: V1 cmd 2 [verified].
 3. **Sensor push wire format** (`CMD_VALUE_SEND_SYSTEM_DATA_TO_DEVICE` numeric id + payload) is unknown.
    Phase 4 needs either a capture of the vendor app (USB sniff) or disassembly.

@@ -391,3 +391,6 @@ Follow-up
 - Run `python3 tools/mklisten.py --getinfo --reload --seconds 60` and press keys.
   If events keep arriving: Phase 3 is a listener in the app plus a theme reload.
   If not: look at VIA raw HID, or keep the layout blank and draw with cmd 100.
+- Rob ran `mklisten.py --getinfo --reload`: key events keep flowing after getInfo plus a V1 reload, with the layout up.
+  An fb0 capture showed the stock layout with a live clock, and the player was running. Presses during the ~3.5 s
+  reload are queued and delivered in order. The Phase 3 gate is cleared, and the device is back on its stock theme.

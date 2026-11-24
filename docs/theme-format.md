@@ -199,7 +199,8 @@ Side effects (all verified, device was in factory V1 state after restart):
 - `row` and `col` match the theme's key items (row 0..1, col 0..4). Pages are not reported; the host tracks the current page itself.
 - Frame ids count down from 0xFFFFFFFF (4294967287, 4294967286, ...). Host request ids count up from small numbers, so a collision looks unlikely.
 - Knob and secondary-panel events were not exercised.
-- Not yet tested: whether events still arrive after getInfo followed by a V1 reload, which brings the layout back. Run `mklisten.py --getinfo --reload --seconds 60` and press keys.
+- **getInfo followed by a V1 reload keeps events flowing with the layout up** (`mklisten.py --getinfo --reload`, verified 2026-11-24). Afterwards, an fb0 capture showed the stock layout with a live clock, and `videoplayerinterfaceAPP` was running.
+- Presses made during the reload are queued, not dropped. 22 frames that the run printed as arriving between 1.2 s and 4.5 s all came in together at 4.47 s, in press order, about 3.5 s after the reload was sent.
 
 ### Theme reload over the protocol (verified, MK10)
 - Command: **V1 binary frame, cmd = 2** (`CMD_VALUE_SET_DEVICE_RELOAD`), plain UTF-8 theme path as payload, no length prefix. Value 2 is from the Terminus-MK20 / MK20Control docs and consistent with the moc enum order of `CMD_VALUE` strings in `KeyboardDevice` (FIND_DEVICE, SEND_SYSTEM_DATA_TO_DEVICE, SET_DEVICE_RELOAD, ... SEND_JSON). The vendor demo source only defines 100/101, it has no V1 commands. The ctlhost doc's V1 table (2 = IMAGE) and 21-byte header do **not** match; the Terminus layout does:
