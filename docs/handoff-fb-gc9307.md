@@ -1,4 +1,4 @@
-# Handoff: reconstruct fb_gc9307 (MK10 info screen) from the vendor kernel
+# Handoff: reconstruct fb_gc9307 (MK10 large screen) from the vendor kernel
 
 Date: 2026-11-24. For the agent that reconstructed `fb_gc9107.c` (your work is in `/tmp/waveshare-kernel/`).
 
@@ -19,7 +19,7 @@ Date: 2026-11-24. For the agent that reconstructed `fb_gc9107.c` (your work is i
 
 ## Goal
 
-Write `drivers/staging/fbtft/fb_gc9307.c` for the 240×296 info screen. It should match the vendor binary function for function. Then build it as a test module and validate it on the device (Rob checks the screen visually).
+Write `drivers/staging/fbtft/fb_gc9307.c` for the 240×296 large screen (the ten GC9107s are the screenkeys). It should match the vendor binary function for function. Then build it as a test module and validate it on the device (Rob checks the screen visually).
 
 ## Facts (verified 2026-11-24)
 
@@ -84,16 +84,49 @@ In the vendor kernel's normal setup it registers as `fb11`, after the ten GC9107
 
 ## Test (device, `ssh root@10.0.1.48`)
 
-Current state: the device boots with both vendor fbtft drivers blocked on the cmdline. `/etc/init.d/mk10-fbtft` loads `fb_gc9107t.ko` for the ten keys. `spi0.0` is **unbound and never initialised this boot**, so loading your module there is a clean power-on test. Runtime *re*binding is not a valid test: panels re-initialised after another driver ran came up dark, even with the vendor driver.
+**State as of handoff: the vendor drivers are back.** The u-boot env is the original, and `mk10-fbtft` is not in any runlevel. Before you test, ask Rob to switch the device into validation mode and reboot:
+```sh
+fw_setenv setargs_mmc "$(fw_printenv -n setargs_mmc) initcall_blacklist=fbtft_driver_module_init"
+rc-update add mk10-fbtft default
+reboot
+```
+- In that mode, `/etc/init.d/mk10-fbtft` loads `fb_gc9107t.ko` for the ten screenkeys, and `spi0.0` stays **unbound and never initialised that boot**. Loading your module there is a clean power-on test.
+- To leave validation mode, restore `setargs_mmc` from `/root/mk10-bak/uboot-env-20261124.txt` and `rc-update del mk10-fbtft default`.
+- Runtime *re*binding is not a valid test. Panels re-initialised after another driver had run came up dark, even with the vendor driver.
 
 ```sh
 scp fb_gc9307t.ko root@10.0.1.48:/tmp/
 ssh root@10.0.1.48 'readlink /sys/bus/spi/devices/spi0.0/driver; insmod /tmp/fb_gc9307t.ko; dmesg | tail -5; ls /sys/bus/spi/devices/spi0.0/graphics; cat /proc/fb'
 ```
 - Expected: `fbN: fb_gc9307t frame buffer, 240x296`. N is probably `fb11`; check it.
-- The vendor app (`keyboard-device`) draws the info screen through a framebuffer. If the fb number differs from the vendor's fb11, say so; don't remap anything.
-- Then ask Rob to look at the info screen. Is the image right-side up, at the correct offset, in the right colours (bgr), with no garbage at the edges?
+- The vendor app (`keyboard-device`) draws the large screen through a framebuffer. If the fb number differs from the vendor's fb11, say so; don't remap anything.
+- Then ask Rob to look at the large screen. Is the image right-side up, at the correct offset, in the right colours (bgr), with no garbage at the edges?
 - If the app doesn't redraw it, ask Rob before restarting `keyboard-device`. A restart drops Wi-Fi for a few seconds, so run anything that spans one detached and write its output to a file.
+
+## Boot logo: `bootlogo=` module parameter (Rob's request)
+
+U-Boot paints `mk10.bin` on the large screen. The kernel blanks it at about 0.9 s: fbtft-core pushes the zeroed framebuffer to the panel when it registers the fb. The goal is to keep a logo on screen until the app draws.
+
+- **Hook.** Set `.fbtftops.update_display` in your `fbtft_display`.
+  - `fbtft-core.c:506` copies it over the default, and `fbtft-core.c:832` calls it once for the whole screen inside `fbtft_register_framebuffer`.
+  - The default `fbtft_update_display` is `static` (`fbtft-core.c:240`), so not callable. Your version has to do `set_addr_win(par, 0, start, xres-1, end)` plus `write_vmem(par, offset, len)` itself. Read the core's version and copy its logic, minus the timing/debug parts.
+- **`bootlogo=<path>`.** Load a raw image into `info->screen_buffer` before that first update, using `kernel_read_file_from_path()`.
+  - It is exported GPL in this 5.4 tree (`fs/exec.c:985`), and the symbol name is in the vendor vmlinux. The module is GPL.
+  - Accept only a file of exactly `width*height*2` bytes. Otherwise log it and fall back.
+  - `mk10.bin` is raw RGB565 little-endian, 240×296, 142,080 bytes, which matches the fb exactly, so copy it as is. The path on the device is `/mnt/SDCARD/mk10.bin` (FAT p1); Rob's custom version is installed there.
+  - This only works as a module loaded after `localmount` (the `mk10-fbtft` service is). A built-in driver probes before the filesystem is mounted.
+- **No parameter.** Consider skipping the first full update so the panel keeps what U-Boot drew.
+  - That needs the init sequence to leave GRAM intact. Check SLPOUT, DISPON and the vendor registers in `docs/GC9307_Manual.pdf` before relying on it.
+  - If it can't be guaranteed, keep the vendor behaviour (blank) as the default.
+- Report which of these you implemented, and what Rob saw at boot.
+
+## References
+- `docs/GC9307_Manual.pdf`: the GC9307 controller datasheet (V1.01, 190 pages).
+  - §6.1 command list.
+  - §6.2.18 MADCTL (36h), for decoding `set_var`.
+  - §6.4 vendor registers: FEh/EFh inter-register enable, F0h–F3h gamma, E8h frame rate.
+  - Sleep-out timing: wait 5 ms before the next command, 120 ms before SLPIN. If the vendor's delays are shorter, keep the vendor's and note it.
+- `docs/GC9307.pdf`: **do not use it for geometry.** It is a 1.47" 172×320 module. The MK10 panel is 240×296 (from the vendor `fbtft_display`).
 
 ## Rules
 - Allowed device writes: `/tmp/fb_gc9307t.ko`, and `insmod`/`rmmod fb_gc9307t`. Nothing else.
