@@ -9,6 +9,7 @@ import { QWriter } from './qdatastream.js'
 import {
   decodeTheme, encodeTheme, formatQtJson, decodeControlData, encodeControlData,
   pages, listKeys, getItem, setKeyTitle, setKeyImage, setBackgroundVideo,
+  editableActionFields, setKeyActionField,
 } from './theme.js'
 
 const REAL = '/Applications/ScreenKeyMacOS.app/Contents/MacOS/theme/MK10/defaultTheme.Theme'
@@ -109,4 +110,37 @@ test('unmodified json keeps original text even if it is not Qt-formatted', () =>
   assert.deepEqual([...decodeTheme(out).assets.keys()], ['/a', '/b'])
   t.json.a = 2
   assert.equal(decodeTheme(encodeTheme(t)).jsonText, '{\n    "a": 2\n}\n')
+})
+
+test('real theme: action field edit changes only that value, keeps type/order, survives encode', { skip }, () => {
+  const t = decodeTheme(load())
+  let found
+  t.json.pages.forEach((p, pi) => (p.items ?? []).forEach((it) => {
+    if (!found && it.controlData && decodeControlData(it.controlData).type === 'openWeb') found = { pi, it }
+  }))
+  assert.ok(found, 'stock theme has an openWeb key')
+  const { pi, it } = found
+  const before = decodeControlData(it.controlData)
+  assert.ok(editableActionFields(before).includes('Url'))
+  assert.ok(!editableActionFields(before).includes('type'))
+  setKeyActionField(t, pi, Number(it.row), Number(it.col), 'Url', 'https://example.com/x')
+  const re = decodeControlData(decodeTheme(encodeTheme(t)).json.pages[pi].items.find((x) => x.row === it.row && x.col === it.col && x.controlData).controlData)
+  assert.deepEqual(re.fields.map(([k, v]) => [k, v.type]), before.fields.map(([k, v]) => [k, v.type]))
+  for (const [k, v] of re.fields) {
+    assert.equal(v.value, k === 'Url' ? 'https://example.com/x' : before.fields.find(([q]) => q === k)[1].value)
+  }
+  assert.throws(() => setKeyActionField(t, pi, Number(it.row), Number(it.col), 'type', 'openApp'), /not editable/)
+  assert.throws(() => setKeyActionField(t, pi, Number(it.row), Number(it.col), 'nope', 'x'), /not editable/)
+})
+
+test('real theme: openPage pageName must name an existing page', { skip }, () => {
+  const t = decodeTheme(load())
+  let found
+  t.json.pages.forEach((p, pi) => (p.items ?? []).forEach((it) => {
+    if (!found && it.controlData && decodeControlData(it.controlData).type === 'openPage') found = { pi, it }
+  }))
+  if (!found) return
+  const { pi, it } = found
+  assert.throws(() => setKeyActionField(t, pi, Number(it.row), Number(it.col), 'pageName', 'no-such-page'), /no page named/)
+  setKeyActionField(t, pi, Number(it.row), Number(it.col), 'pageName', t.json.pages[0].pageName)
 })

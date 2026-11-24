@@ -67,6 +67,12 @@ function buildServer(session, { log, pushOpts }) {
       return ok({ page, row, col, title })
     })
 
+  tool('set_key_action_field', `Change the value of one existing text field of a key's action (e.g. Url of openWeb, pageName of openPage, password of password). Only fields listed in the key's action.editable (get_page) can change; the action type and field set never change. ${LAYOUT}`,
+    { page, row, col, field: z.string(), value: z.string() }, ({ page, row, col, field, value }) => {
+      session.setKeyActionField(page, row, col, field, value)
+      return ok({ page, row, col, field, value })
+    })
+
   tool('set_key_image', `Set a key image from a file path (any format ffmpeg reads; cover-cropped to 128x128 PNG) or base64 PNG/JPG data. Give exactly one. ${LAYOUT}`,
     { page, row, col, imagePath: z.string().optional(), imageBase64: z.string().optional() },
     async ({ page, row, col, imagePath, imageBase64 }) => {

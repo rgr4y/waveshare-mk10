@@ -132,7 +132,6 @@ async function mcpToggle(on, port = settings.mcp.port) {
     const { startMcp } = await import('./lib/mcp.js')
     mcp = await startMcp(session, { port: Number(port), host: '127.0.0.1', log, pushOpts })
     url = mcp.url
-    log(`MCP listening on ${url}`)
   }
   settings.mcp = { enabled: !!on, port: Number(port) }
   send('mcp', url)
@@ -162,6 +161,7 @@ function registerIpc() {
   h('summary', () => session.summary())
   h('asset', asset)
   h('setKeyTitle', (p, r, c, t) => session.setKeyTitle(p, r, c, t))
+  h('setKeyActionField', (p, r, c, f, v) => session.setKeyActionField(p, r, c, f, v))
   h('setKeyImage', setKeyImage)
   h('setBackgroundVideo', setBackgroundVideo)
   h('push', push)

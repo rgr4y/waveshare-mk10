@@ -137,6 +137,26 @@ export function setKeyTitle(theme, pageIndex, row, col, title) {
   needItem(theme, pageIndex, row, col).title = String(title)
 }
 
+// Action (controlData) fields that may be edited: existing QString fields only, never added, removed or
+// reordered (firmware ignores actions with extra/misordered fields). `type` and fields tied to other
+// data (keyString pairs with the int keycode; iconPath/parentDescription are editor metadata) are locked.
+const LOCKED_ACTION_FIELDS = new Set(['type', 'iconPath', 'parentDescription', 'keyString', 'AISoundControlKeyword'])
+export const editableActionFields = (cd) =>
+  cd.fields.filter(([k, v]) => v.type === T_STRING && !LOCKED_ACTION_FIELDS.has(k)).map(([k]) => k)
+
+export function setKeyActionField(theme, pageIndex, row, col, field, value) {
+  const it = needItem(theme, pageIndex, row, col)
+  if (!it.controlData) throw new Error(`key page ${pageIndex} row ${row} col ${col} has no action`)
+  const cd = decodeControlData(it.controlData)
+  if (!editableActionFields(cd).includes(field)) {
+    throw new Error(`action field "${field}" is not editable (editable: ${editableActionFields(cd).join(', ') || 'none'})`)
+  }
+  const v = String(value)
+  if (field === 'pageName' && !theme.json.pages.some((p) => p.pageName === v)) throw new Error(`no page named "${v}"`)
+  cd.fields.find(([k]) => k === field)[1].value = v
+  it.controlData = encodeControlData(cd)
+}
+
 // True if any item field (or controlData string field) points at the asset key
 // (exact path, or a `paths` directory containing it). Undecodable controlData counts as referenced.
 function isReferenced(theme, key) {

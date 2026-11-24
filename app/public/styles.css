@@ -184,5 +184,6 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 .kv-row { display: grid; grid-template-columns: 96px 1fr; gap: 8px; }
 .kv dt { color: var(--muted); font-size: 12px; }
 .kv dd { margin: 0; word-break: break-all; user-select: text; }
+.kv dd input { padding: 3px 6px; }
 .device { border-top: 1px solid var(--line); margin-top: 14px; }
 .log { flex: 1; margin: 0; padding: 8px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; font: 11px/1.4 ui-monospace, Menlo, monospace; color: var(--muted); overflow: auto; white-space: pre-wrap; word-break: break-all; user-select: text; min-height: 80px; }

@@ -410,3 +410,17 @@ Changed
 
 Verification
 - fb0 captures after pushing 42/77/13, 5/95/50 and 0/0/0: the text changed, the rings did not.
+
+## 2026-11-24 — mk10-studio: edit action values
+
+Outcome
+- The key inspector shows the existing **text** fields of a key's action as inputs (Url, description, pageName, password…).
+  The type, field set and order never change: firmware ignores actions with extra or misordered fields (Terminus-MK20).
+  Locked: `type`, `iconPath`, `parentDescription`, `keyString` (paired with the int `keycode`), `AISoundControlKeyword`.
+  `pageName` must name an existing page. MCP: new tool `set_key_action_field`; `get_page` lists `action.editable`.
+- Dropped the duplicate "MCP listening" log line.
+
+Verification
+- 19 tests pass; the new ones check that only the edited value changes, that type and order survive encoding, and that the guards reject bad edits.
+  Lint is clean and both layout greps come back empty. Screenshot of the inspector with editable Url/description checked.
+- Not run: pushing an edited action to the device and pressing the key (validation checklist §2b).

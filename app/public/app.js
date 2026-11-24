@@ -176,17 +176,27 @@ function renderSecondary() {
   }))
 }
 
+// [key, value, editable] rows; editable fields come from the main process (existing text fields only)
 function actionRows(a) {
   if (!a) return [['type', '(none)']]
-  const hide = new Set(['iconPath', 'parentDescription', 'AISoundControlKeyword'])
-  return Object.entries(a).filter(([k, v]) => !hide.has(k) && v !== '').map(([k, v]) => [k, String(v)])
+  const hide = new Set(['iconPath', 'parentDescription', 'AISoundControlKeyword', 'editable'])
+  const edit = new Set(a.editable ?? [])
+  return Object.entries(a).filter(([k, v]) => !hide.has(k) && (v !== '' || edit.has(k)))
+    .map(([k, v]) => [k, String(v), edit.has(k)])
 }
 
-function fillKv(dl, rows) {
-  dl.replaceChildren(...rows.map(([k, v]) => {
-    const r = tpl('tpl-kv')
+function fillKv(dl, rows, onEdit) {
+  // keep a field the user is typing in: don't rebuild under an active input
+  if (dl.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') return
+  dl.replaceChildren(...rows.map(([k, v, editable]) => {
+    const r = tpl(editable && onEdit ? 'tpl-kv-edit' : 'tpl-kv')
     r.querySelector('dt').textContent = k
-    r.querySelector('dd').textContent = v
+    const input = r.querySelector('input')
+    if (input) {
+      input.value = v
+      input.dataset.field = k
+      input.addEventListener('change', () => onEdit(k, input.value))
+    } else r.querySelector('dd').textContent = v
     return r
   }))
 }
@@ -203,7 +213,8 @@ function renderInspector() {
     $('key-pos').textContent = `page ${ui.page} · row ${sel.row} col ${sel.col}`
     if (document.activeElement !== $('key-title')) $('key-title').value = key.title ?? ''
     fillImg($('key-thumb'), key.path || key.paths)
-    fillKv($('key-action'), actionRows(key.action))
+    fillKv($('key-action'), actionRows(key.action), (field, value) =>
+      run(window.mk10.setKeyActionField(ui.page, sel.row, sel.col, field, value)))
   }
   if (vid) fillKv($('video-info'), [['asset', base(vid.path ?? '(none)')], ['size', '640 × 256']])
 }

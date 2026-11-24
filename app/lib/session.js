@@ -5,8 +5,8 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import {
-  decodeTheme, encodeTheme, decodeControlData,
-  setKeyTitle, setKeyImage, setBackgroundVideo,
+  decodeTheme, encodeTheme, decodeControlData, editableActionFields,
+  setKeyTitle, setKeyImage, setBackgroundVideo, setKeyActionField,
 } from './theme.js'
 import { toKeyPng, toDeviceMp4 } from './media.js'
 import { Device } from './device.js'
@@ -25,9 +25,9 @@ const num = (v) => (v === undefined || v === '' ? undefined : Number(v))
 function actionOf(it) {
   if (!it.controlData) return undefined
   try {
-    const { type, fields } = decodeControlData(it.controlData)
-    const pick = Object.fromEntries(fields.filter(([k]) => k !== 'type').map(([k, v]) => [k, v.value]))
-    return { type, ...pick }
+    const cd = decodeControlData(it.controlData)
+    const pick = Object.fromEntries(cd.fields.filter(([k]) => k !== 'type').map(([k, v]) => [k, v.value]))
+    return { type: cd.type, ...pick, editable: editableActionFields(cd) }
   } catch (e) {
     return { type: 'undecodable', error: e.message }
   }
@@ -115,6 +115,12 @@ export class Session extends EventEmitter {
     this.need()
     setKeyTitle(this.theme, page, row, col, title)
     this.touch('keyTitle')
+  }
+
+  setKeyActionField(page, row, col, field, value) {
+    this.need()
+    setKeyActionField(this.theme, page, row, col, field, value)
+    this.touch('keyAction')
   }
 
   // input: path to any image ffmpeg can read, or a Buffer that is already a 128x128 PNG

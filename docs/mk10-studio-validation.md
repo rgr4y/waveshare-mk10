@@ -29,6 +29,16 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 - [ ] Click the video area. The inspector shows video info.
 - [ ] `Esc` (outside a text box) clears the selection.
 
+## 2b. Edit: action values
+
+- [ ] An openWeb key (page 12, row 0 col 1) shows `Url` and `description` as text boxes. `type` stays plain text.
+- [ ] Change the Url and press Enter. The dirty dot appears. Reselecting the key shows the new value.
+- [ ] Hotkey keys: `keyString` is not editable (it is paired with the int `keycode`).
+- [ ] openPage `pageName` set to a name that doesn't exist: you get the error "no page named …", and the theme is unchanged.
+- [ ] MCP `set_key_action_field` makes the same edits. `get_page` lists the editable fields under `action.editable`.
+- [ ] Device: change an openPage key's `pageName` to another child page, then push. Pressing the key opens that page.
+- [ ] Device and ScreenKey host: an edited openWeb Url opens the new URL. This needs a host app that runs actions, either vendor ScreenKey after the push or our Phase 3.
+
 ## 3. Edit: title
 
 - [ ] Change a key title in the inspector and press Enter or tab out. The preview updates, and the dirty dot appears.
@@ -105,7 +115,7 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 
 ## Not in scope yet (don't fail these)
 
-- Key actions are read-only. Editing actions, and running host actions (URL or app on press), is Phase 3.
+- Action **values** are editable (existing text fields only). Changing the action type or adding actions, and running host actions (URL or app on press), is Phase 3.
 - Widget editing and the live stats feed are Phase 4. The stats feed protocol is verified; the app doesn't send it yet.
 - Adding or removing pages and keys.
 - Animated GIF keys are replaced with a static image.
