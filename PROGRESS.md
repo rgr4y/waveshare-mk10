@@ -577,3 +577,66 @@ Verification
 - Verification
   - dmesg shows the blacklist at 0.35 s and fb1..fb10 = spi0.1..spi1.6 on `fb_gc9107t` at 14.3 s. Rob confirmed all ten keys lit.
   - Not done: rotations other than 0, a persistent install via LilAlpine, restoring the env.
+
+## 2026-11-24 (night): custom boot logos, vendor drivers restored, own-kernel prep started
+
+- Outcome
+  - Installed Rob's custom logos on the device card (`/mnt/SDCARD`, partition 1): `mk10.bin` (sha `a0f36d60…`) and `bootlogo.bmp` (sha `1bc1ad05…`), both read back after copy. Originals are in `/root/mk10-bak/` as `mk10.bin.orig` and `bootlogo.bmp.orig`.
+  - Reverted the temporary validation setup from the previous entry:
+    - `setargs_mmc` restored from the backup (sorted `fw_printenv` matches the backup).
+    - `mk10-fbtft` removed from the default runlevel. The script and the `.ko` stay on the device.
+    - After a reboot, no blacklist on the cmdline. `fb1`-`fb10` are on the vendor `fb_gc9107`, `fb11` is on `fb_gc9307`, and `keyboard-device` started.
+  - The first reboot attempt never ran (a backgrounded job died with the ssh session). It was re-sent with `nohup`.
+  - `docs/handoff-fb-gc9307.md` reworded: GC9307 is the large screen, the ten GC9107s are the screenkeys. Added:
+    - validation-mode steps;
+    - a `bootlogo=` module-parameter plan (custom `update_display`, `kernel_read_file_from_path()`, 142,080-byte RGB565 file, module loaded after `localmount`);
+    - datasheet references (`GC9307_Manual.pdf` useful; `GC9307.pdf` is a 172×320 module and not usable for geometry).
+  - Why the logo vanishes at boot: fbtft-core pushes the empty framebuffer when the GC9307 registers at about 0.9 s. Hypothesis only: the logo shown was `mk10.bin` on the large screen.
+  - Kernel prep for an own-kernel boot image (drivers built in, zram init back in userland) started:
+    - Applied `50e671d` as a patch with `git am` onto chonk `~/workspace/waveshare-mk10/kernel`.
+    - Pulled `build-modules.sh` to a scratch dir and wrote a scratch `mkbootimg.py`.
+    - Plan: vendor config plus built-in `FB_TFT_GC9107`/`FB_TFT_GC9307`, mainline `HW_RANDOM`/`CRYPTO_DEV_ATMEL_SHA204A`; Android v0 repack keeping the vendor load addresses (kernel `0x40008000`, ramdisk `0x41000000`).
+  - Rob's rule: never touch chonk `~/build`. My `~/build/mk10` work from earlier collided with Rob's use of it. I stopped the in-progress kernel build and removed my `kernel-build` worktree and `kbuild.log` there, plus the lenny staging dir `~/mk10-kbuild`. Saved memory `chonk-build-dir-off-limits.md`.
+  - `wlan0` is on `rtl8821cu`. `rtl8710bu` registers but nothing binds, so the tree lacking it costs nothing.
+- Changed
+  - Commit `376bed4` (GC9307 handoff, not pushed).
+  - Device: logos on `/mnt/SDCARD`; the env restore was done with `fw_setenv`.
+- Verification
+  - Logo files and env restored (checked as above); post-reboot driver bindings checked.
+  - Not verified:
+    - whether the custom `mk10.bin` is painted by U-Boot (Rob saw something briefly);
+    - the own-kernel build and boot image (not built);
+    - the zram init (not yet moved into userland).
+- Follow-up
+  - Waiting on the agent's GC9307 commit (`modtest9307/fb_gc9307t.ko` built, uncommitted) before building the kernel.
+  - Userland changes: switch the GC9107/GC9307 modules to built-in and bring back the zram init.
+  - Work only in `~/workspace/waveshare-mk10/kernel` on chonk, not `~/build`.
+
+## 2026-11-24 (late): userland for own kernel, boot.img repack, p4 splice
+
+- Outcome
+  - chonk kernel tree `35ca7acae`: `mk10/mkbootimg.py` repacks the stock p4 boot.img with a new zImage. It keeps the header, the 12-byte ramdisk and the load addresses, recomputes the id, and refuses anything over 6,451,200 B. The other session's `mk10/build-kernel.sh` (`72c405fec`) calls it.
+  - The other session built the kernel (chonk `0d8d542e3`; `mk10-boot-p4.img` sha `a32355d2b074`, 5,056,512 B) and modules (63, tgz `0678792b06d0`). Built in: GC9107, GC9307 (`4a924d4c1`, Makefile after GC9107, so fb1-fb10 are the keys and fb11 the large screen), HW_RANDOM, ATMEL_SHA204A, SWAP, ZSMALLOC, ZRAM, CRYPTO_LZ4. Both are copied into LilAlpine `boards/MK10-T113/` (gitignored). On the Mac: boot.img hash matches, 63 modules in `extra/`, and `modules.builtin` lists zram, fb_gc9107 and fb_gc9307.
+  - LilAlpine:
+    - `403cb44`: `features.zram` true; README says panel/hwrng/zram are built in.
+    - `d15709c`: optional `MK10_BOOT_IMG` (default `boards/MK10-T113/boot.img`) spliced into p4 by `pack.sh`, with `card.boot` geometry (start 108008, 12600 sectors).
+    - `6646ea7`: `fetch.sh` no longer copies stock modules over ours when our kernel is in use.
+- Verification
+  - mkbootimg round trip: stock kernel repacked matches the first 5,433,344 B of the p4 dump; the vendor id check passes.
+  - The p4 splice block was run on a sparse fake card: it wrote and read back, rejected an oversize image, and left everything before p4 unchanged.
+  - The copied boot.img header has load addresses kernel 0x40008000, ramdisk 0x41000000, tags 0x40000100, name t113-pro.
+  - Rob flashed a LilAlpine image with the own kernel (`#12 SMP PREEMPT Tue Nov 24 17:49:14 CST 2026`) and it boots:
+    - `fb1`-`fb10` are `fb_gc9107` (`spi0.1`-`spi1.6`) and `fb11` is `fb_gc9307` 240×296 (`spi0.0`), all built in, at 0.35-0.85 s.
+    - hwrng: `rng_current` is `2-0064`, bound to `atmel-sha204a`; `/dev/hwrng` reads.
+    - zram0 is 96M lz4 swap at priority 100.
+    - 8821cu loads and `wlan0` links.
+    - The cmdline has no `initcall_blacklist`, and the old `mk10-fbtft` service and `fb_gc9107t.ko` are absent.
+  - The vendor app did not draw on this kernel. Writing noise to `fb1`/`fb11` showed on the panels, so the drivers were fine; the U-Boot logo also stayed up on the large screen until then.
+    - Root cause: KeyboardDevice opens `/dev/atsha204a` and calls `ioctl(fd, 0x50, {slot 11, 32-byte constant})` (function `0xc7214`, caller `0x31b38`). Only a return value of 0 continues startup; anything else shows "Check HardWare Error" on fb0 and the app stops there. The mainline `atmel-sha204a` creates no such node.
+    - Fix: `drivers/misc/mk10-atsha-compat.c` creates `/dev/atsha204a` and returns 0 for ioctl `0x50` without talking to the chip. Chonk `3f12a86a1` adds it (with the build-kernel.sh drift allowlist), its Kconfig `MK10_ATSHA_COMPAT`, and `=y` in `kernel-builtin.fragment`; it compiles clean with W=1.
+    - Tested as an out-of-tree module (sha `0cae1bbd…`): after `insmod` and a `keyboard-device` restart, the app opened `/dev/disp`, `g2d`, `ion` and the panel framebuffers, and Rob saw the screens come alive. The MK10 launch key typed into the Mac, so the HID path works too.
+- Follow-up
+  - The built-in GC9307 probes before `/mnt/SDCARD` is mounted, so its logo parameter can't read `mk10.bin`. The large screen blanks until the app draws.
+  - Until the next image, the device loads the stand-in as a module (`extra/mk10-atsha-compat.ko`, listed in `/etc/modules`). The rebuilt kernel (boot.img `47849bde4ca5`, modules tgz `d7d42638c280`, 63 .ko) has it built in and is staged in LilAlpine `boards/MK10-T113/`; no image built yet.
+  - At boot, i2c2 logs `incomplete xfer (dev addr: 0x64)` about seven times. Hypothesis: the mainline driver's wake pulse, which the chip NACKs; the RNG works anyway.
+  - The kernel warns that the backup GPT is not at the end of the card (7864319 != 61067263). Check whether growfs fixes it on the next boot.
