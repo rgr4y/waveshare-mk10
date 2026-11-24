@@ -148,9 +148,39 @@ v2 option: a replacement renderer on Alpine (fb0 + fbtft panels directly, own JS
 |---|---|---|---|
 | 1 | Core spike | Node codec + framing + device client + CLI; edited theme renders on device; bg video swap | **done 2026-11-24** |
 | 2 | MVP editor | Electron shell: open `.Theme` (stock included), page list, panel preview, key image/title, bg video replace, save, push. MCP server toggle | **done 2026-11-24**: in-app MCP → live UI update → push verified on the device. The renderer buttons (title box, Replace…, drag-drop) are not yet clicked by hand. |
-| 3 | Actions | Key event listener; host actions (URL, app, shell cmd); hotkey via existing `keyboard` controlData; page navigation editing | 2–4 days |
-| 4 | Parity | Info-panel widgets editing; sensor feed (V1 cmd 1, format known); weather; boot logo export | 1–2 weeks |
-| 5 | Polish | Profiles, theme import/merge, packaging/signing, auto-start | 3–5 days |
+| 3a | Resident app | Menu-bar tray, close-to-tray, Dock icon only while the editor is open; one long-lived serial owner (reconnect on unplug; push, events and stats share it); getInfo → reload on connect; MCP always on; start at login; permission onboarding (see "macOS permissions") | 0.5–1 day |
+| 3b | Actions | Key event listener → run the key's action from the open theme: URL, app, file/dir, shell cmd, password paste; action-value editing **done 2026-11-24** | 2–3 days |
+| 3c | Action palette | Drag an action type from a grouped, searchable list onto a key (vendor UX). Templates come from real vendor examples, because field order differs per type and the firmware ignores bad fields. 7 key types known from the bundled themes; the rest need a scratch theme made in ScreenKey | 1–2 days |
+| 4 | Parity | Info-panel widgets editing; sensor feed (V1 cmd 1, format known; answer `deviceRequestSystemData`); weather; boot logo export | 1–2 weeks |
+| 5 | Polish | Profiles, theme import/merge, packaging + Developer ID signing + notarization | 3–5 days |
+
+## macOS permissions (Phase 3a onward)
+
+What each feature needs from macOS. "[verified]" means it was tested on this Mac; everything else is from Apple docs and general practice, so check it when the feature is built.
+
+| Feature | Permission / mechanism | Notes |
+|---|---|---|
+| Serial port `/dev/cu.usbmodemMK10*` | none | Plain POSIX open; already working [verified]. One process at a time, so vendor ScreenKey must be quit. |
+| MCP server on `127.0.0.1:47110` | none | Loopback does not trigger the application firewall. |
+| ssh push to `10.0.0.10` | **Local Network** (macOS 15+) | Contacting LAN hosts can prompt once for the responsible app (Electron). Not seen yet; check whether `ssh` spawned from Electron counts. |
+| Open URL / app / file | none | `shell.openExternal`, `shell.openPath`, `open -a`. |
+| Shell command action | none from macOS | User-authored commands run with the user's rights. Treat this as code execution: confirm the first time per key. |
+| Password paste / type text, media keys, window ops | **Accessibility** (`kTCCServiceAccessibility`) | Needed to post synthetic key events (`CGEventPost`). Hotkeys don't need it, because the GD32 sends them as a real USB keyboard. |
+| Control other apps via AppleScript (Music, Finder, OBS…) | **Automation** (Apple Events, prompt per target app) | Needs `NSAppleEventsUsageDescription` in Info.plist and the `com.apple.security.automation.apple-events` entitlement under the hardened runtime. |
+| Screenshot action | **Screen Recording** (`kTCCServiceScreenCapture`) | macOS 15 re-prompts periodically for screen capture. |
+| System volume | none (`osascript -e 'set volume …'` targets StandardAdditions in-process) | Check that it causes no Automation prompt. |
+| Stats: CPU / RAM | none | `os` module and `vm_stat`. |
+| Stats: GPU utilisation | none | `ioreg -r -c IOAccelerator` → `PerformanceStatistics` "Device Utilization %"; no root. |
+| Stats: temperatures | no public API | SMC/IOHID sensors are private; `powermetrics` needs root. Leave out or mark unsupported. |
+| Start at login | Login Items (`app.setLoginItemSettings` → SMAppService on macOS 13+) | The user gets a "background item added" notification; manage it in System Settings → General → Login Items. |
+| Notifications (push done, device lost) | Notifications prompt | Optional. |
+| Input Monitoring | **not needed** | We never read the Mac keyboard; key events come from the device over serial. |
+
+Signing matters for all of the TCC grants above. macOS keys each grant to the app's code signature:
+- In dev, grants attach to `node_modules/electron/dist/Electron.app` and can reset when Electron is reinstalled or upgraded.
+- A distributed build needs Developer ID signing, the hardened runtime with the entitlements above, and notarization, or Gatekeeper blocks it and grants don't stick. That is Phase 5.
+
+Onboarding: the tray app checks each permission only when a key that needs it is first used. `systemPreferences.isTrustedAccessibilityClient(false)` covers Accessibility, `getMediaAccessStatus('screen')` covers Screen Recording, and there is a prompt helper for Automation. On a miss, it explains why and opens the right System Settings pane (`x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility` and similar). Nothing is requested up front.
 
 ## Open risks
 
