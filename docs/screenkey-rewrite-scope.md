@@ -1,0 +1,163 @@
+# MK10 host app rewrite — scope
+
+2026-11-24. Answers the six questions in `docs/screenkey-host-rewrite-handoff.md`.
+Stack decision (Rob): **Electron**. Working name: **mk10-studio** (`app/`).
+
+Labels: **[verified]** = checked against our files/device this session;
+**[3p]** = claimed by a third-party reverse-engineering repo, not yet checked by us;
+**[guess]** = inference.
+
+## TL;DR
+
+- No fuller vendor source exists. **Rewrite**, don't clean up. [verified]
+- Several community reimplementations exist (MK20/SK18, one Electron SK18 editor). Use them
+  as reference. Only Terminus (MIT) is safe to port code from. The others are GPL-3.0 or unlicensed.
+- `.Theme` = bare big-endian QDataStream: header map, a JSON page tree, and a path→blob asset
+  map (every PNG/GIF/MP4 embedded). Byte-exact decode→encode works (`tools/qtheme.py`). [verified]
+- Most features **render on the device** from the `.Theme`. The host only (a) pushes theme files,
+  (b) feeds sensor/weather values, and (c) runs host-side actions (open URL, launch app, OBS, HA).
+- Key presses: the GD32 is its own USB HID keyboard (`4250:426F`, QMK/VIA), so hotkeys work with no
+  host app. Host actions need `keyStateChanged` events over the ACM serial port.
+  [verified enumeration; event capture still needs Rob at the keys]
+- MCP server lives **inside** the Electron app (localhost HTTP, opt-in toggle). The serial port
+  is exclusive, so a separate stdio MCP process would fight the app for it.
+
+## 1. Source
+
+| Source | Contents | Verdict |
+|---|---|---|
+| `waveshareteam/Waveshare-ScreenKey` | README stub; Releases = closed `.exe`/`.dmg` | nothing |
+| Waveshare org (217 repos), `gh search code` for protocol strings | no hits under waveshareteam | nothing |
+| EN wiki / Google Drive zip | `OpenSourceLicenseDemo_V1.0` (~1.2k lines Qt) + firmware images | protocol reference only |
+| CN wiki Baidu Pan (`wxdz`) | not downloaded; README notes same products | assume same (low risk) |
+| `Terminus-Geospatial/Terminus-MK20-Tools` | **MIT**, Python: protocol, client, theme, profile + ~700-line protocol doc | **port-safe** |
+| `alexmuraru27/MK20Control` | GPL-3.0 C#, most complete MK20 spec + pcaps + tests | read only (GPL) |
+| `indiealexh/waveshare_sk18_ctlhost` | no license, Flutter; covers **MK10**, cites KeyboardDevice V2.32 addresses | read only |
+| `jzellis/sk18-editor` | no license, **Electron/TS** SK18 editor (`qdatastream.ts`, `theme-io.ts`) | read only, UX reference |
+| `elpapimango/sk18-image` | Apache/MIT mainline Linux for SK18 (DTS, panel driver) | relevant to v2 device side |
+
+Clones: `src/community/`. Third-party docs are not byte-level truth. Example: ctlhost says the
+wire magic is `5E 5A A5 A1`, but our working `mkproto.py` sends `A1 A5 5A 5E`. Trust the demo source and the device.
+
+## 2. Feature inventory
+
+Host and device share one codebase (`../PCMonitorLinux2/…` paths in both binaries), so a string
+in the host binary doesn't prove where a feature runs. The table classifies by device-binary presence.
+
+| Feature | Rendered | Host role | Storage / transport |
+|---|---|---|---|
+| Key tile: image, GIF (frame PNGs + delays), title/font/colour, sound | device | none at runtime | `.Theme` item type 115 |
+| Pages / folders / pageSwitch / oneLevelUp / openPage | device | none | `controlData` types |
+| Hotkey (`keyboard`: keycode, keyString) | device → GD32 HID [guess on exact path] | none | `controlData` `keyboard` |
+| Text / password input | device (`keyboardInput`, `qmk_string`) | maybe auto-paste [guess] | `controlData` `password`/`text` |
+| Open URL, launch app, open file/dir, window ops, screenshot, play music, system volume/media | — | **host executes** on key event | `controlData` (host-only types) |
+| Main-screen background video | device (`videoplayerinterfaceAPP`) | none | type 100, mp4 embedded in `.Theme` |
+| Info panel 240×296: text, GIF, arc/ring/bar gauges, digit clock | device | **feeds values** | types 113/114/109/101/102/111 + `system_data_name` |
+| PC stats (CPU/GPU/RAM/disk/net/temps) | device draws | host collects + pushes (`SEND_SYSTEM_DATA_TO_DEVICE`, wire format **unknown**) | macOS source: bundled `btop` |
+| Clock (digital/analog) | device (`DateTimeManager`) | maybe time sync [guess] | type 111/113 |
+| Weather | device draws | host fetches OpenWeatherMap + pushes | system data |
+| Audio spectrum / dB | device (ALSA mic + FFTW) | none | theme item |
+| OBS / Home Assistant | device shows state | host WebSocket clients | system data + events |
+| XiaoZhi AI | device | toggles | disabled on our image — skip |
+| Device volume 0–7 / backlight 0–100 | device | JSON `setVolume`/`setBacklight` | |
+| Boot logos | U-Boot | host generates `mk10.bin` (RGB565 LE 240×296) + `bootlogo.bmp` (24-bit 160×160) | FAT p1 `/mnt/SDCARD` |
+| Live JPEG mirror | device | host streams cmd 100 | no vendor UI uses it; `mkpush.py` does |
+| Theme store, QMK firmware update | — | `cbytecat.com` | **out of scope** |
+
+Device JSON registry (in registration order): `getInfo setBacklight setVolume saveToFile setFileCRC
+deleteFiles getFilesBySuffix playAudio stopAudio keyboardInput`. The longer list in the handoff is mostly
+Qt signal names, not callable methods [guess; probe with a bogus method].
+
+## 3. Theme format
+
+Full schema: `docs/theme-format.md`. Codec: `tools/qtheme.py` (Python) and `app/lib/theme.js`
+(Node, being built). Summary:
+
+1. Header `QVariantMap`: `keyMacro` (null QByteArray), `keyMacroValue` (92-byte magic), `language`.
+   [3p] A wrong `keyMacroValue` silently disables `text` actions, so preserve it.
+2. u32 0.
+3. QByteArray of indented UTF-8 JSON: `{main:{currentPage,version:"V3.0"}, pages:[{pageName,parentPageName?,canvas,items[]}]}`.
+4. `QMap<QString,QByteArray>` assets keyed by device path (`/theme/MK10/MainScreen/<uuid>.mp4`, `/image/MK10/...png`).
+5. u32 0.
+
+`controlData` = base64 of a nested QVariantMap. [3p] Field set and order must match the vendor exactly,
+or the firmware ignores the action. **Rule for the editor:** mutate in place and keep unknown
+items and fields. New actions are cloned from a known-good template taken from the stock theme,
+never synthesised from scratch.
+
+Round trip: decode→encode is byte-identical [verified]. Edited themes load and render on the device
+[verified]: new key title, new key image, and a new embedded background mp4 (the device extracts
+assets itself on load). Details are in `docs/theme-format.md` § Device verification and § Serial protocol verification.
+
+## 4. Where actions run
+
+- **GD32 = USB HID** `syk_keyboards` `4250:426F`: keyboard, mouse, consumer, system control, and VIA raw HID
+  (`FF60/61`). The macro buffer (`dynamic_keymap_macro_set_buffer`) lives in GD32 flash. Hotkeys therefore
+  work with no host app. [verified enumeration]
+- **T113 gadget** has only ACM + adb, no HID function. [verified]
+- **Host actions** (URL, app launch, OBS, HA) need the host to receive JSON
+  `{"method":"keyStateChanged","parameters":{"col","row","pressed",…}}` over ACM (vendor demo
+  `mainwindow.cpp:565`). [3p] This only flows after `getInfo` switches the device to "V2" mode.
+- **`getInfo` blanks fb0 and kills the video player** [verified]. Closing the port doesn't undo it.
+  A V1 reload (cmd 2) restores the layout, even while still in V2 [verified]. Untested: whether
+  getInfo → reload keeps V2 key events flowing with the layout up. That is the remaining risk for host actions.
+- To verify: run `python3 tools/mklisten.py --getinfo --seconds 60` and press keys. Needs Rob.
+
+## 5. Stack: Electron
+
+Decided. Shape:
+
+```
+app/
+  main.js        Electron main: owns serial port, theme state, MCP server
+  preload.js     contextBridge IPC
+  cli.js         same lib, headless (scripting/CI)
+  lib/           qdatastream, theme, proto, device — pure Node, tested with node:test
+  public/        index.html, styles.css, app.js (no bundler, <template> rendering)
+```
+
+- **No TS, no bundler, no React.** The UI is small: a canvas mock of the 896×304 panel, a key grid, and an
+  inspector. Add a bundler only if the UI outgrows that.
+- **Serial:** `serialport` 13 in main. Prebuilt bindings load in Electron 45 arm64 [verified]. Under
+  **Node 26** its read poller doesn't deliver data until the port closes [verified]. Under Electron's Node 24 a
+  reply arrives in 5 ms. So the CLI runs via `ELECTRON_RUN_AS_NODE=1 electron` (`npm run cli`).
+- **MCP:** `@modelcontextprotocol/sdk` Streamable HTTP on `127.0.0.1:<port>`, off by default, toggled
+  in settings. Tools are thin wrappers over `lib/`: `list_pages`, `get_page`, `set_key_title`,
+  `set_key_image` (path or base64), `set_key_action` (template-cloned), `set_background_video`,
+  `save_theme`, `push_theme`, `device_info`. Edits land in the same in-memory theme the UI shows, so
+  the user sees them live and can undo or save.
+- **Video:** transcode user files with ffmpeg (system binary first, `ffmpeg-static` later) to the stock
+  mp4 parameters (codec/res/fps from `ffprobe` of the stock files).
+- **Rejected:** a PWA or web page with Web Serial can't run host actions (launch app, global hotkeys) or
+  host an MCP server. SwiftUI is Mac-only and would mean rewriting the codec. PySide6 bundles poorly
+  and has a weaker editor UX ceiling.
+
+## 6. Device-side boundary
+
+v1 keeps `KeyboardDevice` as the renderer and speaks its protocol and file format. Theme push is
+protocol-only and works on stock firmware [verified]: `deleteFiles`, then `saveToFile` chunks +
+`setFileCRC`, then V1 reload cmd 2. That is about 10 s for 12 MB. ssh + `rc-service` remains as a LilAlpine option.
+v2 option: a replacement renderer on Alpine (fb0 + fbtft panels directly, own JSON format).
+`elpapimango/sk18-image` shows the mainline route for the sibling SK18. Out of scope.
+
+## Phases
+
+| # | Phase | Contents | Effort |
+|---|---|---|---|
+| 1 | Core spike | Node codec + framing + device client + CLI; edited theme renders on device; bg video swap | **done 2026-11-24** |
+| 2 | MVP editor | Electron shell: open `.Theme` (stock included), page list, panel preview, key image/title, bg video replace, save, push. MCP server toggle | **done 2026-11-24** (MCP→push e2e verified on device; UI edit paths not yet clicked through by hand) |
+| 3 | Actions | Key event listener; host actions (URL, app, shell cmd); hotkey via existing `keyboard` controlData; page navigation editing | 2–4 days |
+| 4 | Parity | Info-panel widgets editing; sensor feed (needs `SEND_SYSTEM_DATA` wire format); weather; boot logo export | 1–2 weeks |
+| 5 | Polish | Profiles, theme import/merge, packaging/signing, auto-start | 3–5 days |
+
+## Open risks
+
+1. **Key events + layout together.** `getInfo` blanks the layout [verified], and reload restores it
+   [verified]. Unknown whether key events still flow after that reload. If they don't, host actions need
+   another path (VIA raw HID on `FF60`?).
+2. ~~Theme switch over protocol~~ is solved: V1 cmd 2 [verified].
+3. **Sensor push wire format** (`CMD_VALUE_SEND_SYSTEM_DATA_TO_DEVICE` numeric id + payload) is unknown.
+   Phase 4 needs either a capture of the vendor app (USB sniff) or disassembly.
+4. **controlData strictness** [3p]. Mitigated by template cloning.
+5. **The vendor app running concurrently** grabs the same serial port. The app must detect this and say so.
+6. **Electron footprint** of about 250 MB. Accepted.

@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>MK10 Studio</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">MK10 Studio</div>
+    <div class="file"><span id="dirty" class="dot" hidden title="Unsaved changes"></span><span id="filename">No file open</span></div>
+    <div class="actions">
+      <button id="btn-open" type="button">Open…</button>
+      <button id="btn-save" type="button" disabled>Save</button>
+      <button id="btn-push" type="button" class="primary" disabled>Push to device</button>
+    </div>
+    <div class="mcp">
+      <label class="switch"><input id="mcp-toggle" type="checkbox"><span class="track"></span><span class="label">MCP</span></label>
+      <input id="mcp-port" type="number" min="1024" max="65535" value="47110" title="MCP port">
+      <span id="mcp-url" class="url" hidden></span>
+    </div>
+    <div id="status" class="status" data-state="idle">Ready</div>
+  </header>
+
+  <main class="layout">
+    <aside class="pages">
+      <h2>Pages</h2>
+      <ul id="page-list" class="page-list"></ul>
+    </aside>
+
+    <section class="stage" id="stage">
+      <div id="empty" class="empty" hidden>
+        <p>Open a ScreenKey <code>.Theme</code> to start.</p>
+        <button id="btn-open-stock" type="button" class="primary" hidden>Open stock defaultTheme</button>
+      </div>
+      <div id="panel" class="panel" hidden>
+        <div id="bg" class="bg" title="Background video">
+          <video id="bgvideo" muted loop autoplay playsinline></video>
+          <div id="bg-none" class="bg-none" hidden>no video on this page</div>
+        </div>
+        <div id="keys" class="keys"></div>
+        <div id="secondary" class="secondary"></div>
+      </div>
+      <div class="legend">896 × 304 · drop an image on a key, or a video on the background</div>
+    </section>
+
+    <aside class="inspector">
+      <div id="insp-none" class="insp-section">
+        <h2>Inspector</h2>
+        <p class="hint">Click a key or the background video.</p>
+      </div>
+
+      <div id="insp-key" class="insp-section" hidden>
+        <h2>Key <span id="key-pos" class="muted"></span></h2>
+        <div class="thumb-row"><img id="key-thumb" class="thumb" alt=""></div>
+        <label class="field"><span>Title</span><input id="key-title" type="text" autocomplete="off"></label>
+        <button id="btn-key-image" type="button">Replace image…</button>
+        <h3>Action <span class="muted">(read-only; editing is a later phase)</span></h3>
+        <dl id="key-action" class="kv"></dl>
+      </div>
+
+      <div id="insp-video" class="insp-section" hidden>
+        <h2>Background video</h2>
+        <dl id="video-info" class="kv"></dl>
+        <button id="btn-video" type="button">Replace video…</button>
+        <p class="hint">The file is transcoded to 640×256 h264 (25 fps, no audio) via ffmpeg. This can take a while.</p>
+      </div>
+
+      <div class="insp-section device">
+        <h3>Device</h3>
+        <label class="field"><span>Push via</span><select id="push-mode"><option value="serial">USB serial (stock firmware)</option><option value="ssh">ssh (LilAlpine)</option></select></label>
+        <label class="field"><span>ssh host</span><input id="ssh-host" type="text" autocomplete="off"></label>
+        <label class="field"><span>Remote</span><input id="ssh-remote" type="text" autocomplete="off"></label>
+      </div>
+
+      <div class="insp-section grow">
+        <h3>Activity</h3>
+        <pre id="log" class="log"></pre>
+      </div>
+    </aside>
+  </main>
+
+  <template id="tpl-page">
+    <li class="page-item"><button type="button" class="page-btn"><span class="cur" title="Current page on device">●</span><span class="page-label"></span></button></li>
+  </template>
+
+  <template id="tpl-key">
+    <div class="key">
+      <img class="key-img" alt="" draggable="false">
+      <div class="key-title"></div>
+    </div>
+  </template>
+
+  <template id="tpl-empty-key">
+    <div class="key empty"></div>
+  </template>
+
+  <template id="tpl-sec-image"><img class="sec sec-image" alt="" draggable="false"></template>
+  <template id="tpl-sec-text"><div class="sec sec-text"></div></template>
+  <template id="tpl-sec-ring"><div class="sec sec-ring"><span class="ring-label"></span></div></template>
+  <template id="tpl-sec-box"><div class="sec sec-box"><span class="box-type"></span><span class="box-name"></span></div></template>
+
+  <template id="tpl-kv"><div class="kv-row"><dt></dt><dd></dd></div></template>
+</body>
+</html>

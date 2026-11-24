@@ -1,0 +1,51 @@
+#!/bin/sh /etc/rc.common
+# Entware: bootstrap /opt once the network is up, install the default package
+# list (/etc/entware/packages), make missing SSH host keys, start /opt services.
+# Log: /tmp/entware-boot.log
+START=99
+
+PKGS=/etc/entware/packages
+STAMP=/opt/etc/.mk10-packages
+
+retry() {  # retry CMD... every 30 s, up to 1 h (network may come up late)
+	i=0
+	while [ $i -lt 120 ]; do
+		"$@" && return 0
+		i=$((i+1)); sleep 30
+	done
+	return 1
+}
+
+bootstrap() {
+	mkdir -p /opt/lib/opkg /opt/tmp /opt/var/lock
+	/opt/bin/opkg update && /opt/bin/opkg install entware-opt || return 1
+	chmod 777 /opt/tmp
+	for f in passwd group shells shadow gshadow; do
+		[ -f /etc/$f ] && ln -sf /etc/$f /opt/etc/$f
+	done
+	[ -f /etc/localtime ] && ln -sf /etc/localtime /opt/etc/localtime
+	return 0
+}
+
+install_pkgs() {
+	list=$(grep -v '^#' $PKGS | tr -s ' \n' ' ')
+	/opt/bin/opkg update && /opt/bin/opkg install $list
+}
+
+start() {
+	(
+	  set -x
+	  if [ ! -f /opt/etc/entware_release ]; then
+	    retry bootstrap || exit 1
+	  fi
+	  sum=$(md5sum $PKGS | cut -d' ' -f1)
+	  if [ "$(cat $STAMP 2>/dev/null)" != "$sum" ]; then
+	    retry install_pkgs && echo "$sum" > $STAMP
+	  fi
+	  if [ -x /opt/bin/ssh-keygen ]; then
+	    ls -l /opt/etc/ssh/ssh_host_*_key 2>/dev/null || echo "no host keys yet"
+	    /opt/bin/ssh-keygen -A   # only creates key types that are missing
+	  fi
+	  [ -x /opt/etc/init.d/rc.unslung ] && /opt/etc/init.d/rc.unslung start
+	) >/tmp/entware-boot.log 2>&1 &
+}

@@ -1,0 +1,15 @@
+# Whitelist: the tree holds ~28 GB of vendor images/dumps. Track only our own work.
+/*
+!/.gitignore
+!/README.md
+!/PROGRESS.md
+!/SHA256SUMS.txt
+!/app/
+!/docs/
+!/tools/
+node_modules/
+__pycache__/
+.DS_Store
+.env
+dist/
+out/

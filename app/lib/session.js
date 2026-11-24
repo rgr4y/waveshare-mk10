@@ -1,0 +1,185 @@
+// Editor session: one open theme, shared by the Electron UI, the MCP server and the CLI.
+// Every mutation goes through here so all front ends see the same state ('change' event).
+import { EventEmitter } from 'node:events'
+import { readFile, writeFile } from 'node:fs/promises'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import {
+  decodeTheme, encodeTheme, decodeControlData,
+  setKeyTitle, setKeyImage, setBackgroundVideo,
+} from './theme.js'
+import { toKeyPng, toDeviceMp4 } from './media.js'
+import { Device } from './device.js'
+
+const run = promisify(execFile)
+const TIMEOUT = 60_000
+
+export const DEFAULT_REMOTE = '/data/theme/MK10/mk10studio.Theme'
+export const DEFAULT_SSH = { host: 'root@10.0.0.10', remote: DEFAULT_REMOTE }
+// mode 'serial' (default, works on stock firmware) or 'ssh' (LilAlpine dev path)
+export const DEFAULT_PUSH = { mode: 'serial', port: null, ...DEFAULT_SSH }
+const CONFIG = '/mnt/SDCARD/config.json'
+
+const num = (v) => (v === undefined || v === '' ? undefined : Number(v))
+
+function actionOf(it) {
+  if (!it.controlData) return undefined
+  try {
+    const { type, fields } = decodeControlData(it.controlData)
+    const pick = Object.fromEntries(fields.filter(([k]) => k !== 'type').map(([k, v]) => [k, v.value]))
+    return { type, ...pick }
+  } catch (e) {
+    return { type: 'undecodable', error: e.message }
+  }
+}
+
+export class Session extends EventEmitter {
+  theme = null
+  file = null
+  dirty = false
+
+  async open(file) {
+    this.theme = decodeTheme(await readFile(file))
+    this.file = file
+    this.dirty = false
+    this.emit('change', { kind: 'open' })
+    return this.summary()
+  }
+
+  async save(file = this.file) {
+    this.need()
+    await writeFile(file, encodeTheme(this.theme))
+    this.file = file
+    this.dirty = false
+    this.emit('change', { kind: 'save' })
+    return file
+  }
+
+  need() {
+    if (!this.theme) throw new Error('no theme open')
+  }
+
+  touch(kind) {
+    this.dirty = true
+    this.emit('change', { kind })
+  }
+
+  // Plain-data view of the theme for UI and MCP. Item `index` is stable within a page.
+  summary() {
+    if (!this.theme) return { file: null }
+    const { json, assets } = this.theme
+    return {
+      file: this.file,
+      dirty: this.dirty,
+      currentPage: json.main?.currentPage,
+      assetCount: assets.size,
+      pages: json.pages.map((p, index) => ({
+        index,
+        name: p.pageName,
+        parent: p.parentPageName,
+        parentIndex: p.parentPageName ? json.pages.findIndex((q) => q.pageName === p.parentPageName) : undefined,
+        canvas: p.canvas,
+        items: (p.items ?? []).map((it, i) => ({
+          index: i,
+          type: String(it.type),
+          backgroundType: it.backgroundType || undefined,
+          x: num(it.x), y: num(it.y),
+          w: num(it.w ?? it.scaledWidthTo), h: num(it.h ?? it.scaledHeightTo),
+          row: num(it.row), col: num(it.col),
+          title: it.title,
+          titleParam: it.titleParam ? JSON.parse(it.titleParam) : undefined,
+          path: it.path || undefined,
+          paths: it.paths || undefined,
+          text: it.text_str,
+          systemData: it.system_data_name,
+          action: actionOf(it),
+        })),
+      })),
+    }
+  }
+
+  asset(key) {
+    this.need()
+    return this.theme.assets.get(key)
+  }
+
+  setKeyTitle(page, row, col, title) {
+    this.need()
+    setKeyTitle(this.theme, page, row, col, title)
+    this.touch('keyTitle')
+  }
+
+  // input: path to any image ffmpeg can read, or a Buffer that is already a 128x128 PNG
+  async setKeyImage(page, row, col, input) {
+    this.need()
+    const png = typeof input === 'string' ? await toKeyPng(input) : input
+    const key = setKeyImage(this.theme, page, row, col, png)
+    this.touch('keyImage')
+    return key
+  }
+
+  // input: path to any video ffmpeg can read (transcoded to the stock player format)
+  async setBackgroundVideo(page, input) {
+    this.need()
+    const mp4 = typeof input === 'string' ? await toDeviceMp4(input) : input
+    const key = setBackgroundVideo(this.theme, page, mp4)
+    this.touch('video')
+    return key
+  }
+
+  push(opts = DEFAULT_PUSH, log = () => {}) {
+    const o = { ...DEFAULT_PUSH, ...opts }
+    if (o.mode === 'ssh') return this.pushSsh(o, log)
+    if (o.mode === 'serial') return this.pushSerial(o, log)
+    throw new Error(`unknown push mode ${o.mode}`)
+  }
+
+  // Protocol-only push (verified on device): saveToFile chunks + setFileCRC, then V1 reload.
+  // ~300 KB/s, so the 13 MB stock theme takes ~45 s. Never sends getInfo (it blanks the panel).
+  async pushSerial({ port, remote } = DEFAULT_PUSH, log = () => {}) {
+    this.need()
+    const path = port || (await Device.list())[0]?.path
+    if (!path) throw new Error('MK10 serial port not found (is it plugged in? is ScreenKey running?)')
+    const buf = encodeTheme(this.theme)
+    const dev = new Device()
+    await dev.open(path)
+    try {
+      // saveToFile seeks into an existing file; delete first so a smaller theme can't leave a stale tail
+      await dev.call('deleteFiles', { filePaths: [remote] }).catch(() => {})
+      log(`serial ${path}: writing ${(buf.length / 1e6).toFixed(1)} MB to ${remote}`)
+      let last = 0
+      await dev.pushFile(buf, remote, (done, total) => {
+        const pct = Math.floor((done / total) * 10) * 10
+        if (pct > last) { last = pct; log(`  ${pct}%`) }
+      })
+      log(`reload ${remote}`)
+      await dev.reloadTheme(remote)
+    } finally {
+      await dev.close()
+    }
+    log('pushed')
+    return remote
+  }
+
+  // Verified recipe (docs/theme-format.md, Device verification): copy theme, point
+  // config.json defaultTheme at it, restart KeyboardDevice. LilAlpine only (needs ssh).
+  async pushSsh({ host, remote } = DEFAULT_SSH, log = () => {}) {
+    this.need()
+    const tmp = `${process.env.TMPDIR ?? '/tmp/'}mk10studio-push.Theme`
+    await writeFile(tmp, encodeTheme(this.theme))
+    log(`scp -> ${host}:${remote}`)
+    await run('scp', ['-q', '-o', 'ConnectTimeout=5', tmp, `${host}:${remote}`], { timeout: TIMEOUT })
+    const { stdout } = await run('ssh', ['-o', 'ConnectTimeout=5', host, `cat ${CONFIG}`], { timeout: TIMEOUT })
+    const cfg = JSON.parse(stdout)
+    if (cfg.defaultTheme !== remote) {
+      log(`config.json defaultTheme: ${cfg.defaultTheme} -> ${remote}`)
+      cfg.defaultTheme = remote
+      const q = JSON.stringify(cfg).replaceAll("'", "'\\''")
+      await run('ssh', [host, `printf '%s' '${q}' > ${CONFIG}.new && mv ${CONFIG}.new ${CONFIG} && sync`], { timeout: TIMEOUT })
+    }
+    log('rc-service keyboard-device restart')
+    await run('ssh', [host, 'rc-service keyboard-device restart'], { timeout: TIMEOUT })
+    log('pushed')
+    return remote
+  }
+}

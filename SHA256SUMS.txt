@@ -1,0 +1,9 @@
+# SHA256 of downloaded artifacts, computed on mimi Tue Nov 10 03:40:18 CST 2026
+863ccc9be61e873d3925f71ae1d019a6fa42f64e4ac5c77560925be8d8b6b17f  desktop/ScreenKeyMacOS_v1_1.dmg
+35677011d2fed65548202f8beeaba49969c579859a142d9c3911657174e10561  desktop/ScreenKeyWindows_v1_1.exe
+1e9e43a58620b836cf532c31f5f3ab87c5a06490e1f9186b6544a6d6b747a29a  desktop/ScreenKey_Open_Source_V1.0.zip
+1babb1befdfcd9d5f9869a55ab5bc45b9d9f2325d25282b561b268b6f432dc5e  linux/ScreenKey-mk10-AI-80M-20250923.zip
+c1b9d16d33b61cd0a3a623ac0595ad25cf97aab94d5023400f1ce81783757e1e  linux/ScreenKey-mk10-AI-80M-20250923/ScreenKey-mk10-AI-80M-20250923.img
+66b1b6a949155a32f37dc49ef96f2786b79f077f307d7b9e9d8f11334d64b4ef  linux/MK10_V1.0.img
+87b47617e3b2eb90ed0e56afde19e1df4c093405db6b28930168240372ff9425  resources/240x296-XiaoZhi-Emojis.zip
+0ce61b48829416b7604967cbd7ea24a8272cfd6d2d18f6dee1a9ced8098e3ee3  resources/AIDA64-template-MK10.zip

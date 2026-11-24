@@ -1,0 +1,8 @@
+# Entware packages installed by /etc/init.d/entware once the network is up.
+# One per line. Edit and reboot: the list is re-applied when it changes.
+vim
+fdisk
+bash
+zsh
+openssh-server
+openssh-sftp-server
