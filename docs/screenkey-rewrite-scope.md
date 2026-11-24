@@ -165,6 +165,10 @@ v2 option: a replacement renderer on Alpine (fb0 + fbtft panels directly, own JS
 - Cut = copy, then remove the key item; the slot becomes empty. Removed assets are dropped only when nothing else references them (`dropIfOrphan`).
 - Page references: an openPage or pageSwitch action whose `pageName` does not exist in the target theme pastes with a warning in the log; the key stays as pasted.
 - MCP: `copy_key` returns the same JSON, and `paste_key` accepts it.
+- Shortcuts: Cmd+X, Cmd+C and Cmd+V act on the selected key whenever no text field has focus. You never need to click into anything first. Cmd+Z undoes a cut or paste. Delete/Backspace clears the key, the same as a cut without the copy.
+- Text fields keep normal text copy/paste. The handler checks `document.activeElement`, and the Edit menu entries route to key actions only when no input has focus. This is the same rule the Esc deselect uses.
+- The Edit menu shows Cut, Copy, Paste and Delete Key with their accelerators. Paste is greyed out when the clipboard holds no compatible key. A right-click on a key opens the same context menu.
+- Feedback: after a copy, the key briefly flashes, and the status line says "Copied key r0 c1". A paste selects the pasted key.
 - Open: multi-select (copy a whole row or page) is not in this phase.
 
 ## macOS permissions (Phase 3a onward)
