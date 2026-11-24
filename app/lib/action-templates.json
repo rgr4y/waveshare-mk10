@@ -1,0 +1,694 @@
+{
+ "keyboard": {
+  "group": "System input control",
+  "label": "Keyboard",
+  "fields": [
+   [
+    "AISoundControlKeyword",
+    10,
+    ""
+   ],
+   [
+    "description",
+    10,
+    "Keyboard"
+   ],
+   [
+    "iconPath",
+    10,
+    "/static/icon/dark/keyboard.png"
+   ],
+   [
+    "keyString",
+    10,
+    ""
+   ],
+   [
+    "keycode",
+    2,
+    0
+   ],
+   [
+    "parentDescription",
+    10,
+    "System input control"
+   ],
+   [
+    "type",
+    10,
+    "keyboard"
+   ]
+  ]
+ },
+ "keyboard_switch": {
+  "group": "System input control",
+  "label": "Keyboard (switch)",
+  "fields": [
+   [
+    "AISoundControlKeyword",
+    10,
+    ""
+   ],
+   [
+    "description",
+    10,
+    "Keyboard (switch)"
+   ],
+   [
+    "iconPath",
+    10,
+    "/static/icon/dark/keyboard.png"
+   ],
+   [
+    "parentDescription",
+    10,
+    "System input control"
+   ],
+   [
+    "type",
+    10,
+    "keyboard_switch"
+   ]
+  ]
+ },
+ "qmk_mouse": {
+  "group": "System input control",
+  "label": "Mouse",
+  "fields": [
+   [
+    "AISoundControlKeyword",
+    10,
+    ""
+   ],
+   [
+    "description",
+    10,
+    "Mouse"
+   ],
+   [
+    "iconPath",
+    10,
+    "/static/icon/dark/mouse.png"
+   ],
+   [
+    "mouse_h",
+    2,
+    0
+   ],
+   [
+    "mouse_v",
+    2,
+    0
+   ],
+   [
+    "mouse_x",
+    2,
+    0
+   ],
+   [
+    "mouse_y",
+    2,
+    0
+   ],
+   [
+    "parentDescription",
+    10,
+    "System input control"
+   ],
+   [
+    "qmk_mouse_event",
+    2,
+    0
+   ],
+   [
+    "qmk_mouse_key",
+    2,
+    0
+   ],
+   [
+    "type",
+    10,
+    "qmk_mouse"
+   ]
+  ]
+ },
+ "qmk_string": {
+  "group": "System input control",
+  "label": "QMKString",
+  "fields": [
+   [
+    "AISoundControlKeyword",
+    10,
+    ""
+   ],
+   [
+    "description",
+    10,
+    "QMKString"
+   ],
+   [
+    "iconPath",
+    10,
+    "/static/icon/dark/Text.png"
+   ],
+   [
+    "inputTextPercentEncoding",
+    10,
+    ""
+   ],
+   [
+    "parentDescription",
+    10,
+    "System input control"
+   ],
+   [
+    "type",
+    10,
+    "qmk_string"
+   ]
+  ]
+ },
+ "text": {
+  "group": "System input control",
+  "label": "Text",
+  "fields": [
+   [
+    "AISoundControlKeyword",
+    10,
+    ""
+   ],
+   [
+    "description",
+    10,
+    "Text"
+   ],
+   [
+    "iconPath",
+    10,
+    "/static/icon/dark/Text.png"
+   ],
+   [
+    "inputText",
+    10,
+    ""
+   ],
+   [
+    "isCopyPaste",
+    1,
+    false
+   ],
+   [
+    "isInputEnter",
+    1,
+    false
+   ],
+   [
+    "parentDescription",
+    10,
+    "System input control"
+   ],
+   [
+    "type",
+    10,
+    "text"
+   ]
+  ]
+ },
+ "password": {
+  "group": "System input control",
+  "label": "Password",
+  "fields": [
+   [
+    "AISoundControlKeyword",
+    10,
+    ""
+   ],
+   [
+    "description",
+    10,
+    "Password"
+   ],
+   [
+    "iconPath",
+    10,
+    "/static/icon/dark/password.png"
+   ],
+   [
+    "isCopyPaste",
+    1,
+    false
+   ],
+   [
+    "isInputEnter",
+    1,
+    false
+   ],
+   [
+    "parentDescription",
+    10,
+    "System input control"
+   ],
+   [
+    "password",
+    10,
+    ""
+   ],
+   [
+    "type",
+    10,
+    "password"
+   ]
+  ]
+ },
+ "openDir": {
+  "group": "System file control",
+  "label": "Open the folder",
+  "fields": [
+   [
+    "AISoundControlKeyword",
+    10,
+    ""
+   ],
+   [
+    "description",
+    10,
+    "Open the folder"
+   ],
+   [
+    "iconPath",
+    10,
+    "/static/icon/dark/openDir.png"
+   ],
+   [
+    "parentDescription",
+    10,
+    "System file control"
+   ],
+   [
+    "path",
+    10,
+    ""
+   ],
+   [
+    "type",
+    10,
+    "openDir"
+   ]
+  ]
+ },
+ "openFile": {
+  "group": "System file control",
+  "label": "Open the file",
+  "fields": [
+   [
+    "AISoundControlKeyword",
+    10,
+    ""
+   ],
+   [
+    "description",
+    10,
+    "Open the file"
+   ],
+   [
+    "iconPath",
+    10,
+    "/static/icon/dark/openFile.png"
+   ],
+   [
+    "parentDescription",
+    10,
+    "System file control"
+   ],
+   [
+    "path",
+    10,
+    ""
+   ],
+   [
+    "type",
+    10,
+    "openFile"
+   ]
+  ]
+ },
+ "Loudspeaker": {
+  "group": "System sound control",
+  "label": "Loudspeaker",
+  "fields": [
+   [
+    "AISoundControlKeyword",
+    10,
+    ""
+   ],
+   [
+    "description",
+    10,
+    "Loudspeaker"
+   ],
+   [
+    "iconPath",
+    10,
+    "/static/icon/dark/volume.png"
+   ],
+   [
+    "isSwitchDefaultDevice",
+    1,
+    false
+   ],
+   [
+    "parentDescription",
+    10,
+    "System sound control"
+   ],
+   [
+    "type",
+    10,
+    "Loudspeaker"
+   ],
+   [
+    "volumeAdjustDevice",
+    10,
+    ""
+   ],
+   [
+    "volumeAdjustMode",
+    2,
+    0
+   ],
+   [
+    "volumeadjustValue",
+    2,
+    0
+   ]
+  ]
+ },
+ "pageSwitch": {
+  "group": "Page switching",
+  "label": "Page switching",
+  "fields": [
+   [
+    "AISoundControlKeyword",
+    10,
+    ""
+   ],
+   [
+    "description",
+    10,
+    "Page switching"
+   ],
+   [
+    "iconPath",
+    10,
+    "/static/icon/dark/PageSwitch.png"
+   ],
+   [
+    "jumpToPage",
+    2,
+    0
+   ],
+   [
+    "pageSwitchMode",
+    2,
+    0
+   ],
+   [
+    "parentDescription",
+    10,
+    "Page switching"
+   ],
+   [
+    "type",
+    10,
+    "pageSwitch"
+   ]
+  ]
+ },
+ "Microphone": {
+  "group": "System sound control",
+  "label": "Microphone",
+  "fields": [
+   [
+    "AISoundControlKeyword",
+    10,
+    ""
+   ],
+   [
+    "description",
+    10,
+    "Microphone"
+   ],
+   [
+    "iconPath",
+    10,
+    "/static/icon/dark/Microphone.png"
+   ],
+   [
+    "isSwitchDefaultDevice",
+    1,
+    false
+   ],
+   [
+    "parentDescription",
+    10,
+    "System sound control"
+   ],
+   [
+    "type",
+    10,
+    "Microphone"
+   ],
+   [
+    "volumeAdjustDevice",
+    10,
+    ""
+   ],
+   [
+    "volumeAdjustMode",
+    2,
+    0
+   ],
+   [
+    "volumeadjustValue",
+    2,
+    0
+   ]
+  ]
+ },
+ "screenshot": {
+  "group": "System tools",
+  "label": "Screenshot",
+  "fields": [
+   [
+    "AISoundControlKeyword",
+    10,
+    ""
+   ],
+   [
+    "description",
+    10,
+    "Screenshot"
+   ],
+   [
+    "iconPath",
+    10,
+    "/static/icon/dark/screenshot.png"
+   ],
+   [
+    "parentDescription",
+    10,
+    "System tools"
+   ],
+   [
+    "saveDir",
+    10,
+    ""
+   ],
+   [
+    "type",
+    10,
+    "screenshot"
+   ]
+  ]
+ },
+ "playMusic": {
+  "group": "System tools",
+  "label": "Play audio",
+  "fields": [
+   [
+    "AISoundControlKeyword",
+    10,
+    ""
+   ],
+   [
+    "description",
+    10,
+    "Play audio"
+   ],
+   [
+    "iconPath",
+    10,
+    "/static/icon/dark/playMusic.png"
+   ],
+   [
+    "parentDescription",
+    10,
+    "System tools"
+   ],
+   [
+    "path",
+    10,
+    ""
+   ],
+   [
+    "playMode",
+    2,
+    0
+   ],
+   [
+    "playState",
+    2,
+    0
+   ],
+   [
+    "type",
+    10,
+    "playMusic"
+   ]
+  ]
+ },
+ "deviceVolume": {
+  "group": "Devices",
+  "label": "Device volume",
+  "fields": [
+   [
+    "AISoundControlKeyword",
+    10,
+    ""
+   ],
+   [
+    "description",
+    10,
+    "Device volume"
+   ],
+   [
+    "deviceVolumeAdjustMode",
+    2,
+    0
+   ],
+   [
+    "deviceVolumeadjustValue",
+    2,
+    0
+   ],
+   [
+    "iconPath",
+    10,
+    "/static/icon/dark/deviceVolume.png"
+   ],
+   [
+    "parentDescription",
+    10,
+    "Devices"
+   ],
+   [
+    "type",
+    10,
+    "deviceVolume"
+   ]
+  ]
+ },
+ "openPage": {
+  "group": "页面切换",
+  "label": "创建文件夹",
+  "fields": [
+   [
+    "description",
+    10,
+    "创建文件夹"
+   ],
+   [
+    "iconPath",
+    10,
+    "/static/icon/dark/createFolder.png"
+   ],
+   [
+    "pageName",
+    10,
+    ""
+   ],
+   [
+    "parentDescription",
+    10,
+    "页面切换"
+   ],
+   [
+    "type",
+    10,
+    "openPage"
+   ]
+  ]
+ },
+ "oneLevelUp": {
+  "group": "页面切换",
+  "label": "返回到上一层",
+  "fields": [
+   [
+    "description",
+    10,
+    "返回到上一层"
+   ],
+   [
+    "iconPath",
+    10,
+    "/static/icon/dark/oneLevelUp.png"
+   ],
+   [
+    "pageName",
+    10,
+    ""
+   ],
+   [
+    "parentDescription",
+    10,
+    "页面切换"
+   ],
+   [
+    "type",
+    10,
+    "oneLevelUp"
+   ]
+  ]
+ },
+ "openWeb": {
+  "group": "系统文件控制",
+  "label": "打开网页",
+  "fields": [
+   [
+    "Url",
+    10,
+    ""
+   ],
+   [
+    "description",
+    10,
+    "打开网页"
+   ],
+   [
+    "iconPath",
+    10,
+    "/static/icon/dark/openWeb.png"
+   ],
+   [
+    "parentDescription",
+    10,
+    "系统文件控制"
+   ],
+   [
+    "type",
+    10,
+    "openWeb"
+   ]
+  ]
+ }
+}

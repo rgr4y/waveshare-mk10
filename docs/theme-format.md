@@ -231,3 +231,28 @@ config.json restored byte-identical to backup (sha 99def778...) via stop / scp /
 - `hour`, `minute` and `date` were not pushed, yet the clock was correct, so the device fills those itself.
 - After a V1 reload the device sends unsolicited V1 frames. Two are cmd 15 (SEND_JSON) `{"wifiState":N}`. One is cmd 15 with the contract: `deviceRequestSystemData` lists the keys the current page wants, here `date, hour, CPU Usage, GPU Usage, RAM Usage, minute`, plus `deviceRequestSystemDataShowUnit: true` and `themePageSwitch: true`. A V1 cmd 13 (`DEVICE_ProactiveEscalationCMD`) also appeared, as a Tagged-Value Map with `type: keyState, row, col, pressed`, followed by the key's action (`pageSwitch`). That suggests the MK20-style key events exist on MK10 too. Unclear whether a physical press caused it.
 - Tool: `tools/mkv1.py`.
+
+## Action catalogue (controlData types), 2026-11-24
+
+Source: `allThemeTest.Theme`, which Rob built in ScreenKeyMacOS with one key per palette type and pulled from the device, plus the stock MK10 theme for `openWeb`, `openPage` and `oneLevelUp`. The templates are in `app/lib/action-templates.json`. Each entry has its group and label, and its fields as `[name, QVariant type, default]`: 10 = QString, 2 = int, 1 = bool. The defaults are blanked except type, description, iconPath and parentDescription.
+
+**Field order is not significant [verified by evidence].** The current vendor app writes every action with keys sorted, which is QMap order: 17 of 17 in allThemeTest. The stock theme has 63 of 69 unsorted, an older writer, probably QHash order. The device loads both. Templates therefore use sorted keys. The Terminus "misordered fields are ignored" note is better read as "missing or extra fields": QDataStream into QVariantMap rebuilds the map and does not care about order.
+
+| Group | type | Fields beyond the common five (`AISoundControlKeyword`, `description`, `iconPath`, `parentDescription`, `type`) | Who runs it (unverified unless noted) |
+|---|---|---|---|
+| System input control | keyboard | keyString, keycode:int | device (GD32 HID) |
+| | keyboard_switch | none | device? |
+| | qmk_mouse | mouse_h, mouse_v, mouse_x, mouse_y, qmk_mouse_event, qmk_mouse_key (all int) | device (QMK) |
+| | qmk_string | inputTextPercentEncoding | device (QMK types it) |
+| | text | inputText, isCopyPaste:bool, isInputEnter:bool | host (MK20: serial event only, no HID) |
+| | password | password (stored as 32 hex chars, apparently hashed or encrypted; unknown which), isCopyPaste, isInputEnter | host |
+| System file control | openDir / openFile | path | host |
+| | openWeb | Url | host |
+| System sound control | Loudspeaker / Microphone | volumeAdjustDevice (device name), volumeAdjustMode:int (0,1,3,4 seen), volumeadjustValue:int, isSwitchDefaultDevice:bool | host |
+| System tools | screenshot | saveDir | host |
+| | playMusic | path, playMode:int, playState:int | host |
+| Devices | deviceVolume | deviceVolumeAdjustMode:int, deviceVolumeadjustValue:int | device (MK10 speaker)? |
+| Page switching | pageSwitch | jumpToPage:int, pageSwitchMode:int | device |
+| | openPage / oneLevelUp | pageName | device |
+
+Not yet captured: openApp, window ops, media keys, Action flow (`ControlFlow`, whose `controlDataList` is a QByteArray list of nested actions), OBS, Home Assistant, weather, and the MK20-only `encoder_*` types.
