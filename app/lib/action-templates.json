@@ -134,7 +134,7 @@
  },
  "qmk_string": {
   "group": "Keyboard & mouse",
-  "label": "Type text (keyboard)",
+  "label": "Keyboard macro",
   "fields": [
    [
     "AISoundControlKeyword",
@@ -170,7 +170,7 @@
  },
  "text": {
   "group": "Keyboard & mouse",
-  "label": "Type text",
+  "label": "Type text (via Mac)",
   "fields": [
    [
     "AISoundControlKeyword",
