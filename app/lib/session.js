@@ -202,6 +202,13 @@ export class Session extends EventEmitter {
     }
     log('rc-service keyboard-device restart')
     await run('ssh', [host, 'rc-service keyboard-device restart'], { timeout: TIMEOUT })
+    // Once (2026-11-24) the restart came up without videoplayerinterfaceAPP (black background);
+    // not reproduced since. Check for it so a silent miss shows in the log.
+    const hasVideo = (this.theme.json.pages[0]?.items ?? []).some((x) => String(x.type) === '100' && x.path)
+    const { stdout: ps } = !hasVideo ? { stdout: 'up' } : await run('ssh', [host,
+      'for i in 1 2 3 4 5 6 7 8; do sleep 2; ps -o args | grep -q "[v]ideoplayerinterfaceAPP" && echo up && exit; done; echo down'],
+    { timeout: TIMEOUT })
+    if (ps.trim() !== 'up') log('warning: background video player did not start; push again or press a key on the device')
     log('pushed')
     return remote
   }

@@ -299,6 +299,15 @@ async function init() {
   $('ssh-host').value = cfg.ssh.host
   $('ssh-remote').value = cfg.ssh.remote
   $('push-mode').value = cfg.pushMode ?? 'serial'
+  $('device-mode').textContent = $('push-mode').value
+  let gaps = true
+  try { gaps = localStorage.getItem('keyGaps') !== 'false' } catch { /* storage unavailable: default on */ }
+  $('key-gaps').checked = gaps
+  $('panel').dataset.gaps = String(gaps)
+  $('key-gaps').addEventListener('change', (e) => {
+    $('panel').dataset.gaps = String(e.target.checked)
+    try { localStorage.setItem('keyGaps', String(e.target.checked)) } catch { /* not persisted */ }
+  })
   $('mcp-port').value = cfg.mcp.port
   $('btn-open-stock').hidden = !cfg.stockDir
 
@@ -322,7 +331,10 @@ async function init() {
   $('key-title').addEventListener('change', (e) => {
     if (ui.sel?.kind === 'key') run(window.mk10.setKeyTitle(ui.page, ui.sel.row, ui.sel.col, e.target.value))
   })
-  const saveSsh = () => run(window.mk10.setSsh({ host: $('ssh-host').value, remote: $('ssh-remote').value, mode: $('push-mode').value }))
+  const saveSsh = () => {
+    $('device-mode').textContent = $('push-mode').value
+    return run(window.mk10.setSsh({ host: $('ssh-host').value, remote: $('ssh-remote').value, mode: $('push-mode').value }))
+  }
   $('ssh-host').addEventListener('change', saveSsh)
   $('ssh-remote').addEventListener('change', saveSsh)
   $('push-mode').addEventListener('change', saveSsh)

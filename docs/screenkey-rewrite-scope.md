@@ -150,9 +150,22 @@ v2 option: a replacement renderer on Alpine (fb0 + fbtft panels directly, own JS
 | 2 | MVP editor | Electron shell: open `.Theme` (stock included), page list, panel preview, key image/title, bg video replace, save, push. MCP server toggle | **done 2026-11-24**: in-app MCP → live UI update → push verified on the device. The renderer buttons (title box, Replace…, drag-drop) are not yet clicked by hand. |
 | 3a | Resident app | Menu-bar tray, close-to-tray, Dock icon only while the editor is open; one long-lived serial owner (reconnect on unplug; push, events and stats share it); getInfo → reload on connect; MCP always on; start at login; permission onboarding (see "macOS permissions") | 0.5–1 day |
 | 3b | Actions | Key event listener → run the key's action from the open theme: URL, app, file/dir, shell cmd, password paste; action-value editing **done 2026-11-24** | 2–3 days |
-| 3c | Action palette | Drag an action type from a grouped, searchable list onto a key (vendor UX). Templates come from real vendor examples, because field order differs per type and the firmware ignores bad fields. 7 key types known from the bundled themes; the rest need a scratch theme made in ScreenKey | 1–2 days |
+| 3c | Action palette | Drag an action type from a grouped, searchable list onto a key (vendor UX). Templates come from real vendor examples, because field order differs per type and the firmware ignores bad fields. All 17 types are in `app/lib/action-templates.json` (from the vendor allThemeTest) | 1–2 days |
+| 3d | Key clipboard | Cut, copy and paste keys (Cmd+X/C/V and the context menu), within a theme and across themes. See "Key clipboard" below | 0.5–1 day |
 | 4 | Parity | Info-panel widgets editing; sensor feed (V1 cmd 1, format known; answer `deviceRequestSystemData`); weather; boot logo export | 1–2 weeks |
 | 5 | Polish | Profiles, theme import/merge, packaging + Developer ID signing + notarization | 3–5 days |
+
+## Key clipboard (Phase 3d)
+
+- The clipboard holds plain-text JSON, so a key can be pasted into another theme, another app instance, or a text editor for inspection:
+  `{"mk10studio": "key", "v": 1, "item": {…type 115 item, minus row/col…}, "assets": {"<asset key>": "<base64>"}}`.
+- `assets` embeds the key's image (or the GIF frame directory) so the paste works when the target theme lacks those files. On paste, the assets get new UUID keys, and `path`/`paths` are rewritten to them.
+- Detection: when the window gets focus or the selection changes, read the clipboard and parse it. Paste is enabled only for an object with `mk10studio: "key"` and a supported `v`, and an `item` that has `controlData` that decodes. Anything else leaves Paste disabled, without an error.
+- Paste onto a key replaces it. Paste onto an empty slot creates the key there. The target `row`/`col` come from the selection, not from the clipboard.
+- Cut = copy, then remove the key item; the slot becomes empty. Removed assets are dropped only when nothing else references them (`dropIfOrphan`).
+- Page references: an openPage or pageSwitch action whose `pageName` does not exist in the target theme pastes with a warning in the log; the key stays as pasted.
+- MCP: `copy_key` returns the same JSON, and `paste_key` accepts it.
+- Open: multi-select (copy a whole row or page) is not in this phase.
 
 ## macOS permissions (Phase 3a onward)
 

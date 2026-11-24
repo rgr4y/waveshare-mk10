@@ -24,7 +24,8 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 
 ## 2. Inspect
 
-- [ ] Click a key. The inspector shows position (page/row/col), thumbnail, title and action.
+- [ ] Click a key. The key gets a blue ring and tint, and the inspector shows position (page/row/col), thumbnail, title and action.
+- [ ] **key gaps** (under the preview) is on by default and draws a dark bezel between keys, empty slots included. Toggle it off, then relaunch: it stays off.
 - [ ] Check the action read-out on several keys: hotkey, page switch, URL/app. It looks sane, with no `undecodable`.
 - [ ] Click the video area. The inspector shows video info.
 - [ ] `Esc` (outside a text box) clears the selection.
@@ -88,8 +89,9 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 
 ## 8. Push (ssh mode, LilAlpine only)
 
+- [ ] **Device: …** (top right) opens the device popover; click outside or press Esc to close. The button shows the push mode.
 - [ ] Switch the push mode to ssh. Host and remote fields persist across restart.
-- [ ] Push. The device restarts keyboard-device with about 10 s blank, then shows the edits.
+- [ ] Push. The device restarts keyboard-device with about 10 s blank, then shows the edits, background video included. If the video player did not start, the log shows a warning (seen once, not reproduced).
 - [ ] Wrong host gives a clean error within about 5 s (ConnectTimeout).
 
 ## 9. MCP

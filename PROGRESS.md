@@ -424,3 +424,62 @@ Verification
 - 19 tests pass; the new ones check that only the edited value changes, that type and order survive encoding, and that the guards reject bad edits.
   Lint is clean and both layout greps come back empty. Screenshot of the inspector with editable Url/description checked.
 - Not run: pushing an edited action to the device and pressing the key (validation checklist §2b).
+
+## 2026-11-24 — Action catalogue, LilAlpine build fixes, kernel/cedar sources, bg-video push bug
+
+- Outcome
+  - **Action catalogue:** decoded `allThemeTest.Theme` (pulled from the device) plus the stock themes into 17 action templates in `app/lib/action-templates.json`.
+    - Field order does not matter: current ScreenKey writes alphabetical and the device loads both orders. The earlier MK20 warning was about missing or extra fields.
+    - Labels are plain English (`qmk_string` = "Keyboard macro", `text` = "Type text (via Mac)"). Written `type` values are unchanged.
+  - **Who runs each action:**
+    - Device-run, verified with ScreenKey closed: `qmk_string`.
+    - Host-run, verified: screenshot, play sound, open folder, speaker/mic volume.
+    - Hotkey (`keyboard`) takes QMK keycodes, so mute, vol+ and vol− work without the host (168/169/170 — from the MK20 theme, not pressed on the device).
+    - Untested: Hotkey toggle, mouse action, MK10 speaker volume, Switch page.
+  - **`password` actions:** stored as 32 hex characters. Hash or encrypted is unknown.
+  - **Scope doc:** `docs/screenkey-rewrite-scope.md` now splits Phase 3 into 3a resident menu-bar app with one shared serial owner, 3b running host actions, 3c drag palette. It adds a macOS permissions section and Developer ID signing/notarization to Phase 5.
+  - **App fixes:** Save As no longer defaults into the `.app` bundle (now `~/Documents`). A stray `theme/MK10/mk10studio.Theme` is still inside `ScreenKeyMacOS.app`, pending Rob's call. Stale push-timing text fixed, and `docs/mk10-studio-validation.md` added.
+  - **LilAlpine (`feat/mk10-t113`, private/solo, not pushed):**
+    - `e841670`: tty1–6 commented out of inittab, busybox `ntpd` service dropped (chronyd only). The device was not running `ntpd`; `S98sysntpd` is only a failing call from the vendor app.
+    - `75614dd`: `MK10_BASE_IMG` default is now `img/mk10-original-PRISTINE.img`. `rdisk8.img` had been compressed into the `.xz`, which I decompressed.
+    - `51243d2` and `dffd5b6`: rk-camera SD storage and PicoPlus docs, repo cleaned.
+  - **Kernel and cedar:**
+    - No kernel source is in the repo.
+    - `open-cores/tina-t113-linux-5.4-new` is a 5.4.61 tree whose `cedar_ve.c` matches the device's dmesg line numbers (552/592). The ioctl tables and the whole-kernel `#334` build were not compared.
+    - Public libcedarc trees use ion directly. No dma-heap build was found. Details are in `docs/t113-kernel-cedar-sources.md`.
+    - The Waveshare open-source zip holds no kernel source. I deleted the two extracted `.img` copies (the zip still has them).
+  - **Stock bg video:** frame-matched on the device and it plays correctly (4.0 s, 96 frames, 24 fps loop). The black screen at about 13:05 is unexplained: the log shows `XPLAYER_COMMAND_RESET` and a zero-fill of fb0, with no timestamps to line up.
+- Changed
+  - Commits in waveshare-mk10: `4bf4c62`, `e91c501`, `c8ad254`, `b4a442e`, `f6bf23c`, `51d8cf7`, `37c29b7`, `21fcd7b`, `c2229b1`, `7bc4fc9`, `d8fac67`, `74e234d`, `ae82a56`.
+  - `docs/theme-format.md`, `docs/t113-kernel-cedar-sources.md`, memory notes.
+- Verification
+  - 19 tests pass and lint is clean after the action-value work.
+  - Not verified:
+    - Action-value edits pushed to the device (validation checklist §2b).
+    - The remaining hotkey, mouse, volume and page-switch guesses.
+    - A LilAlpine rebuild with these changes.
+- Open bug (in progress at compaction)
+  - After Rob pushed `mk10studio.Theme` from the studio, the layout appeared but the bg video was missing.
+  - Investigated the pushed theme, config, player process and log, then sent a V1 reload and restarted `keyboard-device` to see whether the player returns.
+  - The result is not in the excerpt, and the root cause is unknown.
+
+## 2026-11-24 (later): ssh-push video, UI tweaks, clipboard spec
+
+- Outcome
+  - **Missing bg video after ssh push:**
+    - A V1 reload over USB brought it back (player pid 6792).
+    - Three repro attempts all started the player: plain `rc-service keyboard-device restart`, an in-place theme overwrite plus restart, and a config switch from stock and back plus restart.
+    - Root cause is unknown.
+    - `pushSsh` now checks for `videoplayerinterfaceAPP` for up to 16 s after the restart, when page 0 has a video, and logs a warning if the player is missing.
+  - **UI:**
+    - Selected key/video gets an overlay ring and tint. It is an `::after` overlay, so the key image can't paint over it.
+    - New **key gaps** toggle under the preview, default on, saved in localStorage. It draws a 3px black bezel per key, empty slots included.
+    - Device push settings moved from the inspector into a native `popover`, opened by the **Device: <mode>** button at top right.
+  - **Scope:** new phase 3d "Key clipboard" with a section describing the clipboard JSON, its detection, and cut/paste rules. The stale 3c text ("7 key types") now says 17.
+- Changed: `app/lib/session.js`, `app/public/{index.html,app.js,styles.css}`, `docs/screenkey-rewrite-scope.md`, `docs/mk10-studio-validation.md`.
+- Verification
+  - Lint is clean. The layout greps are empty.
+  - 18 of 19 tests pass. The failure is `real theme: controlData round trips on every key`: it expects 65 keys, but the fixture has 69. The fixture `/Applications/ScreenKeyMacOS.app/.../defaultTheme.Theme` was modified at 14:07 today. It is no longer stock: sha b5b75da0…, mode now rw.
+  - The UI changes were not clicked through; the app needs a restart.
+- Follow-up
+  - Put a pristine copy of the stock defaultTheme in the repo (or `img/`) as the test fixture, so vendor-app saves can't break the tests.

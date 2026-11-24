@@ -21,6 +21,13 @@
       <span id="mcp-url" class="url" hidden></span>
     </div>
     <div id="status" class="status" data-state="idle">Ready</div>
+    <button id="btn-device" type="button" popovertarget="device-pop" title="Device connection settings">Device: <span id="device-mode"></span></button>
+    <div id="device-pop" class="device-pop" popover>
+      <h3>Device</h3>
+      <label class="field"><span>Push via</span><select id="push-mode"><option value="serial">USB serial (stock firmware)</option><option value="ssh">ssh (LilAlpine)</option></select></label>
+      <label class="field"><span>ssh host</span><input id="ssh-host" type="text" autocomplete="off"></label>
+      <label class="field"><span>Remote</span><input id="ssh-remote" type="text" autocomplete="off"></label>
+    </div>
   </header>
 
   <main class="layout">
@@ -42,7 +49,8 @@
         <div id="keys" class="keys"></div>
         <div id="secondary" class="secondary"></div>
       </div>
-      <div class="legend">896 × 304 · drop an image on a key, or a video on the background</div>
+      <div class="legend">896 × 304 · drop an image on a key, or a video on the background
+        · <label class="inline"><input id="key-gaps" type="checkbox" checked> key gaps</label></div>
     </section>
 
     <aside class="inspector">
@@ -65,13 +73,6 @@
         <dl id="video-info" class="kv"></dl>
         <button id="btn-video" type="button">Replace video…</button>
         <p class="hint">The file is transcoded to 640×256 h264 (25 fps, no audio) via ffmpeg. This can take a while.</p>
-      </div>
-
-      <div class="insp-section device">
-        <h3>Device</h3>
-        <label class="field"><span>Push via</span><select id="push-mode"><option value="serial">USB serial (stock firmware)</option><option value="ssh">ssh (LilAlpine)</option></select></label>
-        <label class="field"><span>ssh host</span><input id="ssh-host" type="text" autocomplete="off"></label>
-        <label class="field"><span>Remote</span><input id="ssh-remote" type="text" autocomplete="off"></label>
       </div>
 
       <div class="insp-section grow">

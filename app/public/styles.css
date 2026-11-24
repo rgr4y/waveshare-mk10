@@ -132,8 +132,14 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 .bg { position: absolute; left: 0; top: 0; width: 640px; height: 256px; background: #050608; cursor: pointer; }
 .bg video { width: 640px; height: 256px; object-fit: cover; display: block; pointer-events: none; }
 .bg-none { position: absolute; inset: 0; display: grid; place-items: center; color: #3f4552; font-size: 14px; }
-.bg[data-selected=true], .key[data-selected=true] { outline: 3px solid var(--accent); outline-offset: -3px; z-index: 5; }
-.bg[data-drop=true], .key[data-drop=true] { outline: 3px dashed var(--ok); outline-offset: -3px; z-index: 5; }
+/* selection/drop ring as an overlay so the key image can't paint over it */
+.bg::after, .key::after { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+.bg[data-selected=true]::after, .key[data-selected=true]::after { box-shadow: inset 0 0 0 3px var(--accent); background: rgba(77, 163, 255, .12); }
+.bg[data-drop=true]::after, .key[data-drop=true]::after { box-shadow: inset 0 0 0 3px var(--ok); }
+/* key gaps: dark bezel between keys, roughly like the physical keycaps */
+.key::before { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.panel[data-gaps=true] .key::before { box-shadow: inset 0 0 0 3px #000; }
+.panel[data-gaps=true] .key.empty::before { box-shadow: inset 0 0 0 3px #000, inset 0 0 0 4px #1d2129; }
 
 .keys { position: absolute; left: 0; top: 0; width: 640px; height: 256px; pointer-events: none; }
 .key { position: absolute; width: 128px; height: 128px; pointer-events: auto; cursor: pointer; overflow: hidden; }
@@ -185,5 +191,7 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 .kv dt { color: var(--muted); font-size: 12px; }
 .kv dd { margin: 0; word-break: break-all; user-select: text; }
 .kv dd input { padding: 3px 6px; }
-.device { border-top: 1px solid var(--line); margin-top: 14px; }
+.device-pop { inset: 52px 14px auto auto; margin: 0; width: 300px; padding: 4px 14px 10px; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 12px 40px rgba(0, 0, 0, .5); }
+#btn-device { flex: none; }
+.inline { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
 .log { flex: 1; margin: 0; padding: 8px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; font: 11px/1.4 ui-monospace, Menlo, monospace; color: var(--muted); overflow: auto; white-space: pre-wrap; word-break: break-all; user-select: text; min-height: 80px; }
