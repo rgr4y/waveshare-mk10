@@ -246,13 +246,20 @@ Source: `allThemeTest.Theme`, which Rob built in ScreenKeyMacOS with one key per
 | | qmk_string ("Keyboard macro") | inputTextPercentEncoding | **device [verified 2026-11-24]**: with ScreenKey quit, pressing the key typed "asdfasdfasdf" into the focused field |
 | | text | inputText, isCopyPaste:bool, isInputEnter:bool | host (MK20: serial event only, no HID) |
 | | password | password (stored as 32 hex chars, apparently hashed or encrypted; unknown which), isCopyPaste, isInputEnter | host |
-| System file control | openDir / openFile | path | host |
+| System file control | openDir / openFile | path | **host** (openDir does nothing without the host [verified 2026-11-24]) |
 | | openWeb | Url | host |
-| System sound control | Loudspeaker / Microphone | volumeAdjustDevice (device name), volumeAdjustMode:int (0,1,3,4 seen), volumeadjustValue:int, isSwitchDefaultDevice:bool | host |
-| System tools | screenshot | saveDir | host |
-| | playMusic | path, playMode:int, playState:int | host |
+| System sound control | Loudspeaker / Microphone | volumeAdjustDevice (device name), volumeAdjustMode:int (0,1,3,4 seen), volumeadjustValue:int, isSwitchDefaultDevice:bool | **host [verified]**. For plain mute and volume use a `keyboard` action with a consumer keycode instead; the device runs it (below) |
+| System tools | screenshot | saveDir | **host [verified]** |
+| | playMusic | path, playMode:int, playState:int | **host [verified]** |
 | Devices | deviceVolume | deviceVolumeAdjustMode:int, deviceVolumeadjustValue:int | device (MK10 speaker)? |
 | Page switching | pageSwitch | jumpToPage:int, pageSwitchMode:int | device |
 | | openPage / oneLevelUp | pageName | device |
 
 Not yet captured: openApp, window ops, media keys, Action flow (`ControlFlow`, whose `controlDataList` is a QByteArray list of nested actions), OBS, Home Assistant, weather, and the MK20-only `encoder_*` types.
+
+### `keyboard` keycode encoding (QMK keycodes) [inferred from all bundled themes]
+`keycode` is a **QMK keycode**, and `keyString` is the human label the vendor app shows. The GD32 runs QMK, so these execute with no host.
+- The low byte is the HID keyboard usage: `C` = 6, `Esc` = 41, `Caps Lock` = 57.
+- Modifier bits follow QMK `QK_MODS`: 0x100 Ctrl, 0x200 Shift, 0x400 Alt, 0x800 GUI (Win/Cmd). For example, 262 = 0x106 `L Ctrl C`, 2582 = 0xA16 `L Win L Shift S`, and 1067 = 0x42B `L Alt Tab`.
+- Consumer keys use the QMK basic codes: 168 = 0xA8 `KC_AUDIO_MUTE` "Mute", 169 `KC_AUDIO_VOL_UP` "Vol +", 170 `KC_AUDIO_VOL_DOWN` "Vol -". These come from the MK20 `encoder_keyboard` action. Next/prev/play would presumably be `KC_MEDIA_*` (0xAB-0xAE); that is untested.
+- So "mute" and "volume" keys can be `keyboard` actions with these codes, and they work with the host app closed. A host-run `Loudspeaker` action is only needed for picking an output device or setting an exact level.
