@@ -12,7 +12,8 @@ import {
   editableActionFields, setKeyActionField,
 } from './theme.js'
 
-const REAL = '/Applications/ScreenKeyMacOS.app/Contents/MacOS/theme/MK10/defaultTheme.Theme'
+// Pristine stock theme (ScreenKeyMacOS v1.1 bundle, captured 2026-11-24 before an accidental vendor-app save); sha in SHA256SUMS.txt
+const REAL = new URL('../../img/stock/defaultTheme.Theme', import.meta.url).pathname
 const skip = existsSync(REAL) ? false : 'real theme not installed'
 const QTHEME = new URL('../../tools/qtheme.py', import.meta.url).pathname
 const sha = (b) => createHash('sha256').update(b).digest('hex')

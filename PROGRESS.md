@@ -491,3 +491,9 @@ Verification
     - About: version and settings file path.
   - The new `--settings` flag opens the dialog at launch, for screenshots.
   - Verified: `--screenshot` captures of the main window (key highlight, gaps) and of the open dialog. Lint is clean.
+- Test fixture:
+  - The bundle `defaultTheme.Theme` had been overwritten by an accidental ScreenKey save (69 keys).
+  - The pristine copy (sha `88785d8b…`, 65 keys) was recovered from the 04:19 scratch backup. A second, independent scratch copy matches.
+  - It is saved read-only at `img/stock/defaultTheme.Theme`, which is untracked like the rest of `img/`. The sha is in SHA256SUMS.txt.
+  - `theme.test.js` now uses this copy. 19/19 tests pass.
+  - The v1.1 dmg bundles no themes, so it can't serve as a source.

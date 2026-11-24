@@ -70,7 +70,8 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 - [ ] **Save** while the stock theme from the `.app` bundle is open: it goes to **Save As** instead. The bundle file is untouched; compare its sha256 before and after.
 - [ ] Save As to `~/Desktop/test.Theme`. The dirty dot clears.
 - [ ] Reopen `test.Theme`. All edits from sections 3–5 survived.
-- [ ] Unedited round trip: open the stock theme, Save As, then `shasum -a 256`. The output equals the stock file. The unit test covers this; spot-check it.
+- [ ] Unedited round trip: open `img/stock/defaultTheme.Theme`, Save As, then `shasum -a 256`. The output equals `88785d8b…` (SHA256SUMS.txt). The unit test covers this; spot-check it.
+- Note: the bundle `defaultTheme.Theme` was overwritten by an accidental ScreenKey save on 2026-11-24 (69 keys, sha `b5b75da0…`). The pristine copy is `img/stock/defaultTheme.Theme` (read-only, untracked, sha in SHA256SUMS.txt).
 - [ ] Close the window with unsaved edits. You get the "Unsaved changes" prompt. Cancel keeps the window; Discard closes it.
 - [ ] Cmd+O, Cmd+S and Cmd+Shift+S work.
 
