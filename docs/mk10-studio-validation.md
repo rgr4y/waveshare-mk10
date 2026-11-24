@@ -25,7 +25,7 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 ## 2. Inspect
 
 - [ ] Click a key. The key gets a blue ring and tint, and the inspector shows position (page/row/col), thumbnail, title and action.
-- [ ] **key gaps** (under the preview) is on by default and draws a dark bezel between keys, empty slots included. Toggle it off, then relaunch: it stays off.
+- [ ] **Show gaps between keys** (Settings) is on by default and draws a dark bezel between keys, empty slots included. Toggle it off, then relaunch: it stays off.
 - [ ] Check the action read-out on several keys: hotkey, page switch, URL/app. It looks sane, with no `undecodable`.
 - [ ] Click the video area. The inspector shows video info.
 - [ ] `Esc` (outside a text box) clears the selection.
@@ -96,7 +96,9 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 
 ## 9. MCP
 
-- [ ] Toggle MCP on. The URL `http://127.0.0.1:47110/mcp` appears, and the setting persists across restart.
+- [ ] **Settings** button and Cmd+, both open Settings. Esc and **Done** close it.
+- [ ] Toggle MCP on in Settings. The `claude mcp add …` command appears and **Copy command** copies it. The green **MCP** badge shows in the top bar, and clicking it opens Settings. The setting persists across restart.
+- [ ] Turn off **Reopen last theme on launch** and relaunch: the app starts empty. Turn it back on.
 - [ ] `claude mcp add --transport http mk10 http://127.0.0.1:47110/mcp`, then in Claude: "show the theme pages". `get_theme` and `get_page` return sane data.
 - [ ] "Set key row 0 col 1 title to Hello". The UI updates live and the dirty dot appears. **[done 2026-11-24]**
 - [ ] "Set that key's image to <path>" and "use this video as background". The UI updates live. **[done 2026-11-24]**

@@ -45,9 +45,8 @@ h3 { margin: 14px 0 8px; font-size: 12px; color: var(--text); font-weight: 600; 
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); display: inline-block; }
 .dot[hidden] { display: none; }
 .actions { display: flex; gap: 8px; }
-.mcp { display: flex; align-items: center; gap: 8px; }
-.mcp input[type=number] { width: 70px; }
-.url { color: var(--ok); font-family: ui-monospace, Menlo, monospace; font-size: 12px; user-select: text; }
+.badge { color: var(--ok); border-color: var(--ok); font-size: 11px; padding: 2px 8px; flex: none; }
+#btn-settings { flex: none; }
 .status { margin-left: auto; color: var(--muted); font-size: 12px; max-width: 38%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .status[data-state=busy] { color: var(--warn); }
 .status[data-state=error] { color: var(--err); }
@@ -195,3 +194,15 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 #btn-device { flex: none; }
 .inline { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
 .log { flex: 1; margin: 0; padding: 8px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; font: 11px/1.4 ui-monospace, Menlo, monospace; color: var(--muted); overflow: auto; white-space: pre-wrap; word-break: break-all; user-select: text; min-height: 80px; }
+
+/* settings dialog */
+.settings { width: 440px; max-width: calc(100vw - 32px); padding: 0; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 20px 60px rgba(0, 0, 0, .6); }
+.settings::backdrop { background: rgba(0, 0, 0, .45); }
+.settings form { padding: 14px 18px 18px; }
+.settings-head { display: flex; align-items: center; justify-content: space-between; }
+.settings-head h2 { margin: 0; }
+.settings section { border-top: 1px solid var(--line); margin-top: 12px; }
+.settings section .inline { display: flex; margin: 8px 0; }
+.settings #mcp-port { width: 100px; }
+.settings #mcp-cmd { font: 11px ui-monospace, Menlo, monospace; user-select: text; }
+.settings .switch { margin: 6px 0 2px; }

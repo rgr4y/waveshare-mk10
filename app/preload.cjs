@@ -23,10 +23,12 @@ contextBridge.exposeInMainWorld('mk10', {
   mcpToggle: call('mcpToggle'),
   settings: call('settings'),
   setSsh: call('setSsh'),
+  setPref: call('setPref'),
   pathFor: (file) => webUtils.getPathForFile(file),
   onChange: on('change'),
   onStatus: on('status'),
   onLog: on('log'),
   onSelect: on('select'),
   onMcp: on('mcp'),
+  onOpenSettings: on('openSettings'),
 })

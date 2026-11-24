@@ -483,3 +483,11 @@ Verification
   - The UI changes were not clicked through; the app needs a restart.
 - Follow-up
   - Put a pristine copy of the stock defaultTheme in the repo (or `img/`) as the test fixture, so vendor-app saves can't break the tests.
+- Settings dialog, added later the same day:
+  - The MCP toggle and port moved out of the top bar into a native `<dialog>`. It opens from the **Settings** button, Cmd+, (custom appMenu) or the green MCP badge.
+  - Sections:
+    - MCP: enable, port, and the `claude mcp add` command with a copy button.
+    - Editor: key gaps (moved here), and a new `reopenLast` pref saved in settings.json through the whitelisted `setPref` IPC.
+    - About: version and settings file path.
+  - The new `--settings` flag opens the dialog at launch, for screenshots.
+  - Verified: `--screenshot` captures of the main window (key highlight, gaps) and of the open dialog. Lint is clean.

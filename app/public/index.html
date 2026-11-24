@@ -15,12 +15,9 @@
       <button id="btn-save" type="button" disabled>Save</button>
       <button id="btn-push" type="button" class="primary" disabled>Push to device</button>
     </div>
-    <div class="mcp">
-      <label class="switch"><input id="mcp-toggle" type="checkbox"><span class="track"></span><span class="label">MCP</span></label>
-      <input id="mcp-port" type="number" min="1024" max="65535" value="47110" title="MCP port">
-      <span id="mcp-url" class="url" hidden></span>
-    </div>
+    <button id="mcp-badge" type="button" class="badge" hidden title="MCP server running (Settings)">MCP</button>
     <div id="status" class="status" data-state="idle">Ready</div>
+    <button id="btn-settings" type="button" title="Settings (Cmd+,)">Settings</button>
     <button id="btn-device" type="button" popovertarget="device-pop" title="Device connection settings">Device: <span id="device-mode"></span></button>
     <div id="device-pop" class="device-pop" popover>
       <h3>Device</h3>
@@ -49,8 +46,7 @@
         <div id="keys" class="keys"></div>
         <div id="secondary" class="secondary"></div>
       </div>
-      <div class="legend">896 × 304 · drop an image on a key, or a video on the background
-        · <label class="inline"><input id="key-gaps" type="checkbox" checked> key gaps</label></div>
+      <div class="legend">896 × 304 · drop an image on a key, or a video on the background</div>
     </section>
 
     <aside class="inspector">
@@ -81,6 +77,37 @@
       </div>
     </aside>
   </main>
+
+  <dialog id="settings-dlg" class="settings">
+    <form method="dialog">
+      <header class="settings-head"><h2>Settings</h2><button type="submit" title="Close (Esc)">Done</button></header>
+
+      <section>
+        <h3>MCP server</h3>
+        <p class="hint">Lets Claude (or any MCP client) read and edit the open theme and push it. Listens on 127.0.0.1 only.</p>
+        <label class="switch"><input id="mcp-toggle" type="checkbox"><span class="track"></span><span class="label">Enabled</span></label>
+        <label class="field"><span>Port</span><input id="mcp-port" type="number" min="1024" max="65535" value="47110"></label>
+        <div id="mcp-on" hidden>
+          <label class="field"><span>Add to Claude Code</span><input id="mcp-cmd" type="text" readonly></label>
+          <button id="btn-mcp-copy" type="button">Copy command</button>
+        </div>
+      </section>
+
+      <section>
+        <h3>Editor</h3>
+        <label class="inline"><input id="key-gaps" type="checkbox" checked> Show gaps between keys</label>
+        <label class="inline"><input id="reopen-last" type="checkbox" checked> Reopen last theme on launch</label>
+      </section>
+
+      <section>
+        <h3>About</h3>
+        <dl class="kv">
+          <div class="kv-row"><dt>Version</dt><dd id="about-version"></dd></div>
+          <div class="kv-row"><dt>Settings file</dt><dd id="about-settings"></dd></div>
+        </dl>
+      </section>
+    </form>
+  </dialog>
 
   <template id="tpl-page">
     <li class="page-item"><button type="button" class="page-btn"><span class="cur" title="Current page on device">●</span><span class="page-label"></span></button></li>

@@ -17,7 +17,7 @@ const DEV = argv.includes('--dev')
 const session = new Session()
 let win = null
 let mcp = null
-let settings = { lastFile: null, mcp: { enabled: false, port: 47110 }, ssh: { ...DEFAULT_SSH } }
+let settings = { lastFile: null, reopenLast: true, mcp: { enabled: false, port: 47110 }, ssh: { ...DEFAULT_SSH } }
 let settingsFile
 
 // ---- settings
@@ -154,6 +154,8 @@ function asset(key) {
   return bytes ? { mime: MIME[extname(k).toLowerCase()] ?? 'application/octet-stream', bytes: new Uint8Array(bytes) } : null
 }
 
+const PREFS = new Set(['reopenLast']) // boolean prefs the renderer may set
+
 function registerIpc() {
   const h = (name, fn) => ipcMain.handle(`mk10:${name}`, (_e, ...a) => fn(...a))
   h('open', open)
@@ -168,7 +170,12 @@ function registerIpc() {
   h('setBackgroundVideo', setBackgroundVideo)
   h('push', push)
   h('mcpToggle', (on, port) => task(on ? 'Start MCP' : 'Stop MCP', () => mcpToggle(on, port)))
-  h('settings', () => ({ ...settings, mcpUrl: mcp?.url ?? null, stockDir: existsSync(STOCK_DIR) ? STOCK_DIR : null }))
+  h('settings', () => ({ ...settings, settingsFile, version: app.getVersion(), mcpUrl: mcp?.url ?? null, stockDir: existsSync(STOCK_DIR) ? STOCK_DIR : null }))
+  h('setPref', async (key, value) => {
+    if (!PREFS.has(key) || typeof value !== 'boolean') throw new Error(`unknown setting ${key}`)
+    settings[key] = value
+    await saveSettings()
+  })
   h('setSsh', async (ssh) => {
     settings.ssh = { host: String(ssh.host), remote: String(ssh.remote) }
     if (ssh.mode === 'serial' || ssh.mode === 'ssh') settings.pushMode = ssh.mode
@@ -179,7 +186,22 @@ function registerIpc() {
 function buildMenu() {
   const guard = (fn) => () => fn().catch(() => {}) // already reported via status
   Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { role: 'appMenu' },
+    {
+      role: 'appMenu',
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: () => send('openSettings') },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    },
     {
       label: 'File',
       submenu: [
@@ -245,7 +267,7 @@ app.whenReady().then(async () => {
   if (DEV) watchPublic()
   win.webContents.once('did-finish-load', async () => {
     const shot = flag('--screenshot')
-    const file = flag('--open') || settings.lastFile
+    const file = flag('--open') || (settings.reopenLast ? settings.lastFile : null)
     if (file && existsSync(file)) await openPath(file).catch((e) => log(`reopen failed: ${e.message}`))
     if ((!shot && settings.mcp.enabled) || argv.includes('--mcp')) await mcpToggle(true).catch((e) => log(`MCP start failed: ${e.message}`))
     const sel = flag('--select')
@@ -253,6 +275,7 @@ app.whenReady().then(async () => {
       const [page, row, col] = String(sel).split(',').map(Number)
       send('select', { page, row, col })
     }
+    if (argv.includes('--settings')) send('openSettings')
     if (shot) await screenshot(shot)
   })
 })

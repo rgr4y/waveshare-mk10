@@ -261,9 +261,10 @@ function wireDrop(el, re, handler) {
 
 function setMcp(url) {
   $('mcp-toggle').checked = !!url
-  $('mcp-url').textContent = url ?? ''
-  $('mcp-url').hidden = !url
   $('mcp-port').disabled = !!url
+  $('mcp-on').hidden = !url
+  $('mcp-cmd').value = url ? `claude mcp add --transport http mk10 ${url}` : ''
+  $('mcp-badge').hidden = !url
 }
 
 // ---- state sync
@@ -307,6 +308,21 @@ async function init() {
   $('key-gaps').addEventListener('change', (e) => {
     $('panel').dataset.gaps = String(e.target.checked)
     try { localStorage.setItem('keyGaps', String(e.target.checked)) } catch { /* not persisted */ }
+  })
+
+  // settings dialog (native <dialog>: Esc and the Done button close it)
+  const openSettings = () => { if (!$('settings-dlg').open) $('settings-dlg').showModal() }
+  window.mk10.onOpenSettings(openSettings)
+  $('btn-settings').addEventListener('click', openSettings)
+  $('mcp-badge').addEventListener('click', openSettings)
+  $('reopen-last').checked = cfg.reopenLast !== false
+  $('reopen-last').addEventListener('change', (e) => run(window.mk10.setPref('reopenLast', e.target.checked)))
+  $('about-version').textContent = cfg.version ?? ''
+  $('about-settings').textContent = cfg.settingsFile ?? ''
+  $('btn-mcp-copy').addEventListener('click', () => {
+    navigator.clipboard.writeText($('mcp-cmd').value).then(
+      () => setStatus({ msg: 'Copied MCP command' }),
+      () => { $('mcp-cmd').select(); setStatus({ msg: 'Copy failed: select the text and press Cmd+C', error: true }) })
   })
   $('mcp-port').value = cfg.mcp.port
   $('btn-open-stock').hidden = !cfg.stockDir
