@@ -82,7 +82,9 @@ async function save() {
 async function saveAs() {
   if (!session.theme) return null
   const r = await dialog.showSaveDialog(win, {
-    title: 'Save theme as', defaultPath: session.file ? join(dirname(session.file), 'mk10studio.Theme') : undefined,
+    // never default into the vendor .app bundle (Save As on the stock theme would land inside it)
+    title: 'Save theme as',
+    defaultPath: join(session.file && !session.isProtected ? dirname(session.file) : app.getPath('documents'), 'mk10studio.Theme'),
     filters: [{ name: 'ScreenKey theme', extensions: ['Theme'] }],
   })
   if (r.canceled) return null
