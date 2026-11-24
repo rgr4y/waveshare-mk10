@@ -189,8 +189,17 @@ Side effects (all verified, device was in factory V1 state after restart):
 - Closing the port does **not** restore anything: still black, no player after >2 min with port closed. Observed recovery paths: `rc-service keyboard-device restart` (~10 s), or the V1 reload command below (verified, no restart needed; layout + player came back).
 - Bogus-method call alone did not change state; `getInfo` is the V2 switch (matches the SK18 docs).
 
-### Key events: NOT VERIFIED
-No key was pressed (no human present). Nothing unsolicited was seen in V1 or V2 state. Event format is unknown on MK10; third-party docs say events appear only in V2 mode as cmd 101 JSON. Use `tools/mklisten.py --getinfo --seconds 60` while pressing keys (prints every decoded frame; JSON pretty-printed, other cmds hex).
+### Key events: verified (2026-11-24, Rob at the keys)
+`mklisten.py --getinfo` while pressing keys. After getInfo, every press and release arrives as an unsolicited cmd 101 frame:
+
+    {"method":"keyStateChanged","parameters":{"col":2,"pressed":true,"row":0}}
+    {"method":"keyStateChanged","parameters":{"col":2,"pressed":false,"row":0}}
+
+- One frame on press and one on release; no repeat frames seen. Presses were short (about 0.2 s), so long-hold behaviour is untested.
+- `row` and `col` match the theme's key items (row 0..1, col 0..4). Pages are not reported; the host tracks the current page itself.
+- Frame ids count down from 0xFFFFFFFF (4294967287, 4294967286, ...). Host request ids count up from small numbers, so a collision looks unlikely.
+- Knob and secondary-panel events were not exercised.
+- Not yet tested: whether events still arrive after getInfo followed by a V1 reload, which brings the layout back. Run `mklisten.py --getinfo --reload --seconds 60` and press keys.
 
 ### Theme reload over the protocol (verified, MK10)
 - Command: **V1 binary frame, cmd = 2** (`CMD_VALUE_SET_DEVICE_RELOAD`), plain UTF-8 theme path as payload, no length prefix. Value 2 is from the Terminus-MK20 / MK20Control docs and consistent with the moc enum order of `CMD_VALUE` strings in `KeyboardDevice` (FIND_DEVICE, SEND_SYSTEM_DATA_TO_DEVICE, SET_DEVICE_RELOAD, ... SEND_JSON). The vendor demo source only defines 100/101, it has no V1 commands. The ctlhost doc's V1 table (2 = IMAGE) and 21-byte header do **not** match; the Terminus layout does:

@@ -347,3 +347,47 @@ Follow-up commit (same day)
   Unknown what set it to 0.
 - The first commit also swept in the pre-existing `tools/`, `README.md` and `SHA256SUMS.txt`. The repo is whitelist-ignored
   (`.gitignore` tracks only app/, docs/, tools/ and the root .md files).
+
+## 2026-11-24 — MK10 LilAlpine polish: logging, splash, ScreenKey rewrite handoff
+
+Outcome
+- Kernel log: KeyboardDevice runs `dmesg -c` via `system()`, which clears the ring buffer. Added a `dmesg` shim at `/usr/libexec/mk10` that drops `-c`/`-C`, and the `keyboard-device` service puts it first on the app's PATH (LilAlpine 31e495b). Tested on the device (a test line survived an app restart); not yet in a rebuilt image.
+- `fw_printenv` showed no devices because `growfs` re-reads the partition table and mdev loses the p2–p5 nodes. `growfs` now runs `mdev -s` after the re-read (3bb4f10, shared across boards). Takes effect on the next build.
+- Small-screen splash: `mk10.bin` is a raw 240x296 RGB565 LE framebuffer dump with no header, not a sunxi format. The U-Boot boot_package contains the `mk10.bin`/`mk20-plus.bin` strings (inferred; U-Boot code not traced). `MK10_SPLASH` puts it into p1 at pack time (48279b1). Rob's `mk10.bin` is in `tools/overlay-sd/`.
+- Wrote `docs/screenkey-host-rewrite-handoff.md` for a fresh session to scope a host-app rewrite. Official ScreenKey is closed source (76 MB Qt 6, Intel-only). Waveshare's open source is only a ~1,180-line Qt 5 serial demo. Layout editing was already bad on stock Tina, so it's an app limit, not a port bug.
+- Device `/file_info.json` and `defaultTheme.Theme` (13,198,510 bytes, vs 13,213,899 copied from UDISK) were rewritten after the copy. Probably a ScreenKey sync; unverified.
+
+Changed
+- LilAlpine `feat/mk10-t113`: commits above, not pushed.
+- waveshare-mk10: `docs/screenkey-host-rewrite-handoff.md`, `tools/overlay-sd/mk10.bin`.
+
+Verification
+- On the device: the dmesg shim, and `mdev -s` restoring the p2–p5 nodes.
+- Not run: a full rebuild with the shim, the growfs `mdev -s` and the splash. Whether U-Boot actually paints `mk10.bin` is unconfirmed.
+
+Follow-up
+- Rebuild, flash, and confirm the splash, kernel log and `fw_printenv` on first boot.
+- The branch mixes concerns (base pkgs, growfs, new board). Split it before a PR.
+
+## 2026-11-24 — MK10 key events verified
+
+Outcome
+- Rob's key-press run of `tools/mklisten.py --getinfo` confirms that key events arrive after getInfo. Each press and each release sends a cmd 101 frame
+  `{"method":"keyStateChanged","parameters":{"col","row","pressed"}}`, with frame ids counting down from 0xFFFFFFFF.
+  All 10 keys reported, row 0..1 and col 0..4. Pages are not reported.
+- `mklisten.py --reload [THEME]` sends a V1 reload (cmd 2) 1 s after getInfo. This tests the last Phase 3 gate:
+  do events keep arriving once the layout is back?
+
+Changed
+- `docs/theme-format.md`, `docs/screenkey-rewrite-scope.md`, `tools/mklisten.py`.
+- Also commits the LilAlpine-session PROGRESS entry above, which was uncommitted.
+
+Verification
+- `py_compile` and `--help` on mklisten.py. `--reload` has not been run against the device.
+- The device is probably still in V2 with a blank layout after the key test (not checked). `--reload`, or
+  `rc-service keyboard-device restart`, brings it back.
+
+Follow-up
+- Run `python3 tools/mklisten.py --getinfo --reload --seconds 60` and press keys.
+  If events keep arriving: Phase 3 is a listener in the app plus a theme reload.
+  If not: look at VIA raw HID, or keep the layout blank and draw with cmd 100.

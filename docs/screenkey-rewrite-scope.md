@@ -97,11 +97,13 @@ assets itself on load). Details are in `docs/theme-format.md` § Device verifica
 - **T113 gadget** has only ACM + adb, no HID function. [verified]
 - **Host actions** (URL, app launch, OBS, HA) need the host to receive JSON
   `{"method":"keyStateChanged","parameters":{"col","row","pressed",…}}` over ACM (vendor demo
-  `mainwindow.cpp:565`). [3p] This only flows after `getInfo` switches the device to "V2" mode.
+  `mainwindow.cpp:565`). Verified on MK10: one frame per press and one per release, `{col,row,pressed}`,
+  after `getInfo` switches the device to "V2" mode [verified, 2026-11-24].
 - **`getInfo` blanks fb0 and kills the video player** [verified]. Closing the port doesn't undo it.
   A V1 reload (cmd 2) restores the layout, even while still in V2 [verified]. Untested: whether
   getInfo → reload keeps V2 key events flowing with the layout up. That is the remaining risk for host actions.
-- To verify: run `python3 tools/mklisten.py --getinfo --seconds 60` and press keys. Needs Rob.
+- To verify: run `python3 tools/mklisten.py --getinfo --reload --seconds 60` and press keys. The layout
+  should come back about 1 s in; key frames should still print. Needs Rob.
 
 ## 5. Stack: Electron
 
@@ -152,8 +154,8 @@ v2 option: a replacement renderer on Alpine (fb0 + fbtft panels directly, own JS
 
 ## Open risks
 
-1. **Key events + layout together.** `getInfo` blanks the layout [verified], and reload restores it
-   [verified]. Unknown whether key events still flow after that reload. If they don't, host actions need
+1. **Key events + layout together.** Key events flow after `getInfo` [verified]. `getInfo` blanks the layout
+   [verified], and reload restores it [verified]. Unknown whether key events still flow after that reload. If they don't, host actions need
    another path (VIA raw HID on `FF60`?).
 2. ~~Theme switch over protocol~~ is solved: V1 cmd 2 [verified].
 3. **Sensor push wire format** (`CMD_VALUE_SEND_SYSTEM_DATA_TO_DEVICE` numeric id + payload) is unknown.
