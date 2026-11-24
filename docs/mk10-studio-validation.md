@@ -10,7 +10,7 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 - [ ] `ffmpeg -version` works. It is needed for image and video replacement.
 - [ ] MK10 is plugged in over USB. `ls /dev/cu.usbmodemMK10*` lists the port.
 - [ ] Baseline: the device shows the stock layout, and the video is playing.
-- [ ] Optional backup before pushing: `scp root@10.0.0.10:/mnt/SDCARD/config.json /tmp/config.json.bak`
+- [ ] Optional backup before pushing: `scp root@10.0.1.48:/mnt/SDCARD/config.json /tmp/config.json.bak`
 
 ## 1. Open
 
@@ -81,7 +81,7 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 - [ ] Push. The log shows progress in 10% steps, then `reload …`, `removed old pushes …` (on the second push and later), then `pushed`. About 10 s for 12 MB.
 - [ ] The device shows the edits: titles, images, video. Press keys: hotkeys still work.
 - [ ] Push again. Only one `mk10studio-*.Theme` remains:
-      `ssh root@10.0.0.10 'ls -la /data/theme/MK10/*.Theme'`
+      `ssh root@10.0.1.48 'ls -la /data/theme/MK10/*.Theme'`
 - [ ] Pull the USB cable mid-push. You get a clean error, the device keeps showing the previous theme, and a re-push after replugging works.
 - [ ] Push with ScreenKeyMacOS running, so the port is busy. You get a clear error, not a hang.
 - [ ] Push with no device plugged in. The error is "MK10 serial port not found".
@@ -115,7 +115,7 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 
 - [ ] Open the stock `defaultTheme.Theme` and push it. Or restore `config.json` from the backup and run `rc-service keyboard-device restart`.
 - [ ] Remove the test pushes:
-      `ssh root@10.0.0.10 'rm -f /data/theme/MK10/mk10studio-*.Theme'`
+      `ssh root@10.0.1.48 'rm -f /data/theme/MK10/mk10studio-*.Theme'`
 - [ ] Known leak: each push extracts its new images and videos under `/data/image/MK10/cache/` and `/data/theme/MK10/MainScreen/`, and these are not cleaned up. List them and delete the ones the stock theme doesn't use. The stock videos are `2e37fe8c-….mp4` and `40624559-….mp4`.
 
 ## Not in scope yet (don't fail these)

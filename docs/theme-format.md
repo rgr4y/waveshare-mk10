@@ -262,4 +262,8 @@ Not yet captured: openApp, window ops, media keys, Action flow (`ControlFlow`, w
 - The low byte is the HID keyboard usage: `C` = 6, `Esc` = 41, `Caps Lock` = 57.
 - Modifier bits follow QMK `QK_MODS`: 0x100 Ctrl, 0x200 Shift, 0x400 Alt, 0x800 GUI (Win/Cmd). For example, 262 = 0x106 `L Ctrl C`, 2582 = 0xA16 `L Win L Shift S`, and 1067 = 0x42B `L Alt Tab`.
 - Consumer keys use the QMK basic codes: 168 = 0xA8 `KC_AUDIO_MUTE` "Mute", 169 `KC_AUDIO_VOL_UP` "Vol +", 170 `KC_AUDIO_VOL_DOWN` "Vol -". These come from the MK20 `encoder_keyboard` action. Next/prev/play would presumably be `KC_MEDIA_*` (0xAB-0xAE); that is untested.
+- Launch and navigation consumer keys, tested on macOS 2026-11-24. Method: `keyboard` keycodes on page 1 of a temporary theme, keys pressed by hand. The HID usages are the upstream QMK `report.h` mapping; the vendor GD32 fork's mapping is not verified.
+  - **Work:** 0xB4 `KC_WWW_SEARCH` (AC Search) opens **Siri/Spotlight**; 0xC1 `KC_MISSION_CONTROL` opens **Mission Control**; 0xC2 `KC_LAUNCHPAD` opens **Launchpad**.
+  - **No visible effect:** 0xB5 `KC_WWW_HOME`, 0xB1 `KC_MAIL`, 0xB2 `KC_CALCULATOR`, 0xB3 `KC_MY_COMPUTER`, 0xBF `KC_CONTROL_PANEL`, 0xC0 `KC_ASSISTANT`. It was not checked with Karabiner-EventViewer whether these usages reached macOS.
+  - No HID usage carries a URL, and QMK has no keycode for AL Internet Browser (0x196). Opening a URL stays a host action (`shell.openExternal`, which needs no macOS permission).
 - So "mute" and "volume" keys can be `keyboard` actions with these codes, and they work with the host app closed. A host-run `Loudspeaker` action is only needed for picking an output device or setting an exact level.

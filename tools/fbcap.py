@@ -2,7 +2,7 @@
 """fbcap.py TAG [fbN...] : ssh-cat device fbs -> $FBCAP_DIR/TAG_fbN.png (fb0 = first 896x304 page). Verbose on stderr."""
 import sys, subprocess, zlib, struct, os
 D=os.environ.get("FBCAP_DIR",".")+"/"
-H="root@10.0.0.10"
+H="root@10.0.1.48"
 def sh(c,**k): return subprocess.run(["ssh",H,c],capture_output=True,timeout=60,**k).stdout
 def png(w,h,rgb,path):
     raw=b"".join(b"\0"+rgb[y*w*3:(y+1)*w*3] for y in range(h))

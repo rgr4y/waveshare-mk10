@@ -179,7 +179,7 @@ What each feature needs from macOS. "[verified]" means it was tested on this Mac
 |---|---|---|
 | Serial port `/dev/cu.usbmodemMK10*` | none | Plain POSIX open; already working [verified]. One process at a time, so vendor ScreenKey must be quit. |
 | MCP server on `127.0.0.1:47110` | none | Loopback does not trigger the application firewall. |
-| ssh push to `10.0.0.10` | **Local Network** (macOS 15+) | Contacting LAN hosts can prompt once for the responsible app (Electron). Not seen yet; check whether `ssh` spawned from Electron counts. |
+| ssh push to `10.0.1.48` | **Local Network** (macOS 15+) | Contacting LAN hosts can prompt once for the responsible app (Electron). Not seen yet; check whether `ssh` spawned from Electron counts. |
 | Open URL / app / file | none | `shell.openExternal`, `shell.openPath`, `open -a`. |
 | Shell command action | none from macOS | User-authored commands run with the user's rights. Treat this as code execution: confirm the first time per key. |
 | Password paste / type text, media keys, window ops | **Accessibility** (`kTCCServiceAccessibility`) | Needed to post synthetic key events (`CGEventPost`). Hotkeys don't need it, because the GD32 sends them as a real USB keyboard. |

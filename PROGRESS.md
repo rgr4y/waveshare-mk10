@@ -497,3 +497,9 @@ Verification
   - It is saved read-only at `img/stock/defaultTheme.Theme`, which is untracked like the rest of `img/`. The sha is in SHA256SUMS.txt.
   - `theme.test.js` now uses this copy. 19/19 tests pass.
   - The v1.1 dmg bundles no themes, so it can't serve as a source.
+- HID launch keys:
+  - A temporary theme pushed over serial. On macOS: Search opens Siri/Spotlight, and Mission Control and Launchpad work. WWW Home, Mail, Calculator, My Computer, Control Panel and Assistant did nothing. Recorded in `docs/theme-format.md`.
+  - The device was switched back to `defaultTheme.Theme`, and `hidtest.Theme` deleted.
+- IMU: none. The only I2C device on the T113 is an `atsha204a` (0x64), and there are no IIO devices.
+- Device IP: it is now `10.0.1.48` (udhcpc). The app's ssh default, the checklist, the scope doc and `tools/fbcap.py` are updated. Historical logs in `docs/theme-format.md` still say 10.0.0.10.
+- Phase 3a was split into 8 beads (`waveshare-mk10-phase-3a-pv0`; `.beads/` is gitignored). MCP stays off by default and is offered in a first-run dialog. The typing plan prefers the device (`keyboardInput` not yet probed).

@@ -15,7 +15,7 @@ const run = promisify(execFile)
 const TIMEOUT = 60_000
 
 export const DEFAULT_REMOTE = '/data/theme/MK10/mk10studio.Theme'
-export const DEFAULT_SSH = { host: 'root@10.0.0.10', remote: DEFAULT_REMOTE }
+export const DEFAULT_SSH = { host: 'root@10.0.1.48', remote: DEFAULT_REMOTE }
 // mode 'serial' (default, works on stock firmware) or 'ssh' (LilAlpine dev path)
 export const DEFAULT_PUSH = { mode: 'serial', port: null, ...DEFAULT_SSH }
 const CONFIG = '/mnt/SDCARD/config.json'
