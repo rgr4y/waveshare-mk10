@@ -243,7 +243,7 @@ Source: `allThemeTest.Theme`, which Rob built in ScreenKeyMacOS with one key per
 | System input control | keyboard | keyString, keycode:int | device (GD32 HID) |
 | | keyboard_switch | none | device? |
 | | qmk_mouse | mouse_h, mouse_v, mouse_x, mouse_y, qmk_mouse_event, qmk_mouse_key (all int) | device (QMK) |
-| | qmk_string | inputTextPercentEncoding | device (QMK types it) |
+| | qmk_string ("Keyboard macro") | inputTextPercentEncoding | **device [verified 2026-11-24]**: with ScreenKey quit, pressing the key typed "asdfasdfasdf" into the focused field |
 | | text | inputText, isCopyPaste:bool, isInputEnter:bool | host (MK20: serial event only, no HID) |
 | | password | password (stored as 32 hex chars, apparently hashed or encrypted; unknown which), isCopyPaste, isInputEnter | host |
 | System file control | openDir / openFile | path | host |
