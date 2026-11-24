@@ -103,7 +103,7 @@ function buildServer(session, { log, pushOpts }) {
     }
   })
 
-  tool('push_to_device', 'Push the current in-memory theme to the MK10 and make it the active layout. Default is USB serial (~45 s for a 13 MB theme, then the device reloads); ssh mode restarts the on-device app (~10 s blank). Does not save the local file.',
+  tool('push_to_device', 'Push the current in-memory theme to the MK10 and make it the active layout. Default is USB serial (~10 s for 12 MB: writes a new timestamped file, reloads it, prunes older mk10studio pushes); ssh mode restarts the on-device app (~10 s blank). Does not save the local file.',
     {}, async () => ok({ pushed: await session.push(typeof pushOpts === 'function' ? pushOpts() : pushOpts, log) }))
 
   return s

@@ -119,7 +119,7 @@ async function push() {
     message: o.mode === 'ssh' ? `Push to ${o.host} over ssh?` : 'Push to MK10 over USB?',
     detail: o.mode === 'ssh'
       ? `Copies the theme to ${o.remote}, points config.json at it and restarts keyboard-device.`
-      : `Writes the theme to ${o.remote} (~45 s for 13 MB) and tells the device to load it.`,
+      : `Writes the theme to ${o.remote} as a new timestamped file (~10 s for 12 MB), tells the device to load it, then deletes older mk10studio pushes.`,
   })
   if (r.response !== 0) return null
   return task('Push', () => session.push(o, log))
