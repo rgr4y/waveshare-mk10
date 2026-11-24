@@ -245,7 +245,7 @@ Source: `allThemeTest.Theme`, which Rob built in ScreenKeyMacOS with one key per
 | | qmk_mouse | mouse_h, mouse_v, mouse_x, mouse_y, qmk_mouse_event, qmk_mouse_key (all int) | device (QMK) |
 | | qmk_string ("Keyboard macro") | inputTextPercentEncoding | **device [verified 2026-11-24]**: with ScreenKey quit, pressing the key typed "asdfasdfasdf" into the focused field |
 | | text | inputText, isCopyPaste:bool, isInputEnter:bool | host (MK20: serial event only, no HID) |
-| | password | password (stored as 32 hex chars, apparently hashed or encrypted; unknown which), isCopyPaste, isInputEnter | host |
+| | password | password (stored as 32 hex chars, apparently hashed or encrypted; unknown which), isCopyPaste, isInputEnter | host. Vendor ScreenKey asked for the macOS Accessibility ("control this computer") permission to type for some actions (Rob, 2026-11-24). Plan: route typing through the device (`keyboardInput`, untested) and fall back to Accessibility only for text the device cannot type. |
 | System file control | openDir / openFile | path | **host** (openDir does nothing without the host [verified 2026-11-24]) |
 | | openWeb | Url | host |
 | System sound control | Loudspeaker / Microphone | volumeAdjustDevice (device name), volumeAdjustMode:int (0,1,3,4 seen), volumeadjustValue:int, isSwitchDefaultDevice:bool | **host [verified]**. For plain mute and volume use a `keyboard` action with a consumer keycode instead; the device runs it (below) |
