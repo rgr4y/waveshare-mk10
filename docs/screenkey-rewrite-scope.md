@@ -149,7 +149,7 @@ v2 option: a replacement renderer on Alpine (fb0 + fbtft panels directly, own JS
 | 1 | Core spike | Node codec + framing + device client + CLI; edited theme renders on device; bg video swap | **done 2026-11-24** |
 | 2 | MVP editor | Electron shell: open `.Theme` (stock included), page list, panel preview, key image/title, bg video replace, save, push. MCP server toggle | **done 2026-11-24**: in-app MCP → live UI update → push verified on the device. The renderer buttons (title box, Replace…, drag-drop) are not yet clicked by hand. |
 | 3 | Actions | Key event listener; host actions (URL, app, shell cmd); hotkey via existing `keyboard` controlData; page navigation editing | 2–4 days |
-| 4 | Parity | Info-panel widgets editing; sensor feed (needs `SEND_SYSTEM_DATA` wire format); weather; boot logo export | 1–2 weeks |
+| 4 | Parity | Info-panel widgets editing; sensor feed (V1 cmd 1, format known); weather; boot logo export | 1–2 weeks |
 | 5 | Polish | Profiles, theme import/merge, packaging/signing, auto-start | 3–5 days |
 
 ## Open risks
@@ -157,8 +157,9 @@ v2 option: a replacement renderer on Alpine (fb0 + fbtft panels directly, own JS
 1. ~~**Key events + layout together.**~~ Solved: getInfo → V1 reload gives the layout and key events [verified].
    Watch for: anything else that sends getInfo (vendor app) blanks the layout again.
 2. ~~Theme switch over protocol~~ is solved: V1 cmd 2 [verified].
-3. **Sensor push wire format** (`CMD_VALUE_SEND_SYSTEM_DATA_TO_DEVICE` numeric id + payload) is unknown.
-   Phase 4 needs either a capture of the vendor app (USB sniff) or disassembly.
+3. ~~Sensor push wire format~~ is solved: V1 cmd 1 with a UTF-16BE string map [verified 2026-11-24, from Terminus-MK20 §5.3].
+   Text widgets update. The type 109 ring arcs did not move on the stock page; 101/102 are untested.
+   After a reload the device lists the keys it wants (`deviceRequestSystemData`, V1 cmd 15). See theme-format.md.
 4. **controlData strictness** [3p]. Mitigated by template cloning.
 4b. **Extracted-asset leak.** On every theme load the device extracts its assets to `/data/<asset key>`.
    Each push with new images or video leaves uuid files under `/data/image/MK10/cache/` and

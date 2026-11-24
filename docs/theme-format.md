@@ -222,3 +222,12 @@ Side effects (all verified, device was in factory V1 state after restart):
 
 ### Final state
 config.json restored byte-identical to backup (sha 99def778...) via stop / scp / start (note: at the start of this session the device config had `deviceBl: 0`, backup has 58; restored value is 58, source of the 0 unknown, ScreenKeyMacOS not running), defaultTheme.Theme and the 4 stock mp4s sha-identical to backup, ccReload.Theme deleted (disk + registry), service restarted, stock layout captured (`cap/final_fb0.png`, `final_fb11.png`; player running). Not tested: SHOW_JPG, keyboardInput, playAudio/stopAudio, setBacklight/setVolume, key events.
+
+### Live data push (verified on MK10, 2026-11-24)
+- Old-style (V1) frame, **cmd 1** (`SEND_SYSTEM_DATA_TO_DEVICE`). The payload is a map: u32 BE count, then for each pair a u32 BE byte length plus a UTF-16BE key, and a u32 BE byte length plus a UTF-16BE value. Same as Terminus-MK20 §5.1/§5.3.
+- The device acks with an empty V1 reply: type 2, cmd 1, len 0.
+- Keys are the widgets' `system_data_name`. Every text widget bound to the key shows the value string verbatim (`"42%"`, `"0"`), and it updates at once. This worked with the device still in V2 mode after getInfo + reload.
+- The type 109 rings on the stock main page **did not change** their arc for 0, 5, 42 or 95. Untested: type 101/102 gauges and bars on other pages.
+- `hour`, `minute` and `date` were not pushed, yet the clock was correct, so the device fills those itself.
+- After a V1 reload the device sends unsolicited V1 frames. Two are cmd 15 (SEND_JSON) `{"wifiState":N}`. One is cmd 15 with the contract: `deviceRequestSystemData` lists the keys the current page wants, here `date, hour, CPU Usage, GPU Usage, RAM Usage, minute`, plus `deviceRequestSystemDataShowUnit: true` and `themePageSwitch: true`. A V1 cmd 13 (`DEVICE_ProactiveEscalationCMD`) also appeared, as a Tagged-Value Map with `type: keyState, row, col, pressed`, followed by the key's action (`pageSwitch`). That suggests the MK20-style key events exist on MK10 too. Unclear whether a physical press caused it.
+- Tool: `tools/mkv1.py`.

@@ -394,3 +394,19 @@ Follow-up
 - Rob ran `mklisten.py --getinfo --reload`: key events keep flowing after getInfo plus a V1 reload, with the layout up.
   An fb0 capture showed the stock layout with a live clock, and the player was running. Presses during the ~3.5 s
   reload are queued and delivered in order. The Phase 3 gate is cleared, and the device is back on its stock theme.
+
+## 2026-11-24 — MK10 live data push verified
+
+Outcome
+- V1 cmd 1 (`SEND_SYSTEM_DATA_TO_DEVICE`), with a UTF-16BE string map keyed by `system_data_name`, updates the stock
+  page's CPU/GPU/RAM text widgets at once. This was done in V2 mode after getInfo + reload. Format from Terminus-MK20.
+- The type 109 ring arcs did not move for 0, 5, 42 or 95. Types 101/102 are untested.
+- After a V1 reload the device sends V1 cmd 15 JSON (`wifiState`, plus the `deviceRequestSystemData` key list) and a
+  V1 cmd 13 keyState frame. So MK20-style key events exist on MK10 too.
+- The device had rebooted before this run (uptime 4 min, port name changed). Not caused here.
+
+Changed
+- `tools/mkv1.py` (new), `docs/theme-format.md`, `docs/screenkey-rewrite-scope.md`.
+
+Verification
+- fb0 captures after pushing 42/77/13, 5/95/50 and 0/0/0: the text changed, the rings did not.
