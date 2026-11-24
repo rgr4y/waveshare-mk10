@@ -234,7 +234,7 @@ config.json restored byte-identical to backup (sha 99def778...) via stop / scp /
 
 ## Action catalogue (controlData types), 2026-11-24
 
-Source: `allThemeTest.Theme`, which Rob built in ScreenKeyMacOS with one key per palette type and pulled from the device, plus the stock MK10 theme for `openWeb`, `openPage` and `oneLevelUp`. The templates are in `app/lib/action-templates.json`. Each entry has its group and label, and its fields as `[name, QVariant type, default]`: 10 = QString, 2 = int, 1 = bool. The defaults are blanked except type, description, iconPath and parentDescription.
+Source: `allThemeTest.Theme`, which Rob built in ScreenKeyMacOS with one key per palette type and pulled from the device, plus the stock MK10 theme for `openWeb`, `openPage` and `oneLevelUp`. The templates are in `app/lib/action-templates.json`. Each entry has an English UI group and label (our names, not the vendor's), and its fields as `[name, QVariant type, default]`: 10 = QString, 2 = int, 1 = bool. The defaults are blanked except type, description, iconPath and parentDescription.
 
 **Field order is not significant [verified by evidence].** The current vendor app writes every action with keys sorted, which is QMap order: 17 of 17 in allThemeTest. The stock theme has 63 of 69 unsorted, an older writer, probably QHash order. The device loads both. Templates therefore use sorted keys. The Terminus "misordered fields are ignored" note is better read as "missing or extra fields": QDataStream into QVariantMap rebuilds the map and does not care about order.
 
