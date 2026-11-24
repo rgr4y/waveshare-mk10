@@ -46,8 +46,16 @@ export class Session extends EventEmitter {
     return this.summary()
   }
 
+  // Themes inside an app bundle (the vendor ScreenKey install) are never overwritten in place.
+  get isProtected() {
+    return !!this.file && /\.app\/Contents\//.test(this.file)
+  }
+
   async save(file = this.file) {
     this.need()
+    if (file === this.file && this.isProtected) {
+      throw new Error(`${file} is the vendor's stock theme; save to a new path instead (Save As / save_theme with path)`)
+    }
     await writeFile(file, encodeTheme(this.theme))
     this.file = file
     this.dirty = false
@@ -134,31 +142,40 @@ export class Session extends EventEmitter {
     throw new Error(`unknown push mode ${o.mode}`)
   }
 
-  // Protocol-only push (verified on device): saveToFile chunks + setFileCRC, then V1 reload.
-  // ~300 KB/s, so the 13 MB stock theme takes ~45 s. Never sends getInfo (it blanks the panel).
+  // Protocol-only push (verified on device against KeyboardDevice V2.34): saveToFile chunks +
+  // setFileCRC to a NEW file, V1 reload onto it, then delete older mk10studio pushes. The active
+  // theme is never deleted or half-written: a failed push leaves the previous one in place.
+  // ~10 s for 12 MB. Never sends getInfo (it blanks the panel).
   async pushSerial({ port, remote } = DEFAULT_PUSH, log = () => {}) {
     this.need()
     const path = port || (await Device.list())[0]?.path
     if (!path) throw new Error('MK10 serial port not found (is it plugged in? is ScreenKey running?)')
+    const base = remote.replace(/\.Theme$/, '')
+    const target = `${base}-${Date.now()}.Theme`
     const buf = encodeTheme(this.theme)
     const dev = new Device()
     await dev.open(path)
     try {
-      // saveToFile seeks into an existing file; delete first so a smaller theme can't leave a stale tail
-      await dev.call('deleteFiles', { filePaths: [remote] }).catch(() => {})
-      log(`serial ${path}: writing ${(buf.length / 1e6).toFixed(1)} MB to ${remote}`)
+      log(`serial ${path}: writing ${(buf.length / 1e6).toFixed(1)} MB to ${target}`)
       let last = 0
-      await dev.pushFile(buf, remote, (done, total) => {
+      await dev.pushFile(buf, target, (done, total) => {
         const pct = Math.floor((done / total) * 10) * 10
         if (pct > last) { last = pct; log(`  ${pct}%`) }
       })
-      log(`reload ${remote}`)
-      await dev.reloadTheme(remote)
+      log(`reload ${target}`)
+      await dev.reloadTheme(target)
+      const listed = (await dev.call('getFilesBySuffix', { suffixs: ['Theme'] })).result?.filePaths ?? []
+      const esc = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const stale = listed.map((f) => f.filePath).filter((f) => f !== target && new RegExp(`^${esc}-\\d+\\.Theme$`).test(f))
+      if (stale.length) {
+        const r = (await dev.call('deleteFiles', { filePaths: stale })).result
+        log(`removed old pushes: ${(r?.deletedFiles ?? []).join(', ') || 'none'}${r?.failedFiles?.length ? `; failed: ${r.failedFiles.join(', ')}` : ''}`)
+      }
     } finally {
       await dev.close()
     }
     log('pushed')
-    return remote
+    return target
   }
 
   // Verified recipe (docs/theme-format.md, Device verification): copy theme, point

@@ -119,8 +119,8 @@ app/
 - **No TS, no bundler, no React.** The UI is small: a canvas mock of the 896×304 panel, a key grid, and an
   inspector. Add a bundler only if the UI outgrows that.
 - **Serial:** `serialport` 13 in main. Prebuilt bindings load in Electron 45 arm64 [verified]. Under
-  **Node 26** its read poller doesn't deliver data until the port closes [verified]. Under Electron's Node 24 a
-  reply arrives in 5 ms. So the CLI runs via `ELECTRON_RUN_AS_NODE=1 electron` (`npm run cli`).
+  **Node 26** reads stall [verified, cause unknown]: one run got ~100 replies and then hung, and later runs
+  saw the reply only on close. Under Electron's Node 24.22 a reply arrives in 5 ms. So the CLI runs via `ELECTRON_RUN_AS_NODE=1 electron` (`npm run cli`).
 - **MCP:** `@modelcontextprotocol/sdk` Streamable HTTP on `127.0.0.1:<port>`, off by default, toggled
   in settings. Tools are thin wrappers over `lib/`: `list_pages`, `get_page`, `set_key_title`,
   `set_key_image` (path or base64), `set_key_action` (template-cloned), `set_background_video`,
@@ -135,7 +135,7 @@ app/
 ## 6. Device-side boundary
 
 v1 keeps `KeyboardDevice` as the renderer and speaks its protocol and file format. Theme push is
-protocol-only and works on stock firmware [verified]: `deleteFiles`, then `saveToFile` chunks +
+protocol-only [verified against vendor `KeyboardDevice` V2.34 running on LilAlpine; stock Tina untested]: `deleteFiles`, then `saveToFile` chunks +
 `setFileCRC`, then V1 reload cmd 2. That is about 10 s for 12 MB. ssh + `rc-service` remains as a LilAlpine option.
 v2 option: a replacement renderer on Alpine (fb0 + fbtft panels directly, own JSON format).
 `elpapimango/sk18-image` shows the mainline route for the sibling SK18. Out of scope.
@@ -145,7 +145,7 @@ v2 option: a replacement renderer on Alpine (fb0 + fbtft panels directly, own JS
 | # | Phase | Contents | Effort |
 |---|---|---|---|
 | 1 | Core spike | Node codec + framing + device client + CLI; edited theme renders on device; bg video swap | **done 2026-11-24** |
-| 2 | MVP editor | Electron shell: open `.Theme` (stock included), page list, panel preview, key image/title, bg video replace, save, push. MCP server toggle | **done 2026-11-24** (MCP→push e2e verified on device; UI edit paths not yet clicked through by hand) |
+| 2 | MVP editor | Electron shell: open `.Theme` (stock included), page list, panel preview, key image/title, bg video replace, save, push. MCP server toggle | **done 2026-11-24**: in-app MCP → live UI update → push verified on the device. The renderer buttons (title box, Replace…, drag-drop) are not yet clicked by hand. |
 | 3 | Actions | Key event listener; host actions (URL, app, shell cmd); hotkey via existing `keyboard` controlData; page navigation editing | 2–4 days |
 | 4 | Parity | Info-panel widgets editing; sensor feed (needs `SEND_SYSTEM_DATA` wire format); weather; boot logo export | 1–2 weeks |
 | 5 | Polish | Profiles, theme import/merge, packaging/signing, auto-start | 3–5 days |
@@ -159,5 +159,8 @@ v2 option: a replacement renderer on Alpine (fb0 + fbtft panels directly, own JS
 3. **Sensor push wire format** (`CMD_VALUE_SEND_SYSTEM_DATA_TO_DEVICE` numeric id + payload) is unknown.
    Phase 4 needs either a capture of the vendor app (USB sniff) or disassembly.
 4. **controlData strictness** [3p]. Mitigated by template cloning.
+4b. **Extracted-asset leak.** On every theme load the device extracts its assets to `/data/<asset key>`.
+   Each push with new images or video leaves uuid files under `/data/image/MK10/cache/` and
+   `/data/theme/MK10/MainScreen/`. There is no protocol call to list them, so for now clean up over ssh. Fix idea: reuse asset keys per key slot.
 5. **The vendor app running concurrently** grabs the same serial port. The app must detect this and say so.
 6. **Electron footprint** of about 250 MB. Accepted.

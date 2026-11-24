@@ -74,6 +74,7 @@ async function open() {
 
 async function save() {
   if (!session.theme) return null
+  if (session.isProtected) return saveAs() // never overwrite the vendor's stock theme
   const f = await task('Save', () => session.save())
   return f
 }
@@ -225,7 +226,7 @@ function watchPublic() {
 }
 
 async function screenshot(out) {
-  await new Promise((r) => setTimeout(r, 3000))
+  await new Promise((r) => setTimeout(r, Number(flag('--screenshot-delay')) || 3000))
   const img = await win.webContents.capturePage()
   await mkdir(dirname(out), { recursive: true })
   await writeFile(out, img.toPNG())
@@ -244,7 +245,7 @@ app.whenReady().then(async () => {
     const shot = flag('--screenshot')
     const file = flag('--open') || settings.lastFile
     if (file && existsSync(file)) await openPath(file).catch((e) => log(`reopen failed: ${e.message}`))
-    if (!shot && settings.mcp.enabled) await mcpToggle(true).catch((e) => log(`MCP start failed: ${e.message}`))
+    if ((!shot && settings.mcp.enabled) || argv.includes('--mcp')) await mcpToggle(true).catch((e) => log(`MCP start failed: ${e.message}`))
     const sel = flag('--select')
     if (sel) {
       const [page, row, col] = String(sel).split(',').map(Number)

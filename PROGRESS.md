@@ -309,13 +309,13 @@ Outcome
 - New Electron app `app/` (mk10-studio): opens existing themes (stock `defaultTheme` included), previews the
   896x304 panel, edits key title and image, replaces the bg video (ffmpeg transcode), saves, and pushes. An opt-in MCP
   server (`http://127.0.0.1:47110/mcp`) shares the same session, so agent edits show live in the UI.
-- Push works on stock firmware over USB serial only: `deleteFiles`, then `saveToFile`+`setFileCRC`, then V1 reload
+- Push works over USB serial only (verified against vendor KeyboardDevice V2.34 on LilAlpine; stock Tina untested): `deleteFiles`, then `saveToFile`+`setFileCRC`, then V1 reload
   cmd 2 (`"AA551234 FIXEDCMDHEAD "` framing). About 10 s for 12 MB. ssh mode is kept for LilAlpine.
 
 Findings
 - `getInfo` blanks fb0 and kills videoplayerinterfaceAPP until a reload or restart. The app never sends it.
-- serialport 13 under Node 26: reads aren't delivered until close. It works under Electron's Node 24, so the
-  `npm run cli` script uses `ELECTRON_RUN_AS_NODE=1 electron`.
+- serialport 13 under Node 26: reads stall (cause unknown; one run got ~100 replies then hung, later runs saw replies
+  only on close). It works under Electron's Node 24.22, so `npm run cli` uses `ELECTRON_RUN_AS_NODE=1 electron`.
 - GD32 is its own USB HID (`4250:426F`, QMK/VIA), so hotkeys don't need the host.
 - The CRC registry is `/data/file_info.json`, not `/file_info.json`.
 
@@ -332,3 +332,18 @@ Follow-up
 - Key events: run `python3 tools/mklisten.py --getinfo --seconds 60` and press keys. Also test whether getInfo
   followed by a V1 reload keeps events flowing with the layout up. This gates host actions (Phase 3).
 - ScreenKeyMacOS was not running at the end; it holds the port if relaunched.
+
+Follow-up commit (same day)
+- Push safety: every push writes a new `mk10studio-<ts>.Theme`, reloads it, then deletes older mk10studio pushes.
+  A failed push leaves the active theme intact. It never matches `defaultTheme.Theme`.
+- Save refuses to overwrite a theme inside an `.app` bundle (the vendor stock theme). The UI falls back to Save As,
+  and MCP `save_theme` returns an error.
+- Verified in the real Electron window (`--mcp`): an MCP client edited a title, replaced the GIF key's image and the
+  bg video, and pushed twice. The UI updated live (`docs/screenshots/mk10-studio-mcp-live.png`), the device rendered
+  it, and the old push was removed.
+- Device restored to stock. fb0 matches stock, the player runs the stock mp4, `config.json` is byte-identical,
+  `defaultTheme.Theme` sha is unchanged, and the 3 orphaned extracted test assets were removed over ssh.
+- Note for Rob: at the probe start the device's `config.json` had `deviceBl: 0`; it was restored to 58 from backup.
+  Unknown what set it to 0.
+- The first commit also swept in the pre-existing `tools/`, `README.md` and `SHA256SUMS.txt`. The repo is whitelist-ignored
+  (`.gitignore` tracks only app/, docs/, tools/ and the root .md files).
