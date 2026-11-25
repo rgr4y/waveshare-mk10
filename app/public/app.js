@@ -398,11 +398,16 @@ const rawText = (raw) => `{\n${Object.entries(raw).map(([k, v]) => `  ${JSON.str
 async function loadRaw(force = false) {
   const ta = $('raw-json')
   const sel = ui.sel
-  if (!force && (ta.dataset.dirty === 'true' || document.activeElement === ta)) return
+  const id = `${ui.page}:${sel.row}:${sel.col}`
+  // an unapplied edit survives re-renders of its own key only; another key replaces it
+  const same = ta.dataset.key === id
+  if (!force && same && (ta.dataset.dirty === 'true' || document.activeElement === ta)) return
+  if (!same && ta.dataset.dirty === 'true') setStatus({ msg: 'Unapplied raw JSON edit discarded' })
   const raw = await window.mk10.keyRaw(ui.page, sel.row, sel.col).catch(() => null)
   if (ui.sel !== sel) return // selection moved on while loading
   ta.value = raw ? rawText(raw) : ''
   ta.dataset.dirty = 'false'
+  ta.dataset.key = id
 }
 
 function renderInspector() {
