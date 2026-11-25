@@ -229,6 +229,11 @@ Side effects (all verified, device was in factory V1 state after restart):
 ### Final state
 config.json restored byte-identical to backup (sha 99def778...) via stop / scp / start (note: at the start of this session the device config had `deviceBl: 0`, backup has 58; restored value is 58, source of the 0 unknown, ScreenKeyMacOS not running), defaultTheme.Theme and the 4 stock mp4s sha-identical to backup, ccReload.Theme deleted (disk + registry), service restarted, stock layout captured (`cap/final_fb0.png`, `final_fb11.png`; player running). Not tested: SHOW_JPG, keyboardInput, playAudio/stopAudio, setBacklight/setVolume, key events.
 
+### Key sound effects and speaker volume (2026-11-24)
+- From strings in `KeyboardDevice`, not yet tested: a key's `soundFile` is played by an `AudioPlayer` class that runs `tinyplay <file> -D <card> -d <device>`. Volume comes from `config.json` `deviceVolume` (JSON `setVolume {level}`; the vendor demo slider is 0-7), applied with `tinymix set "Headphone volume" <n>`. The mapping from 0-7 to the mixer value is unknown.
+- The only sound card is `audiocodec` (`/proc/asound/cards`).
+- Stock Tina ships tinyalsa in `/usr/bin`; LilAlpine did not, so sound effects and volume silently did nothing. Rob installed `tinyalsa` on the device by hand (2026-11-24). The LilAlpine base image has it from commit `a4e068a` on.
+
 ### Live data push (verified on MK10, 2026-11-24)
 - Old-style (V1) frame, **cmd 1** (`SEND_SYSTEM_DATA_TO_DEVICE`). The payload is a map: u32 BE count, then for each pair a u32 BE byte length plus a UTF-16BE key, and a u32 BE byte length plus a UTF-16BE value. Same as Terminus-MK20 §5.1/§5.3.
 - The device acks with an empty V1 reply: type 2, cmd 1, len 0.
