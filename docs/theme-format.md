@@ -235,6 +235,7 @@ config.json restored byte-identical to backup (sha 99def778...) via stop / scp /
 - Stock Tina ships tinyalsa in `/usr/bin`; LilAlpine did not, so sound effects and volume silently did nothing.
 - Alpine's `tinyalsa` 2.0.0 does not work here: its `tinyplay` never starts the stream (pcm stays in `SETUP`, `hw_ptr` 0, exits 0 after 0.35 s), so only the amp click is heard. Its `tinymix` works.
 - LilAlpine therefore ships the four stock tools (`tinycap tinymix tinypcminfo tinyplay`, glibc, tinyalsa built in) in `/usr/libexec/mk10`, which is first on `KeyboardDevice`'s PATH. `/usr/local/bin` has symlinks for the shell. Verified 2026-11-24: playback works (`tinyplay <wav> -D 0 -d 0`).
+- Overlap (2026-11-24): the `tinyplay` in `/usr/libexec/mk10` is now a wrapper that runs `aplay` (alsa-utils) in the background through a dmix in `/etc/asound.conf`, 48 kHz with plug resampling. Key sounds mix instead of fighting over the device. alsa-lib drives this codec fine; only Alpine's tinyalsa 2.0.0 is broken. The app sees each sound finish at once, so the serial `stopAudio` no longer stops one. The stock binary is still there as `tinyplay.stock`.
 - The stock `tinymix` exits 0 even when a set fails ("Invalid mixer control"). A set that works prints nothing.
 - The stock `/etc/rc.local` sets the codec at boot: LINEOUT on, `DAC_DIFFER`, volume 25; mic boost on; mic gain 19/19/0. LilAlpine's `mk10-mixer` OpenRC boot service applies the same values.
 

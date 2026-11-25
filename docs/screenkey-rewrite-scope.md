@@ -162,7 +162,7 @@ The device plays a sound file when a key is pressed. Facts below were checked on
 - The WAV is embedded in the `.Theme` asset map under the same key (`/sound/fart0.wav`). On load the device has it at `/data/sound/fart0.wav`. Studio pushes the whole `.Theme`, so no separate upload is needed. That the device extracts the file from the theme is assumed (the vendor app may also copy it); check with a Studio push of a new sound.
 - Studio already keeps the asset: `isReferenced`, `copyKey`/`pasteKey` and orphan cleanup treat any item string field that names an asset as a reference, so `soundFile` is covered. Studio has no `soundFile` UI yet.
 - Playback: `KeyboardDevice` runs `tinyplay <file> -D <card> -d <device>`. On LilAlpine that is the stock `tinyplay` in `/usr/libexec/mk10` (Alpine's tinyalsa 2.0.0 tinyplay never starts the stream). The volume is `setVolume` 0-7, which equals tinymix "Headphone volume" (verified). Studio has a slider for it.
-- Format: the codec takes S16_LE/S24_LE, 1-2 channels. A 44.1 kHz stereo 16-bit file played; the stock tinyplay reported 48000 Hz for it, so 44.1 kHz files may play about 9% fast. Unconfirmed; listen once, and if so, convert to 48 kHz on import.
+- Format: on LilAlpine, sounds go through `aplay` and a dmix with plug resampling, so any WAV rate, channel count or bit depth that alsa-lib reads plays at the right speed, and presses overlap. Stock firmware still uses its own `tinyplay` (44.1 kHz may play fast there; unconfirmed), so converting to 48 kHz stereo 16-bit on import is still the safe default.
 
 To build:
 1. Inspector: a "Sound" row on a key with Choose…, Play (in the app), and Clear. Dropping a `.wav` on the key sets it too.
