@@ -366,18 +366,24 @@ export class Session extends EventEmitter {
     return target
   }
 
-  // Panel brightness 0-100 over the USB serial JSON API ({"method":"setBacklight","parameters":{"level":N}},
-  // vendor demo mainwindow.cpp:755). Both firmwares run the vendor app, so serial works on either.
-  async setBacklight(level) {
-    if (this.pushing) throw new Error('push in progress: brightness waits until it finishes')
+  // Device levels over the USB serial JSON API ({"method":M,"parameters":{"level":N}}, vendor demo
+  // mainwindow.cpp:742/755). Both firmwares run the vendor app, so serial works on either.
+  // setBacklight: panel brightness 0-100. setVolume: speaker 0-7 (the app applies it as tinymix
+  // "Headphone volume", range 0-7).
+  static LEVELS = { setBacklight: ['brightness', 100], setVolume: ['volume', 7] }
+
+  async setLevel(method, level) {
+    const [name, max] = Session.LEVELS[method] ?? []
+    if (!name) throw new Error(`unknown device level ${method}`)
+    if (this.pushing) throw new Error(`push in progress: ${name} waits until it finishes`)
     const n = Math.round(Number(level))
-    if (!(n >= 0 && n <= 100)) throw new Error(`brightness must be 0-100, got ${level}`)
+    if (!(n >= 0 && n <= max)) throw new Error(`${name} must be 0-${max}, got ${level}`)
     const path = (await Device.list())[0]?.path
     if (!path) throw new Error('MK10 serial port not found (is it plugged in? is ScreenKey running?)')
     const dev = new Device()
     await dev.open(path)
     try {
-      await dev.call('setBacklight', { level: n })
+      await dev.call(method, { level: n })
     } finally {
       await dev.close()
     }

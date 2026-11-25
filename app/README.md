@@ -45,9 +45,10 @@ Pull (top bar, next to Push, or File > Pull from Device…) downloads the theme 
 (`config.json` `defaultTheme`) over ssh, saves it where you choose and opens it. LilAlpine only: the stock
 firmware's USB API has no file read. Push and pull share one lock. Key capture is in Settings.
 
-Brightness (top bar slider) sends `setBacklight {level: 0-100}` over USB serial on release; works on
-both firmwares. The device has no brightness getter, so the slider starts at the last value set from
-this app (50 the first time). Disabled during a push.
+Brightness and Volume (top bar sliders) send `setBacklight {level: 0-100}` and `setVolume {level: 0-7}`
+over USB serial on release; both firmwares. The device has no getter for either, so each slider starts at
+the last value set from this app (50 and 4 the first time). Disabled during a push. Key sounds need
+`tinyplay`, which LilAlpine ships (stock binary in `/usr/libexec/mk10`).
 
 Device fonts: the MK10 draws titles and clocks with its own fonts (`/usr/share/fonts`, e.g. Microsoft
 YaHei). After the first ssh push or pull, Studio copies them (~85 MB, about a minute) into
