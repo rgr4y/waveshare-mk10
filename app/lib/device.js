@@ -1,9 +1,10 @@
 // MK10 device over USB CDC serial. Nothing is sent on open().
 // Replies to a call look like {ack_method, success, result?, errorString?}; unsolicited events
-// look like {method, parameters} (e.g. keyStateChanged {col, row, pressed}).
+// look like {method, parameters} (e.g. keyStateChanged {col, row, pressed}). Old-style V1 frames
+// in the same stream are decoded too and emitted as 'v1' {v1: cmd, name, type, payload}.
 import { EventEmitter } from 'node:events'
 import { SerialPort } from 'serialport'
-import { pack, packV1, V1_RELOAD, FrameParser, crc32, CMD_JSON, CMD_SHOW_JPG } from './proto.js'
+import { pack, packV1, V1_RELOAD, V1_NAMES, FrameParser, V1Parser, decodeV1, crc32, CMD_JSON, CMD_SHOW_JPG } from './proto.js'
 
 export const VID = '1d6b'
 export const PID = '0104'
@@ -18,6 +19,7 @@ export class Device extends EventEmitter {
     super()
     this.port = null
     this.parser = new FrameParser()
+    this.v1 = new V1Parser() // old-style frames the device sends on its own (key events, contract)
     this.pending = [] // {method, resolve, reject, timer}
     this.nextId = 1
   }
@@ -51,6 +53,7 @@ export class Device extends EventEmitter {
         if (err) return reject(err)
         this.port = port
         this.parser = new FrameParser()
+        this.v1 = new V1Parser()
         wire.emit('msg', { dir: 'open', path })
         resolve()
       })
@@ -65,6 +68,11 @@ export class Device extends EventEmitter {
 
   #onData(chunk) {
     this.emit('raw', chunk)
+    for (const f of this.v1.push(chunk)) {
+      const msg = { v1: f.cmd, name: V1_NAMES[f.cmd] ?? '?', type: f.type, payload: decodeV1(f.cmd, f.payload) }
+      this.emit('v1', msg)
+      wire.emit('msg', { dir: 'rx', path: this.port?.path, msg })
+    }
     for (const f of this.parser.push(chunk)) {
       this.emit('frame', f)
       if (f.cmd !== CMD_JSON) continue
@@ -161,7 +169,7 @@ export class Device extends EventEmitter {
       }
       const timer = setTimeout(() => done(new Error(`reloadTheme: no echo within ${timeout} ms`)), timeout)
       this.on('raw', onRaw)
-      wire.emit('msg', { dir: 'tx', path: this.port?.path, msg: { v1: 'reloadTheme', path } })
+      wire.emit('msg', { dir: 'tx', path: this.port?.path, msg: { v1: V1_RELOAD, name: V1_NAMES[V1_RELOAD], type: 0, payload: path } })
       this.#write(packV1(V1_RELOAD, want)).catch(done)
     })
   }

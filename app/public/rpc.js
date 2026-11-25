@@ -9,9 +9,13 @@ let append = (entries) => { pending.push(...entries) }
 window.mk10.onRpc((entries) => append(entries))
 
 const time = (ts) => new Date(ts).toLocaleTimeString([], { hour12: false }) + `.${String(ts % 1000).padStart(3, '0')}`
-const format = (e) => e.dir === 'open' || e.dir === 'close'
-  ? `// ${time(e.ts)} ${ARROW[e.dir]} ${e.path ?? ''}\n`
-  : `// ${time(e.ts)} ${ARROW[e.dir]}\n${JSON.stringify(e.msg, null, 2)}\n`
+// V1 (old-style) frames get their cmd and name in the header line and only the payload below
+const format = (e) => {
+  if (e.dir === 'open' || e.dir === 'close') return `// ${time(e.ts)} ${ARROW[e.dir]} ${e.path ?? ''}\n`
+  const v1 = e.msg?.v1 !== undefined
+  const head = v1 ? ` V1 cmd ${e.msg.v1} ${e.msg.name}${e.msg.type ? ` (type ${e.msg.type})` : ''}` : ''
+  return `// ${time(e.ts)} ${ARROW[e.dir]}${head}\n${JSON.stringify(v1 ? e.msg.payload : e.msg, null, 2)}\n`
+}
 
 window.require.config({ paths: { vs: '../node_modules/monaco-editor/min/vs' } })
 window.require(['vs/editor/editor.main'], () => {

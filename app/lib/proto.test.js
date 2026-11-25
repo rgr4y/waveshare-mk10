@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { pack, FrameParser, CMD_JSON, CMD_SHOW_JPG } from './proto.js'
+import { pack, packV1, FrameParser, V1Parser, decodeV1, CMD_JSON, CMD_SHOW_JPG } from './proto.js'
 
 const MKPROTO = new URL('../../tools', import.meta.url).pathname
 
@@ -55,4 +55,24 @@ test('parser: size CRC failure resyncs', () => {
   const good = pack(CMD_JSON, Buffer.from('good'), 2)
   const got = new FrameParser().push(Buffer.concat([bad, good]))
   assert.deepEqual(got.map((f) => f.data.toString()), ['good'])
+})
+
+test('V1: split key event (cmd 13 tagged maps), JSON and path frames decode; bad CRC dropped', () => {
+  const u = (n) => { const b = Buffer.alloc(4); b.writeUInt32BE(n); return b }
+  const s = (x) => { const b = Buffer.from(x, 'utf16le').swap16(); return Buffer.concat([u(b.length), b]) }
+  const tv = (t, body) => Buffer.concat([u(t), Buffer.from([0]), body])
+  const state = Buffer.concat([u(3), s('row'), tv(2, u(0)), s('col'), tv(2, u(2)), s('pressed'), tv(1, Buffer.from([1]))])
+  const action = Buffer.concat([u(2), s('type'), tv(10, s('pageSwitch')), s('jumpToPage'), tv(2, u(3))])
+  const bad = packV1(15, Buffer.from('{}'))
+  bad[38] ^= 0xff
+  const stream = Buffer.concat([Buffer.from('noise'), packV1(13, Buffer.concat([u(2), state, action])), bad,
+    packV1(15, Buffer.from('{"wifiState":1}')), packV1(2, Buffer.from('/data/x.Theme'), 2)])
+  const p = new V1Parser()
+  const got = [...p.push(stream.subarray(0, 60)), ...p.push(stream.subarray(60))]
+  assert.deepEqual(got.map((f) => [f.cmd, f.type, decodeV1(f.cmd, f.payload)]), [
+    [13, 0, [{ row: 0, col: 2, pressed: true }, { type: 'pageSwitch', jumpToPage: 3 }]],
+    [15, 0, { wifiState: 1 }],
+    [2, 2, '/data/x.Theme'],
+  ])
+  assert.equal(p.dropped, 1)
 })
