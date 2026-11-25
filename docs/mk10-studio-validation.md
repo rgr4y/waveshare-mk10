@@ -178,5 +178,5 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 - [x] With the window open, Studio holds the port and device events stream: JSON `keyStateChanged` plus decoded V1 cmd 13 key events (with the key's action) and cmd 15 page contracts (Rob's presses on the soundboard and stock keys).
 
 ### Still to check
-- [x] `reboot` with `mk10-reboot-wdt` installed: back in about 15 s, and `/var/log/mk10-reboot-wdt.log` shows `armed /dev/watchdog 10s` (Rob, 2026-11-25). `poweroff` also ends in a reset (expected, untested).
+- [ ] `reboot` with `mk10-reboot-wdt` (block-and-reset version, `4e75d20`): the device resets about 6 s after the shutdown services stop and comes back. `/var/log/mk10-reboot-wdt.log` gets an `arming` line. The previous version armed but the kernel disarmed it on reboot, and the reboot hung (2026-11-25).
 - [ ] Settings > Developer > JSON RPC window: move the Volume slider. A `setVolume` → and its ack ← appear. A serial push shows `saveToFile` with shortened `data`. Closing the window releases the port.
