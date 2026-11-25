@@ -174,6 +174,8 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 - [x] Inspector Sound > Choose…, then push: the key plays the new sound.
 - [x] Monaco raw JSON modal: Apply changes the key.
 - [x] Watchdog-only reset: `watchdog -T 5 -t 600 /dev/watchdog` (never fed). Down after 5 s, ping back after 26 s, fresh boot (`uptime` 0 min).
+- [x] Settings > Developer > **JSON RPC window…** button opens the window (Rob).
+- [x] With the window open, Studio holds the port and device events stream: JSON `keyStateChanged` plus decoded V1 cmd 13 key events (with the key's action) and cmd 15 page contracts (Rob's presses on the soundboard and stock keys).
 
 ### Still to check
 - [ ] `reboot` with `mk10-reboot-wdt` installed (shutdown runlevel): the device is back within ~40 s. `poweroff` also ends in a reset (expected).

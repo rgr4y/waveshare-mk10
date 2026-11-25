@@ -775,6 +775,8 @@ Verification
     - `be5f8bf`: `tools/build-soundboard.mjs` and `tools/soundboard-icons.py` build a soundboard into an empty top-level Page 5: 36 sounds from `~/workspace/lolf.art/public/sounds`, 8 per page, 4 folders under Page 5, Next/First/Home keys, three drawn icons. Sound keys use keyboard keycode 0. Output: `~/Documents/mk10studio-soundboard.Theme`; the original was left untouched.
     - `f84560c`, `e9ade4f`: status shown as toasts stacked at the canvas's top right (max 4; busy toasts update in place; 3.5 s, errors 8 s). The top bar no longer wraps.
     - `72dc808`: Settings > Developer > JSON RPC window. A separate window shows every JSON-RPC message Studio's serial `Device` sends or receives (`wire` emitter in `lib/device.js`), as formatted JSON in a read-only Monaco view. It replays the last 500 messages and shortens long strings.
+    - `79abea1`: while the JSON RPC window is open, Studio holds the serial port (retried every 2 s); pushes and sliders reuse it (`Session.withDevice`), since serialport locks the port.
+    - `e44c26b`: the window also decodes old-style V1 frames (`V1Parser`, `decodeV1` in `lib/proto.js`, after Terminus-MK20 `protocol.md`, MIT), with a unit test. `7ce9ef5`: one message per line, JSON highlighting (`jsonc` isn't registered in this Monaco build). `a8addb2`: the Settings checkbox became a button.
     - Docs: sound/speaker/mixer notes in `docs/theme-format.md` (`ea3c6a0`, `f27cf4f`, `1f271e8`); sound plan in Phase 3b of `docs/screenkey-rewrite-scope.md` (`effe1df`).
   - LilAlpine (`~/workspace/luckfox/LilAlpine`, not pushed):
     - `mk10-mixer` OpenRC boot service applies the stock firmware's mixer values (`6a1add7`).
@@ -793,6 +795,7 @@ Verification
   - `setVolume` N sets the mixer's `Headphone volume` to N, verified at 2 and 7. `setBacklight` appears to save `deviceBl` (a `config.json` rewrite was observed); not confirmed.
   - Theme paths `/image`, `/static` and `/sound` resolve under `/data`; the push writes embedded files into `/data/...`.
   - The vendor demo's `keyStateChanged` handling (`mainwindow.cpp:567`) reads only `col`, `row` and `pressed`. Extra fields are not echoed. Whether V1 cmd 13 `keyState` frames carry the key's action is untested.
+  - Key events, verified live through the window: every press and release sends a V1 cmd 13 frame with `{keyState, row, col, pressed}` and the key's full action map, so the host can run actions without tracking pages. `keyboard` keys send it on release only. The key's `soundFile` is not included. A page change sends a V1 cmd 15 contract. Written up in `docs/theme-format.md` (`0ded602`).
 - Verification
   - Lint clean and 25 tests pass at the code commits. Screenshots checked for the Monaco modal, the Sound row, the soundboard pages, and the toasts at 980 and 1300 px.
   - On the device (Rob): sound keys play and overlap and type nothing; soundboard Next, First and Home work; Brightness and Volume sliders change the device; Choose… then push gives a key a sound; Apply in the JSON modal works.
