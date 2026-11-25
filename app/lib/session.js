@@ -16,8 +16,8 @@ const TIMEOUT = 60_000
 
 export const DEFAULT_REMOTE = '/data/theme/MK10/mk10studio.Theme'
 export const DEFAULT_SSH = { host: 'root@10.0.1.48', remote: DEFAULT_REMOTE }
-// mode 'serial' (default, works on stock firmware) or 'ssh' (LilAlpine dev path)
-export const DEFAULT_PUSH = { mode: 'serial', port: null, ...DEFAULT_SSH }
+// mode 'auto' (default: detect the firmware), 'serial' (stock firmware) or 'ssh' (LilAlpine)
+export const DEFAULT_PUSH = { mode: 'auto', port: null, ...DEFAULT_SSH }
 const CONFIG = '/mnt/SDCARD/config.json'
 
 const num = (v) => (v === undefined || v === '' ? undefined : Number(v))
@@ -141,8 +141,23 @@ export class Session extends EventEmitter {
     return key
   }
 
-  push(opts = DEFAULT_PUSH, log = () => {}) {
+  // LilAlpine answers ssh and has /etc/alpine-release, so ssh wins when it answers. Stock Tina has no
+  // ssh, only the vendor app's USB serial port (LilAlpine runs the same app, so it has the port too
+  // and a serial push still works there). Errors when neither is found: never guesses a mode.
+  async detectMode({ host } = DEFAULT_SSH) {
+    const alpine = await run('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=3', host, 'test -f /etc/alpine-release && echo lilalpine'], { timeout: 8000 })
+      .then(({ stdout }) => stdout.trim() === 'lilalpine', () => false)
+    if (alpine) return 'ssh'
+    if ((await Device.list()).length) return 'serial'
+    throw new Error(`no MK10 found: ${host} does not answer as LilAlpine over ssh, and no MK10 USB serial port is present`)
+  }
+
+  async push(opts = DEFAULT_PUSH, log = () => {}) {
     const o = { ...DEFAULT_PUSH, ...opts }
+    if (o.mode === 'auto') {
+      o.mode = await this.detectMode(o)
+      log(`auto: ${o.mode === 'ssh' ? 'LilAlpine' : 'stock firmware'} detected, pushing over ${o.mode}`)
+    }
     if (o.mode === 'ssh') return this.pushSsh(o, log)
     if (o.mode === 'serial') return this.pushSerial(o, log)
     throw new Error(`unknown push mode ${o.mode}`)

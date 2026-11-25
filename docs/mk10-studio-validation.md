@@ -105,6 +105,7 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 
 - [ ] **Device: …** (top right) opens the device popover; click outside or press Esc to close. The button shows the push mode.
 - [ ] Switch the push mode to ssh. Host and remote fields persist across restart.
+- [ ] Push mode Auto: on LilAlpine the Activity log says `auto: LilAlpine detected` and the push goes over ssh; on stock firmware it says `stock firmware detected` and uses USB serial; with the device unplugged and off the network, the push fails with `no MK10 found`.
 - [ ] Push. The device restarts keyboard-device with about 10 s blank, then shows the edits, background video included. If the video player did not start, the log shows a warning (seen once, not reproduced).
 - [ ] Wrong host gives a clean error within about 5 s (ConnectTimeout).
 

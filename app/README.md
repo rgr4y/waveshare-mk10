@@ -53,7 +53,10 @@ MCP appear live in the UI.
 "Push to device" encodes the in-memory theme and makes it the active layout. Mode is picked in the
 inspector (stored in `settings.json` under Electron's userData dir):
 
-- **USB serial** (default; verified on KeyboardDevice V2.34 under LilAlpine): writes the theme to a new
+- **Auto** (default): before each push, checks the ssh host for `/etc/alpine-release`. LilAlpine pushes over
+  ssh; otherwise, if an MK10 USB serial port is present (stock firmware), over USB serial. With neither, the
+  push fails with an error instead of guessing.
+- **USB serial** (verified on KeyboardDevice V2.34 under LilAlpine): writes the theme to a new
   `/data/theme/MK10/mk10studio-<timestamp>.Theme` with `saveToFile` + `setFileCRC`, sends the V1 reload
   command (cmd 2), which loads it and rewrites `/mnt/SDCARD/config.json`, then deletes older
   `mk10studio-*.Theme` pushes. A failed push leaves the active theme alone. About 10 s for 12 MB.

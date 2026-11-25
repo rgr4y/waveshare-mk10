@@ -115,11 +115,15 @@ async function setBackgroundVideo(page, file) {
   return task('Transcoding video (640x256 h264, can take a while)', () => session.setBackgroundVideo(page, file))
 }
 
-const pushOpts = () => ({ mode: settings.pushMode ?? 'serial', port: process.env.MK10_PORT || null, ...settings.ssh })
+const pushOpts = () => ({ mode: settings.pushMode ?? 'auto', port: process.env.MK10_PORT || null, ...settings.ssh })
 
 async function push() {
   if (!session.theme) return null
   const o = pushOpts()
+  if (o.mode === 'auto') {
+    o.mode = await task('Detecting MK10 firmware', () => session.detectMode(o))
+    log(`auto: ${o.mode === 'ssh' ? 'LilAlpine' : 'stock firmware'} detected`)
+  }
   const r = await dialog.showMessageBox(win, {
     type: 'question', buttons: ['Push', 'Cancel'], defaultId: 0, cancelId: 1,
     message: o.mode === 'ssh' ? `Push to ${o.host} over ssh?` : 'Push to MK10 over USB?',
@@ -201,7 +205,7 @@ function registerIpc() {
   })
   h('setSsh', async (ssh) => {
     settings.ssh = { host: String(ssh.host), remote: String(ssh.remote) }
-    if (ssh.mode === 'serial' || ssh.mode === 'ssh') settings.pushMode = ssh.mode
+    if (['auto', 'serial', 'ssh'].includes(ssh.mode)) settings.pushMode = ssh.mode
     await saveSettings()
   })
 }

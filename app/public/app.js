@@ -299,7 +299,7 @@ async function init() {
   const cfg = await window.mk10.settings()
   $('ssh-host').value = cfg.ssh.host
   $('ssh-remote').value = cfg.ssh.remote
-  $('push-mode').value = cfg.pushMode ?? 'serial'
+  $('push-mode').value = cfg.pushMode ?? 'auto'
   $('device-mode').textContent = $('push-mode').value
   let gaps = true
   try { gaps = localStorage.getItem('keyGaps') !== 'false' } catch { /* storage unavailable: default on */ }
