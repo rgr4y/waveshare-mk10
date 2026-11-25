@@ -50,6 +50,12 @@ YaHei). After the first ssh push or pull, Studio copies them (~85 MB, about a mi
 `~/Library/Application Support/mk10-studio/device-fonts` and uses them in the preview; Settings > Device
 fonts copies them again. They come from your device and are not shipped with Studio.
 
+Raw JSON (Inspector, above Activity) shows for keys the form doesn't fully cover: int/bool action
+fields, toggle states, no action, or an undecodable one. The action is shown as its fields
+(`["name", {"type": 10|2|1|8, "null": 0, "value": ...}]`: string, int, bool, map), jsonData and
+titleParam as parsed JSON. Apply validates types and new image paths, keeps the key's slot, and is
+undoable (Cmd+Z) like cut and paste.
+
 Right-click > Press Key follows a navigation key in the editor: openPage opens its folder, oneLevelUp
 goes to the parent, pageSwitch (pageSwitchMode 0) goes to top-level page `jumpToPage`. Other actions run
 on the device or host, so the status line only names them.

@@ -369,6 +369,31 @@ function renderPageInspector(p) {
   fillKv($('pg-panel'), [['image', img ? base(img.path || img.paths || '(none)') : 'none']])
 }
 
+// Raw JSON editor: for keys whose action has fields the form can't edit (int/bool, locked strings),
+// toggle states, no action, or an action we can't decode.
+function needsRaw(key) {
+  const a = key.action
+  if (!a || a.type === 'undecodable' || key.states) return true
+  const edit = new Set(a.editable ?? [])
+  const skip = new Set(['type', 'editable', 'iconPath', 'parentDescription', 'AISoundControlKeyword'])
+  return Object.entries(a).some(([k, v]) => !skip.has(k) && !edit.has(k) && v !== '')
+}
+
+// pretty JSON, but one line per controlData field: ["jumpToPage", {"type":2,"null":0,"value":1}]
+const rawText = (raw) => `{\n${Object.entries(raw).map(([k, v]) => `  ${JSON.stringify(k)}: ${k === 'controlData' && Array.isArray(v)
+  ? `[\n${v.map((f) => `    ${JSON.stringify(f)}`).join(',\n')}\n  ]`
+  : JSON.stringify(v, null, 2).replace(/\n/g, '\n  ')}`).join(',\n')}\n}`
+
+async function loadRaw(force = false) {
+  const ta = $('raw-json')
+  const sel = ui.sel
+  if (!force && (ta.dataset.dirty === 'true' || document.activeElement === ta)) return
+  const raw = await window.mk10.keyRaw(ui.page, sel.row, sel.col).catch(() => null)
+  if (ui.sel !== sel) return // selection moved on while loading
+  ta.value = raw ? rawText(raw) : ''
+  ta.dataset.dirty = 'false'
+}
+
 function renderInspector() {
   const p = curPage()
   const sel = ui.sel
@@ -380,6 +405,7 @@ function renderInspector() {
   $('insp-hint').textContent = under.length ? `No key here, but not empty: ${under.map(widgetLabel).join(', ')}. Paste is blocked on this cell.`
     : sel?.kind === 'key' ? 'Empty slot. Paste a key here (Cmd+V or right-click). The background video is in the page Inspector (click the page).' : 'Click a page or a key.'
   $('insp-key').hidden = !key
+  if (!key) $('insp-raw').hidden = true
   $('insp-video').hidden = !vid
   $('insp-page').hidden = !pg
   if (pg) renderPageInspector(pg)
@@ -394,6 +420,8 @@ function renderInspector() {
       const cur = stateIndex(key)
       fillKv($('key-states'), key.states.list.map((s, i) => [`state ${i + 1}${i === cur ? ' (shown)' : ''}`, `${s.keyString ?? ''} · keycode ${s.keycode}`]))
     }
+    $('insp-raw').hidden = !needsRaw(key)
+    if (needsRaw(key)) loadRaw()
     fillKv($('key-action'), actionRows(key.action), (field, value) =>
       run(window.mk10.setKeyActionField(ui.page, sel.row, sel.col, field, value)))
   }
@@ -541,6 +569,23 @@ async function init() {
   $('btn-settings').addEventListener('click', openSettings)
   $('btn-capture').addEventListener('click', () => run(window.mk10.openCapture()))
   $('btn-pull').addEventListener('click', () => run(window.mk10.pull()))
+  $('raw-json').addEventListener('input', (e) => { e.target.dataset.dirty = 'true' })
+  $('btn-raw-revert').addEventListener('click', () => loadRaw(true))
+  $('btn-raw-apply').addEventListener('click', async () => {
+    let raw
+    try {
+      raw = JSON.parse($('raw-json').value)
+    } catch (e) {
+      return setStatus({ error: true, msg: `Raw JSON: ${e.message}` })
+    }
+    const { row, col } = ui.sel
+    try {
+      await window.mk10.setKeyRaw(ui.page, row, col, raw)
+      loadRaw(true)
+    } catch (e) {
+      run(Promise.reject(e)) // status line; the edited text stays for fixing
+    }
+  })
   $('btn-fonts').addEventListener('click', () => run(window.mk10.syncFonts()))
   window.mk10.onFonts(registerFonts)
   registerFonts(await window.mk10.fonts())

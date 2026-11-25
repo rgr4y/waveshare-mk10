@@ -9,7 +9,7 @@ import { QWriter } from './qdatastream.js'
 import {
   decodeTheme, encodeTheme, formatQtJson, decodeControlData, encodeControlData,
   pages, listKeys, getItem, setKeyTitle, setKeyImage, setBackgroundVideo,
-  editableActionFields, setKeyActionField, copyKey, pasteKey, removeKey, parseKeyClip,
+  editableActionFields, setKeyActionField, copyKey, pasteKey, removeKey, parseKeyClip, keyRaw, setKeyRaw,
 } from './theme.js'
 
 // Pristine stock theme (ScreenKeyMacOS v1.1 bundle, captured 2026-11-24 before an accidental vendor-app save); sha in SHA256SUMS.txt
@@ -210,4 +210,26 @@ test('real theme: key clipboard copy, cut, paste across themes, asset reuse and 
   const [cr, cc] = [Math.floor(Number(clk.y) / 128), Math.floor(Number(clk.x) / 128)]
   assert.equal(getItem(a, pi, cr, cc), undefined)
   assert.throws(() => pasteKey(a, pi, cr, cc, text), /holds a widget/)
+})
+
+test('raw key JSON round-trips, edits typed action fields and rejects bad input', { skip }, () => {
+  const t = decodeTheme(load())
+  const k = listKeys(t, 0).find((x) => decodeControlData(x.item.controlData).type === 'pageSwitch')
+  const [p, r, c] = [0, k.row, k.col]
+  const before = JSON.stringify(t.json)
+  setKeyRaw(t, p, r, c, JSON.parse(JSON.stringify(keyRaw(t, p, r, c))))
+  assert.equal(JSON.stringify(t.json), before, 'unchanged JSON writes the same item')
+
+  const raw = keyRaw(t, p, r, c)
+  raw.controlData.find(([n]) => n === 'jumpToPage')[1].value = 3
+  setKeyRaw(t, p, r, c, raw)
+  assert.equal(decodeControlData(getItem(t, p, r, c).controlData).fields.find(([n]) => n === 'jumpToPage')[1].value, 3)
+  assert.equal(getItem(t, p, r, c).row, String(r), 'slot fields kept')
+
+  const bad = (mut, re) => { const x = keyRaw(t, p, r, c); mut(x); const snap = JSON.stringify(t.json); assert.throws(() => setKeyRaw(t, p, r, c, x), re); assert.equal(JSON.stringify(t.json), snap) }
+  bad((x) => { x.controlData.find(([n]) => n === 'jumpToPage')[1].value = '3' }, /32-bit integer/)
+  bad((x) => { x.row = '1' }, /slot/)
+  bad((x) => { x.type = '114' }, /stay "115"/)
+  bad((x) => { x.path = '/image/MK10/cache/nope.png' }, /not in this theme/)
+  bad((x) => { x.title = 5 }, /must be a string/)
 })

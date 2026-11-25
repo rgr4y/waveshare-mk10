@@ -7,7 +7,7 @@ import { promisify } from 'node:util'
 import {
   decodeTheme, encodeTheme, decodeControlData, editableActionFields,
   setKeyTitle, setKeyImage, setBackgroundVideo, setKeyActionField,
-  copyKey, pasteKey, removeKey, parseKeyClip,
+  copyKey, pasteKey, removeKey, parseKeyClip, keyRaw, setKeyRaw,
 } from './theme.js'
 import { toKeyPng, toDeviceMp4 } from './media.js'
 import { Device } from './device.js'
@@ -21,7 +21,7 @@ export const DEFAULT_SSH = { host: 'root@10.0.1.48', remote: DEFAULT_REMOTE }
 export const DEFAULT_PUSH = { mode: 'auto', port: null, ...DEFAULT_SSH }
 const CONFIG = '/mnt/SDCARD/config.json'
 
-const KEY_OPS = new Set(['keyCut', 'keyPaste', 'keyDelete', 'undo'])
+const KEY_OPS = new Set(['keyCut', 'keyPaste', 'keyDelete', 'keyRaw', 'undo'])
 const num = (v) => (v === undefined || v === '' ? undefined : Number(v))
 
 // Multi-state keys (e.g. keyboard_switch, a toggle): item jsonData holds the per-state image, title and
@@ -158,6 +158,23 @@ export class Session extends EventEmitter {
     // ponytail: whole-theme snapshot (json clone + shallow asset map, buffers shared), last 20 kept
     this.undoStack.push({ json: structuredClone(this.theme.json), assets: new Map(this.theme.assets) })
     if (this.undoStack.length > 20) this.undoStack.shift()
+  }
+
+  keyRaw(page, row, col) {
+    this.need()
+    return keyRaw(this.theme, page, row, col)
+  }
+
+  setKeyRaw(page, row, col, raw) {
+    this.need()
+    this.snapshot()
+    try {
+      setKeyRaw(this.theme, page, row, col, raw) // throws before changing anything on bad input
+    } catch (e) {
+      this.undoStack.pop()
+      throw e
+    }
+    this.touch('keyRaw')
   }
 
   cutKey(page, row, col) {

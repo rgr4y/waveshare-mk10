@@ -1,7 +1,7 @@
 // ScreenKey .Theme codec + editor helpers. Port of tools/qtheme.py; format: docs/theme-format.md.
 // Layout: QVariantMap header | u32 pad1 | QByteArray JSON | QMap<QString,QByteArray> assets | u32 pad2
 import { randomUUID } from 'node:crypto'
-import { QReader, QWriter, T_STRING } from './qdatastream.js'
+import { QReader, QWriter, T_BOOL, T_INT, T_MAP, T_STRING } from './qdatastream.js'
 
 const utf8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })
 
@@ -157,8 +157,6 @@ export function setKeyActionField(theme, pageIndex, row, col, field, value) {
   it.controlData = encodeControlData(cd)
 }
 
-// True if any item field (or controlData string field) points at the asset key
-// (exact path, or a `paths` directory containing it). Undecodable controlData counts as referenced.
 // image paths a multi-state key keeps per state, inside its jsonData string
 function stateRefs(it) {
   try {
@@ -168,6 +166,8 @@ function stateRefs(it) {
   }
 }
 
+// True if any item field (or controlData string field, or jsonData state path) points at the asset
+// key (exact path, or a `paths` directory containing it). Undecodable controlData counts as referenced.
 function isReferenced(theme, key) {
   const hit = (s) => typeof s === 'string' && s.startsWith('/') && (s === key || key.startsWith(s + '/'))
   for (const p of theme.json.pages) {
@@ -225,6 +225,74 @@ export function setBackgroundVideo(theme, pageIndex, mp4Buffer) {
 // {"mk10studio":"key","v":1,"item":{...type 115 item minus slot fields},"assets":{"<asset key>":"<base64>"}}
 const SLOT_FIELDS = ['row', 'col', 'x', 'y', 'id', 'itemName']
 const assetRef = (v) => typeof v === 'string' && v.startsWith('/')
+
+// ---- raw key editing: the item as JSON, for key types the Inspector form doesn't cover.
+// controlData (base64 QDataStream) becomes its QVariantMap fields, [name, {type, null, value}] with
+// type 10 = QString, 2 = int, 1 = bool, 8 = map; jsonData and titleParam (JSON inside a string) are
+// parsed. Slot fields (row, col, x, y, id, itemName) are left out and kept as they are.
+const JSON_STRING_FIELDS = ['jsonData', 'titleParam']
+
+function checkVariants(fields, at = 'controlData') {
+  if (!Array.isArray(fields)) throw new Error(`${at} must be a list of [name, {type, null, value}]`)
+  for (const f of fields) {
+    const [name, v] = Array.isArray(f) ? f : []
+    const where = `${at} field ${JSON.stringify(name)}`
+    if (typeof name !== 'string' || !v || typeof v !== 'object') throw new Error(`${at}: each field is [name, {type, null, value}]`)
+    if (v.null !== 0 && v.null !== 1) throw new Error(`${where}: null must be 0 or 1`)
+    if (v.type === T_BOOL) { if (typeof v.value !== 'boolean') throw new Error(`${where}: type 1 (bool) needs true or false`) }
+    else if (v.type === T_INT) { if (!Number.isInteger(v.value) || v.value < -(2 ** 31) || v.value >= 2 ** 31) throw new Error(`${where}: type 2 (int) needs a 32-bit integer`) }
+    else if (v.type === T_STRING) { if (typeof v.value !== 'string' && v.value !== null) throw new Error(`${where}: type 10 (string) needs a string`) }
+    else if (v.type === T_MAP) checkVariants(v.value, where)
+    else throw new Error(`${where}: type ${v.type} can't be edited as JSON`)
+  }
+}
+
+export function keyRaw(theme, pageIndex, row, col) {
+  const it = needItem(theme, pageIndex, row, col)
+  const out = {}
+  for (const [k, v] of Object.entries(it)) {
+    if (SLOT_FIELDS.includes(k)) continue
+    if (k === 'controlData' && v) {
+      try {
+        const { fields } = decodeControlData(v)
+        checkVariants(fields)
+        out[k] = fields
+      } catch {
+        out[k] = v // undecodable or binary fields: stays base64, saved back unchanged
+      }
+    } else if (JSON_STRING_FIELDS.includes(k) && v) {
+      try { out[k] = JSON.parse(v) } catch { out[k] = v }
+    } else out[k] = v
+  }
+  return out
+}
+
+export function setKeyRaw(theme, pageIndex, row, col, raw) {
+  const it = needItem(theme, pageIndex, row, col)
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('the key must be a JSON object')
+  const next = {}
+  for (const [k, v] of Object.entries(raw)) {
+    if (SLOT_FIELDS.includes(k)) throw new Error(`${k} is the key's slot; move keys with cut and paste`)
+    if (k === 'controlData' && Array.isArray(v)) {
+      checkVariants(v)
+      next[k] = encodeControlData({ fields: v })
+    } else if (JSON_STRING_FIELDS.includes(k) && v && typeof v === 'object') next[k] = JSON.stringify(v)
+    else if (typeof v === 'string') next[k] = v
+    else throw new Error(`${k} must be a string (item fields are strings in the theme)`)
+  }
+  if (next.type !== '115') throw new Error('type must stay "115" (a key)')
+  // a path the key didn't have before must exist in the theme (device built-ins it already used are kept)
+  const refs = (x) => [...Object.values(x).filter(assetRef), ...stateRefs(x)]
+  const had = new Set(refs(it))
+  const missing = refs(next).filter((r) => !had.has(r) && !assetsUnder(theme, r).length)
+  if (missing.length) throw new Error(`not in this theme: ${missing.join(', ')}`)
+  // rebuild in the item's own field order; fields new to it go last
+  const old = { ...it }
+  for (const k of Object.keys(it)) delete it[k]
+  for (const k of Object.keys(old)) if (SLOT_FIELDS.includes(k) || k in next) it[k] = SLOT_FIELDS.includes(k) ? old[k] : next[k]
+  for (const k of Object.keys(next)) if (!(k in it)) it[k] = next[k]
+  dropItemOrphans(theme, old)
+}
 
 // asset keys an item field points at: the exact file, or every file under a `paths` directory
 function assetsUnder(theme, ref) {

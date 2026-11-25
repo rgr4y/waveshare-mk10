@@ -359,6 +359,8 @@ function registerIpc() {
   h('fonts', () => fonts)
   h('syncFonts', syncFonts)
   h('keyOp', keyOp)
+  h('keyRaw', (p, r, c) => session.keyRaw(p, r, c))
+  h('setKeyRaw', (p, r, c, raw) => task(`Edit key ${slot(r, c)} JSON`, async () => session.setKeyRaw(p, r, c, raw)))
   h('openCapture', openCapture)
   h('saveCaptureLog', async (text) => {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)

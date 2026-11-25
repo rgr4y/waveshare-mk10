@@ -86,6 +86,12 @@
         <p class="hint">The file is transcoded to 640×256 h264 (25 fps, no audio) via ffmpeg. This can take a while.</p>
       </div>
 
+      <div id="insp-raw" class="insp-section" hidden>
+        <h3>Raw JSON <span class="muted">(fields the form above can't edit yet)</span></h3>
+        <textarea id="raw-json" class="raw-json" spellcheck="false" autocomplete="off"></textarea>
+        <div class="row-buttons"><button id="btn-raw-apply" type="button">Apply</button><button id="btn-raw-revert" type="button">Revert</button></div>
+      </div>
+
       <div class="insp-section grow">
         <h3>Activity</h3>
         <pre id="log" class="log"></pre>
