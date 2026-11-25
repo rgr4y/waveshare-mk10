@@ -483,6 +483,9 @@ function renderInspector() {
     fillImg($('key-thumb'), f.path || f.paths, f.path ? null : f.frameDelays)
     $('key-states-h').hidden = $('key-states').hidden = !key.states
     $('btn-key-image').hidden = !!key.states // per-state images; item path is not what the device shows
+    $('key-sound').textContent = key.sound ? base(key.sound) : 'none'
+    $('key-sound').title = key.sound ?? ''
+    $('btn-key-sound-play').hidden = $('btn-key-sound-clear').hidden = !key.sound
     if (key.states) {
       const cur = stateIndex(key)
       fillKv($('key-states'), key.states.list.map((s, i) => [`state ${i + 1}${i === cur ? ' (shown)' : ''}`, `${s.keyString ?? ''} · keycode ${s.keycode}`]))
@@ -698,6 +701,17 @@ async function init() {
   $('btn-push').addEventListener('click', () => run(window.mk10.push()))
   $('btn-key-image').addEventListener('click', () => {
     if (ui.sel?.kind === 'key') run(window.mk10.setKeyImage(ui.page, ui.sel.row, ui.sel.col))
+  })
+  const selKey = () => (ui.sel?.kind === 'key' ? keyAt(curPage(), ui.sel.row, ui.sel.col) : null)
+  $('btn-key-sound').addEventListener('click', () => {
+    if (selKey()) run(window.mk10.setKeySound(ui.page, ui.sel.row, ui.sel.col))
+  })
+  $('btn-key-sound-clear').addEventListener('click', () => {
+    if (selKey()) run(window.mk10.setKeySound(ui.page, ui.sel.row, ui.sel.col, null))
+  })
+  $('btn-key-sound-play').addEventListener('click', () => {
+    const k = selKey()
+    if (k?.sound) run(assetUrl(k.sound).then((a) => a && new Audio(a.url).play()))
   })
   $('btn-video').addEventListener('click', () => run(window.mk10.setBackgroundVideo(ui.page)))
   $('btn-pg-video').addEventListener('click', () => run(window.mk10.setBackgroundVideo(ui.page)))

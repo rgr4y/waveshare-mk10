@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import { QWriter } from './qdatastream.js'
 import {
   decodeTheme, encodeTheme, formatQtJson, decodeControlData, encodeControlData,
-  pages, listKeys, getItem, setKeyTitle, setKeyImage, setBackgroundVideo,
+  pages, listKeys, getItem, setKeyTitle, setKeyImage, setKeySound, setBackgroundVideo,
   editableActionFields, setKeyActionField, copyKey, pasteKey, removeKey, parseKeyClip, keyRaw, setKeyRaw,
 } from './theme.js'
 
@@ -232,4 +232,22 @@ test('raw key JSON round-trips, edits typed action fields and rejects bad input'
   bad((x) => { x.type = '114' }, /stay "115"/)
   bad((x) => { x.path = '/image/MK10/cache/nope.png' }, /not in this theme/)
   bad((x) => { x.title = 5 }, /must be a string/)
+})
+
+test('real theme: setKeySound adds, dedupes, suffixes, clears and survives a round trip', { skip }, () => {
+  const t = decodeTheme(load())
+  const { row, col } = listKeys(t, 0)[0]
+  const a = Buffer.from('RIFFaaaa')
+  const b = Buffer.from('RIFFbbbb')
+  assert.equal(setKeySound(t, 0, row, col, a, 'Boom Sound!.mp3'), '/sound/Boom_Sound_.wav')
+  assert.equal(setKeySound(t, 0, row, col, a, 'Boom Sound!.mp3'), '/sound/Boom_Sound_.wav') // same bytes: same key
+  const { row: r2, col: c2 } = listKeys(t, 0)[1]
+  assert.equal(setKeySound(t, 0, r2, c2, b, 'Boom Sound!.wav'), '/sound/Boom_Sound_-2.wav') // clash: suffix
+  const back = decodeTheme(encodeTheme(t))
+  assert.equal(getItem(back, 0, row, col).soundFile, '/sound/Boom_Sound_.wav')
+  assert.ok(back.assets.get('/sound/Boom_Sound_-2.wav').equals(b))
+  assert.equal(setKeySound(t, 0, row, col, null), null)
+  assert.equal(getItem(t, 0, row, col).soundFile, '')
+  assert.equal(t.assets.has('/sound/Boom_Sound_.wav'), false) // orphan dropped
+  assert.equal(t.assets.has('/sound/Boom_Sound_-2.wav'), true) // still used by the other key
 })

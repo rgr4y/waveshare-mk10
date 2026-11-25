@@ -1,15 +1,16 @@
 // Editor session: one open theme, shared by the Electron UI, the MCP server and the CLI.
 // Every mutation goes through here so all front ends see the same state ('change' event).
 import { EventEmitter } from 'node:events'
+import { basename } from 'node:path'
 import { readFile, writeFile } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import {
   decodeTheme, encodeTheme, decodeControlData, editableActionFields,
-  setKeyTitle, setKeyImage, setBackgroundVideo, setKeyActionField,
+  setKeyTitle, setKeyImage, setKeySound, setBackgroundVideo, setKeyActionField,
   copyKey, pasteKey, removeKey, parseKeyClip, keyRaw, setKeyRaw,
 } from './theme.js'
-import { toKeyPng, toDeviceMp4 } from './media.js'
+import { toKeyPng, toDeviceMp4, toDeviceWav } from './media.js'
 import { Device } from './device.js'
 
 const run = promisify(execFile)
@@ -126,6 +127,7 @@ export class Session extends EventEmitter {
           title: it.title,
           titleParam: it.titleParam ? JSON.parse(it.titleParam) : undefined,
           path: it.path || undefined,
+          sound: it.soundFile || undefined,
           paths: it.paths || undefined,
           frameDelays: it.frameDelays || undefined,
           text: it.text_str,
@@ -236,6 +238,15 @@ export class Session extends EventEmitter {
     const png = typeof input === 'string' ? await toKeyPng(input) : input
     const key = setKeyImage(this.theme, page, row, col, png)
     this.touch('keyImage')
+    return key
+  }
+
+  // input: path to any audio file ffmpeg reads (converted to 48 kHz stereo WAV), or null to clear
+  async setKeySound(page, row, col, input) {
+    this.need()
+    const wav = input ? await toDeviceWav(input) : null
+    const key = setKeySound(this.theme, page, row, col, wav, input ? basename(input) : undefined)
+    this.touch('keySound')
     return key
   }
 

@@ -29,6 +29,10 @@ export const toKeyPng = (input) => viaFfmpeg([
   '-vf', `crop='min(iw,ih)':'min(iw,ih)',scale=${KEY_PX}:${KEY_PX}:flags=lanczos`,
 ], 'png')
 
+// any audio ffmpeg reads -> 48 kHz stereo 16-bit WAV: the codec's native rate, so the stock firmware's
+// tinyplay (no resampling) plays it at the right speed too
+export const toDeviceWav = (input) => viaFfmpeg(['-i', input, '-vn', '-ac', '2', '-ar', '48000', '-c:a', 'pcm_s16le'], 'wav')
+
 // cover-crop to 640x256, re-encode to what videoplayerinterfaceAPP played in testing
 export const toDeviceMp4 = (input) => viaFfmpeg([
   '-i', input, '-an',

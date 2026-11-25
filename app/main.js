@@ -16,8 +16,9 @@ const fontDir = () => join(app.getPath('userData'), 'device-fonts')
 let fonts = [] // manifest: [{file, family, weight, style}]
 
 const STOCK_DIR = '/Applications/ScreenKeyMacOS.app/Contents/MacOS/theme/MK10/'
-const MIME = { '.png': 'image/png', '.gif': 'image/gif', '.mp4': 'video/mp4', '.jpg': 'image/jpeg' }
+const MIME = { '.png': 'image/png', '.gif': 'image/gif', '.mp4': 'video/mp4', '.jpg': 'image/jpeg', '.wav': 'audio/wav' }
 const IMAGE_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tiff', 'heic', 'svg']
+const AUDIO_EXT = ['wav', 'mp3', 'm4a', 'aac', 'aif', 'aiff', 'flac', 'ogg', 'opus', 'caf']
 const VIDEO_EXT = ['mp4', 'mov', 'm4v', 'mkv', 'avi', 'webm', 'gif']
 
 const argv = process.argv.slice(2)
@@ -139,6 +140,13 @@ async function setKeyImage(page, row, col, file) {
   file ??= await pickFile('Choose key image', 'Images', IMAGE_EXT)
   if (!file) return null
   return task('Set key image', () => session.setKeyImage(page, row, col, file))
+}
+
+async function setKeySound(page, row, col, file) {
+  if (file === null) return task('Clear key sound', () => session.setKeySound(page, row, col, null))
+  file ??= await pickFile('Choose key sound', 'Audio', AUDIO_EXT)
+  if (!file) return null
+  return task('Set key sound', () => session.setKeySound(page, row, col, file))
 }
 
 async function setBackgroundVideo(page, file) {
@@ -353,6 +361,7 @@ function registerIpc() {
   h('setKeyTitle', (p, r, c, t) => session.setKeyTitle(p, r, c, t))
   h('setKeyActionField', (p, r, c, f, v) => session.setKeyActionField(p, r, c, f, v))
   h('setKeyImage', setKeyImage)
+  h('setKeySound', setKeySound)
   h('setBackgroundVideo', setBackgroundVideo)
   h('push', push)
   h('pull', pull)

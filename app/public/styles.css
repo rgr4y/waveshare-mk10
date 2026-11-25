@@ -253,3 +253,4 @@ body.capture { padding: var(--sp-4); overflow: auto; }
 .c-key { font-weight: 600; }
 .level { display: flex; align-items: center; gap: var(--sp-2); flex: none; font-size: 12px; color: var(--muted); }
 .level input { width: 90px; }
+#key-sound { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; align-self: center; }

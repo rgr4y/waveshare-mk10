@@ -45,6 +45,11 @@ Pull (top bar, next to Push, or File > Pull from Device…) downloads the theme 
 (`config.json` `defaultTheme`) over ssh, saves it where you choose and opens it. LilAlpine only: the stock
 firmware's USB API has no file read. Push and pull share one lock. Key capture is in Settings.
 
+Sound (key Inspector): Choose… takes any audio ffmpeg reads and stores it in the theme as a 48 kHz
+stereo 16-bit WAV at `/sound/<name>.wav` (the key's `soundFile`, as the vendor app does). The push
+carries it to `/data/sound/` on the device. Play previews it here; Clear removes it, and the WAV too
+once no key uses it. A name already taken by a different file gets a `-2` suffix.
+
 Brightness and Volume (top bar sliders) send `setBacklight {level: 0-100}` and `setVolume {level: 0-7}`
 over USB serial on release; both firmwares. The device has no getter for either, so each slider starts at
 the last value set from this app (50 and 4 the first time). Disabled during a push. Key sounds need

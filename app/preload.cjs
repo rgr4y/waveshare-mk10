@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('mk10', {
   setKeyTitle: call('setKeyTitle'),
   setKeyActionField: call('setKeyActionField'),
   setKeyImage: call('setKeyImage'),
+  setKeySound: call('setKeySound'),
   setBackgroundVideo: call('setBackgroundVideo'),
   push: call('push'),
   pull: call('pull'),

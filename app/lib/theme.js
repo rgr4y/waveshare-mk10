@@ -209,6 +209,28 @@ export function setKeyImage(theme, pageIndex, row, col, pngBuffer) {
   return key
 }
 
+// Key press sound. The vendor app stores it as item soundFile "/sound/<name>.wav" with the WAV in the asset
+// map under the same key; the device has it at /data/sound/<name>.wav after a push (checked 2026-11-24).
+// wavBuffer null clears it. A name already used by different bytes gets a -2, -3, ... suffix.
+export function setKeySound(theme, pageIndex, row, col, wavBuffer, name = 'sound') {
+  const it = needItem(theme, pageIndex, row, col)
+  const old = it.soundFile
+  let key = ''
+  if (wavBuffer) {
+    const base = String(name).replace(/\.[^.]*$/, '').replace(/[^\p{L}\p{N}_-]+/gu, '_').slice(0, 60) || 'sound'
+    const buf = Buffer.from(wavBuffer)
+    for (let n = 1; ; n++) {
+      key = `/sound/${base}${n > 1 ? `-${n}` : ''}.wav`
+      const have = theme.assets.get(key)
+      if (!have || have.equals(buf)) break
+    }
+    theme.assets.set(key, buf)
+  }
+  it.soundFile = key
+  if (old && old !== key) dropIfOrphan(theme, old, false)
+  return key || null
+}
+
 export function setBackgroundVideo(theme, pageIndex, mp4Buffer) {
   const it = (page(theme, pageIndex).items ?? [])
     .find((x) => String(x.type) === '100' && x.backgroundType === 'main')
