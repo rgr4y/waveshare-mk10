@@ -1,5 +1,5 @@
 // Electron main: owns the single Session; all edits (UI, MCP) go through it.
-import { app, BrowserWindow, dialog, ipcMain, Menu } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Tray } from 'electron'
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { existsSync, watch } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
@@ -13,10 +13,12 @@ const VIDEO_EXT = ['mp4', 'mov', 'm4v', 'mkv', 'avi', 'webm', 'gif']
 const argv = process.argv.slice(2)
 const flag = (name) => { const i = argv.indexOf(name); return i < 0 ? undefined : (argv[i + 1] ?? true) }
 const DEV = argv.includes('--dev')
+const SHOT = !!flag('--screenshot')
 
 const session = new Session()
 let win = null
 let mcp = null
+let tray = null
 let settings = { lastFile: null, reopenLast: true, mcp: { enabled: false, port: 47110 }, ssh: { ...DEFAULT_SSH } }
 let settingsFile
 
@@ -39,7 +41,7 @@ const send = (ch, data) => { if (win && !win.isDestroyed()) win.webContents.send
 const status = (msg, extra = {}) => send('status', { msg, ...extra })
 const log = (line) => { console.log(line); send('log', String(line)) }
 
-session.on('change', (e) => send('change', e))
+session.on('change', (e) => { send('change', e); refreshTray() })
 
 // Wrap an operation so progress/errors reach the status line; errors still reject to the caller.
 async function task(label, fn) {
@@ -137,6 +139,7 @@ async function mcpToggle(on, port = settings.mcp.port) {
   }
   settings.mcp = { enabled: !!on, port: Number(port) }
   send('mcp', url)
+  refreshTray()
   await saveSettings()
   return url
 }
@@ -229,16 +232,40 @@ function createWindow() {
     },
   })
   win.on('close', (e) => {
-    if (!session.dirty || win.forceClose) return
-    const r = dialog.showMessageBoxSync(win, {
-      type: 'warning', buttons: ['Cancel', 'Discard changes'], defaultId: 0, cancelId: 0,
-      message: 'Unsaved changes', detail: 'Close without saving?',
-    })
-    if (r === 0) e.preventDefault()
-    else win.forceClose = true
+    if (app.isQuitting || win.forceClose) return
+    e.preventDefault() // resident app: hide to tray; theme and MCP stay alive
+    win.hide()
+    app.dock.hide()
   })
   win.loadFile(join(import.meta.dirname, 'public', 'index.html'))
   return win
+}
+
+function showWindow() {
+  app.dock.show()
+  win.show()
+  win.focus()
+}
+
+// ---- tray (text-only: no icon asset yet)
+function refreshTray() {
+  if (!tray) return
+  const guard = (fn) => () => fn().catch(() => {}) // already reported via status
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: session.file ? basename(session.file) : 'No theme open', enabled: false },
+    { label: 'Open MK10 Studio', click: showWindow },
+    { label: 'Push to device', enabled: !!session.theme, click: guard(push) },
+    { label: 'MCP server', type: 'checkbox', checked: !!mcp, click: guard(() => task(mcp ? 'Stop MCP' : 'Start MCP', () => mcpToggle(!mcp))) },
+    { type: 'separator' },
+    { label: 'Quit MK10 Studio', click: () => app.quit() },
+  ]))
+}
+
+function createTray() {
+  tray = new Tray(nativeImage.createEmpty())
+  tray.setTitle('MK10')
+  tray.setToolTip('MK10 Studio')
+  refreshTray()
 }
 
 function watchPublic() {
@@ -259,11 +286,18 @@ async function screenshot(out) {
   app.quit()
 }
 
+// the screenshot run skips the lock so it works while a real instance is open
+const gotLock = SHOT || app.requestSingleInstanceLock()
+if (!gotLock) app.quit()
+else app.on('second-instance', () => { if (win) showWindow() })
+
 app.whenReady().then(async () => {
+  if (!gotLock) return
   await loadSettings()
   registerIpc()
   buildMenu()
   createWindow()
+  if (!SHOT) createTray()
   if (DEV) watchPublic()
   win.webContents.once('did-finish-load', async () => {
     const shot = flag('--screenshot')
@@ -280,5 +314,17 @@ app.whenReady().then(async () => {
   })
 })
 
-app.on('before-quit', () => { mcp?.close().catch(() => {}) })
+app.on('before-quit', (e) => {
+  if (!app.isQuitting && session.dirty && win && !win.forceClose) {
+    if (!win.isVisible()) showWindow()
+    const r = dialog.showMessageBoxSync(win, {
+      type: 'warning', buttons: ['Cancel', 'Discard changes'], defaultId: 0, cancelId: 0,
+      message: 'Unsaved changes', detail: 'Quit without saving?',
+    })
+    if (r === 0) { e.preventDefault(); return }
+  }
+  app.isQuitting = true
+  mcp?.close().catch(() => {})
+})
+app.on('activate', () => { if (win) showWindow() })
 app.on('window-all-closed', () => app.quit())
