@@ -85,15 +85,16 @@
 
       <section>
         <h3>MCP server</h3>
-        <label class="inline"><input id="onboard-mcp" type="checkbox"> Let Claude edit and push themes (MCP server on 127.0.0.1)</label>
-        <p class="hint">Off by default. Change it any time in Settings (Cmd+,).</p>
+        <label class="inline"><input id="onboard-mcp" type="checkbox" checked> Let Claude edit and push themes (MCP server on 127.0.0.1)</label>
       </section>
 
-      <div id="onboard-more">
-        <label class="inline"><input id="onboard-login" type="checkbox"> Start at login (menu bar only)</label>
-      </div>
+      <section id="onboard-more">
+        <h3>Start at login</h3>
+        <label class="inline"><input id="onboard-login" type="checkbox" checked> Start at login (menu bar only)</label>
+      </section>
 
-      <button type="submit">Get started</button>
+      <p class="hint">Both on by default. Change them any time in Settings (Cmd+,).</p>
+      <footer class="dlg-actions"><button type="submit" class="primary">Get started</button></footer>
     </form>
   </dialog>
 

@@ -90,7 +90,7 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 
 ## 7b. Resident app
 
-- [ ] Fresh settings (remove `settings.json` from the userData dir, or delete `onboarded`): the welcome dialog shows once, MCP unticked. Tick MCP and Start at login, press Get started. MCP is listening; the login item exists.
+- [ ] Fresh settings (remove `settings.json` from the userData dir, or delete `onboarded`): the welcome dialog shows once, MCP and Start at login both ticked. Press Get started. MCP is listening; the login item exists.
 - [ ] Close the window (red button) with MCP on. The window hides, the Dock icon goes, the "MK10" tray item stays. `curl -s http://127.0.0.1:47110/mcp` still answers (or Claude's `get_theme` still works).
 - [ ] Tray > Open MK10 Studio brings the window and Dock icon back with the theme and unsaved edits intact.
 - [ ] Launch a second copy (`open -n` or `npm start` again). No new window or tray item appears; the running window focuses.

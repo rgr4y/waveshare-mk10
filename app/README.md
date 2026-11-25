@@ -28,7 +28,7 @@ Dev flags: `--open <file>`, `--select <page>,<row>,<col>` (or `<page>,video`), `
 Needs `ffmpeg` on PATH (`FFMPEG` env overrides).
 
 ### MCP
-Off by default (the first-run dialog asks). Enable it in Settings (Cmd+,) or from the tray menu; port
+The first-run dialog offers it, ticked by default (with Start at login). Enable it in Settings (Cmd+,) or from the tray menu; port
 default 47110, bound to 127.0.0.1. The URL and the `claude mcp add` command show when on. Edits made via
 MCP appear live in the UI.
 
