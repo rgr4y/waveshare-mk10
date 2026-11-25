@@ -688,3 +688,77 @@ Verification
 - Follow-up
   - Delete `backups/pre-serial-scrub-20261124.bundle`. It is gitignored and still contains the serial.
   - Decide where waveshare-mk10 gets a remote (none yet), and whether the kernel fork stays public.
+
+## 2026-11-24 — Studio: clipboard, capture, page inspector
+
+- Outcome
+  - `99d2949`: header and tray show the theme name without `.Theme`.
+  - `d515032`: Settings permission rows show Granted in green and other states in red, with an icon button that opens System Settings. Added `--screenshot <file> --settings` for previews (the default 3 s delay captured a blank window, so use `--screenshot-delay 7000`).
+  - `45f4da2`: sidebar shows top-level pages as Page 0–5 with a "6 / 6" count. Folders nest under their parent and are named after the key that opens them. The "6 pages" limit came from Rob; it is not in the notes. Whether the device's `jumpToPage` counts these 0–5 is unverified.
+  - `0e85ad1`: clicking a page or folder shows its properties in the Inspector, including a replaceable background video. The info panel image is read-only; a setter was not built.
+  - `5ad20bb`: Auto push logs why the ssh probe failed before falling back to serial, and waits up to 10 s instead of 3. Cause of the earlier wrong "stock firmware detected" was never seen, because the old code discarded the error.
+  - `66355d0`: action field labels are readable ("Adjust mode", "URL"), wrap when long, and keep the raw name in the tooltip.
+  - `e108644` (Phase 3d key clipboard): right-click Cut/Copy/Paste/Delete Key, Edit menu shortcuts, undo (20 steps, cleared by any other edit), cross-theme paste via JSON with embedded assets, MCP `copy_key`/`paste_key`.
+  - `eb31fef`: blank slots take clicks and right-clicks (a leftover `.key.empty { pointer-events: none }` was the cause). A video dropped on any slot sets the page background.
+  - `ce1804c`: Electron 45's clipboard API is async. The code treated it as sync, so Paste was always disabled. Cut now copies first and removes the key only after the write succeeds.
+  - `1f5451f`: Cmd+Q and tray Quit ask when edits aren't pushed to the device, with a Push to Device option.
+  - `6bcb08c`, `7c64d56`: dev runs show the git commit time in place of the "MK10 Studio" title, small and muted (`*` for a dirty `app/`, branch if not main).
+  - Key capture proof of concept:
+    - `3dd7416`: red Capture keys button, window, and the Swift helper `app/native/hidtap.swift`, compiled on first use into `native/build/` (gitignored).
+    - `68f87d6`: the first-use compile failed because `swiftc` doesn't create its output directory; the app now does.
+    - `8d91692`: HID-to-QMK keycode table `app/lib/qmk-keycodes.json`, generated from upstream QMK master `80973aa0b5`, plus `app/lib/qmk.js`.
+    - `71412c7`: Save log… writes JSONL.
+    - `17760a1`, `5ce2bff`, `1aaffc9`: the doubled HID events. Karabiner holds every keyboard, so only its virtual keyboard reports. The doubling was our own bug: `hidtap` matched Karabiner's virtual keyboard twice, once for keyboards and once for media-key devices, under the same registry ID. The dedupe now keys on device name, element cookie and usage.
+    - `9fa9009`: capture events also go to stderr as JSON lines, and to `/tmp/mk10.log` in dev runs.
+- Findings
+  - `IOHIDManagerOpen` returns `0xE00002C5` (`kIOReturnExclusiveAccess`, checked in the SDK header) because Karabiner holds the keyboards exclusively. It is harmless while Karabiner runs.
+  - QMK basic codes 0x04–0xA4 and 0xE0–0xE7 equal the HID usage. Only 27 QMK keycodes send consumer usages, so other consumer keys can be captured but not sent by the device.
+  - Host actions (Open URL and similar) never go out over HID. The device reports `keyStateChanged` as JSON over the USB serial port, so capturing them needs a serial listener (Phase 3b).
+- Verification
+  - `npm test` (21 pass) and lint were clean after the code commits. Screenshots checked: the Settings dialog, the sidebar, the page Inspector, and the build label.
+  - Checked in `/tmp/mk10.log`: HID capture has no doubles after the fix.
+  - `hidtap` was never run from the agent's shell, because it triggers an Input Monitoring prompt for the terminal app.
+  - Not verified by hand:
+    - the right-click menus and Edit shortcuts;
+    - the quit prompt;
+    - the red permission state;
+    - the Inspector for a folder;
+    - a video replace from the Inspector;
+    - an Auto-mode push.
+- Follow-up
+  - Rob reported that the GIF sub-page keys show as empty in the app but not on the device. Investigation had only started (reading `renderSecondary` and the layout); there is no cause or fix yet.
+  - Decisions with Rob:
+    - the Phase 3b key-event path (the serial listener is the recommended option);
+    - whether Auto mode should error instead of falling back to serial when ssh fails;
+    - mapping keyboard-page volume/mute (0x7F–0x81) to the consumer keycodes;
+    - labelling the Karabiner open error as expected;
+    - whether to add an info panel image setter.
+
+## 2026-11-25 — Studio: widgets, toggles, pull, fonts, raw JSON
+
+- Outcome
+  - `dd79885`: key-area widgets draw in the preview: clock digits, GIF images and gauges placed in key cells with no key (`backgroundType` "child", e.g. the GIF folder and the clock pages). Their cells count as occupied: the Inspector names the widget and `pasteKey` refuses the cell. Also fixed `--select` losing a race with the open handler. This resolves the 2026-11-24 "GIF keys show as empty" report.
+  - `38360c4`: clock widgets tick every second.
+  - `284e022`: right-click > Press Key follows openPage, oneLevelUp and pageSwitch (`pageSwitchMode` 0) in the editor.
+  - `50c0477`: one push at a time. The lock is in `Session` (shared by button, menu, quit prompt and MCP) and covers detection and the confirm dialog; Push and the Device settings are disabled while it runs.
+  - `65a18c0`, `35a4836`: multi-state keys (`keyboard_switch`, a toggle) keep per-state image, title and keycode in the item's `jsonData`. Preview and Inspector show the current state; Press Key steps it. State images now count as asset references, so a cut or image replace can't drop one in use, and copy/paste carries them. Labelled "toggle" in the Inspector.
+  - `32313a0`: Pull from device: reads `config.json` `defaultTheme` over ssh, copies it to a chosen file, opens it. Stock firmware's serial API has no file read, so pull is ssh only. Capture keys moved into Settings.
+  - `aa0a9b8`, `d2c22c4`, `aa5539c`, `b8637c7`: clock digits. With a glyph directory (`displayType` 1) the device draws the dot images, aspect kept in a `w/displayNum` slot; without one (`displayType` 0) it draws `text_font`'s family (Microsoft YaHei) in regular weight. Both checked against the device framebuffers.
+  - `66fb770`: Studio copies the device's `/usr/share/fonts` (191 files, 91 families, ~85 MB, ~50 s) into `~/Library/Application Support/mk10-studio/device-fonts` after the first ssh push or pull (or from Settings), reads family/weight/italic from each font's name and OS/2 tables (`app/lib/fonts.js`), and registers them as FontFaces served over `mk10font://`. Nothing is shipped with the app.
+  - `ffdbfd2`: frame animations (`paths` directory of `frame_N.png` plus `frameDelays`) play on keys, toggle states, widgets and the Inspector thumbnail.
+  - `a13ba08`: raw JSON editor above Activity for keys the form doesn't cover (int/bool action fields, toggle states, no or undecodable action). controlData shows as its QVariantMap fields, jsonData and titleParam as parsed JSON. Apply checks types, slot, item type and new image paths, keeps field order, and is undoable.
+  - `825795f`: openPage's target is a page picker in sidebar order instead of a raw UUID field.
+  - `3935e6f`, `6416b0c`: device and app checks recorded in `docs/mk10-studio-validation.md`.
+- Findings
+  - On LilAlpine the key cells are separate framebuffers: `/dev/fb1`–`fb10` (128x128 RGB565, gc9107), `fb11` the info panel (240x296), `fb0` the 896x608 main buffer. Reading them over ssh gives a screenshot of what the device draws.
+  - pageSwitch `jumpToPage` counts top-level pages (no `parentPageName`) in theme order, not the theme page index: confirmed on the device.
+  - The device's Qt uses `QT_QPA_FONTDIR=/usr/share/fonts`. A theme's `text_font` point size (e.g. 12) is not what it draws.
+  - Pulled theme on 2026-11-24 came from the vendor app's save at 20:43 (`defaultTheme.Theme`, config re-pointed to it), not from anything Studio wrote.
+- Verification
+  - `npm test` (24 pass) and lint clean at each code commit. Screenshots checked for widgets, clocks, toggle key, animations, raw JSON and the font cache.
+  - On the device (Rob): jumpToPage numbering, raw JSON int edit pushed, cross-page openPage and back, push lock, Auto mode on LilAlpine.
+  - In the app (Rob): paste after cut, paste refused on widget cells, Press Key, quit prompt, font re-copy, capture QMK column. Pull confirmed working.
+- Follow-up
+  - Gauges (types 101/109) render nothing like the device; needs its own pass.
+  - Text clock size not re-measured after the last trim.
+  - Open decisions from 2026-11-24 still stand (Phase 3b serial key events, Auto mode fallback, volume keycode mapping, Karabiner error label, info panel image setter), plus repo remote and the backup bundle.
