@@ -9,7 +9,7 @@
 <body class="capture">
   <header class="cap-head">
     <h2>Key capture <span class="muted">proof of concept</span></h2>
-    <p class="hint">Press any key. <b>App</b> rows are what this window receives (menu shortcuts are blocked while it has focus). <b>HID</b> rows are raw USB HID usages from every keyboard and media-key device, including keys macOS handles itself (volume, brightness, play). HID needs Input Monitoring.</p>
+    <p class="hint">Press any key. <b>App</b> rows are what this window receives (menu shortcuts are blocked while it has focus). <b>HID</b> rows are raw USB HID usages from every keyboard and media-key device, including keys macOS handles itself (volume, brightness, play). HID needs Input Monitoring. <b>QMK keycode</b> is what a device <code>keyboard</code> action would store for that press (held modifiers included).</p>
     <div class="cap-status">
       <span>Input Monitoring: <span id="cap-access" class="perm">checking…</span></span>
       <button id="cap-pane" type="button">Open Input Monitoring settings</button>
@@ -18,12 +18,12 @@
     </div>
   </header>
   <table class="cap-table">
-    <thead><tr><th>Source</th><th>Event</th><th>Key</th><th>Detail</th><th>Device / modifiers</th></tr></thead>
+    <thead><tr><th>Source</th><th>Event</th><th>Key</th><th>Detail</th><th>QMK keycode</th><th>Device / modifiers</th></tr></thead>
     <tbody id="cap-rows"></tbody>
   </table>
 
   <template id="tpl-cap-row">
-    <tr><td class="c-src"></td><td class="c-ev"></td><td class="c-key"></td><td class="c-detail"></td><td class="c-dev muted"></td></tr>
+    <tr><td class="c-src"></td><td class="c-ev"></td><td class="c-key"></td><td class="c-detail"></td><td class="c-qmk"></td><td class="c-dev muted"></td></tr>
   </template>
 </body>
 </html>

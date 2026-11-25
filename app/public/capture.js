@@ -24,7 +24,7 @@ const CONSUMER = {
 const PAGES = { 0x01: 'Generic Desktop', 0x07: 'Keyboard', 0x0C: 'Consumer' }
 const hidName = (page, usage) => (page === 0x07 ? KEYBOARD[usage] : page === 0x0C ? CONSUMER[usage] : null) ?? hex(usage)
 
-function addRow(src, ev, key, detail, dev) {
+function addRow(src, ev, key, detail, dev, qmk = '') {
   const tr = $('tpl-cap-row').content.firstElementChild.cloneNode(true)
   tr.dataset.src = src
   tr.querySelector('.c-src').textContent = src
@@ -32,6 +32,7 @@ function addRow(src, ev, key, detail, dev) {
   tr.querySelector('.c-key').textContent = key
   tr.querySelector('.c-detail').textContent = detail
   tr.querySelector('.c-dev').textContent = dev
+  tr.querySelector('.c-qmk').textContent = qmk
   const body = $('cap-rows')
   body.prepend(tr)
   while (body.children.length > 300) body.lastElementChild.remove()
@@ -44,7 +45,8 @@ window.mk10.onCapture((o) => {
   }
   if (o.t === 'hid') {
     const page = PAGES[o.page] ?? `page ${hex(o.page)}`
-    return addRow('HID', o.value ? 'down' : 'up', hidName(o.page, o.usage), `${page} ${hex(o.page)}:${hex(o.usage)}${o.value > 1 ? ` value ${o.value}` : ''}`, o.device)
+    return addRow('HID', o.value ? 'down' : 'up', hidName(o.page, o.usage), `${page} ${hex(o.page)}:${hex(o.usage)}${o.value > 1 ? ` value ${o.value}` : ''}`, o.device,
+      o.value ? (o.qmk ? `${o.qmk.code} (${hex(o.qmk.code, 4)}) ${o.qmk.name}` : 'none') : '')
   }
   if (o.t === 'access') {
     $('cap-access').textContent = o.status[0].toUpperCase() + o.status.slice(1)

@@ -1,0 +1,298 @@
+{
+ "source": "qmk/qmk_firmware master 80973aa0b5413e9a5bbbf9293507f39e870f9aa3: quantum/keycodes.h, tmk_core/protocol/report.h (KEYCODE2CONSUMER, KEYCODE2SYSTEM)",
+ "keyboard": {
+  "0x4": "KC_A",
+  "0x5": "KC_B",
+  "0x6": "KC_C",
+  "0x7": "KC_D",
+  "0x8": "KC_E",
+  "0x9": "KC_F",
+  "0xa": "KC_G",
+  "0xb": "KC_H",
+  "0xc": "KC_I",
+  "0xd": "KC_J",
+  "0xe": "KC_K",
+  "0xf": "KC_L",
+  "0x10": "KC_M",
+  "0x11": "KC_N",
+  "0x12": "KC_O",
+  "0x13": "KC_P",
+  "0x14": "KC_Q",
+  "0x15": "KC_R",
+  "0x16": "KC_S",
+  "0x17": "KC_T",
+  "0x18": "KC_U",
+  "0x19": "KC_V",
+  "0x1a": "KC_W",
+  "0x1b": "KC_X",
+  "0x1c": "KC_Y",
+  "0x1d": "KC_Z",
+  "0x1e": "KC_1",
+  "0x1f": "KC_2",
+  "0x20": "KC_3",
+  "0x21": "KC_4",
+  "0x22": "KC_5",
+  "0x23": "KC_6",
+  "0x24": "KC_7",
+  "0x25": "KC_8",
+  "0x26": "KC_9",
+  "0x27": "KC_0",
+  "0x28": "KC_ENTER",
+  "0x29": "KC_ESCAPE",
+  "0x2a": "KC_BACKSPACE",
+  "0x2b": "KC_TAB",
+  "0x2c": "KC_SPACE",
+  "0x2d": "KC_MINUS",
+  "0x2e": "KC_EQUAL",
+  "0x2f": "KC_LEFT_BRACKET",
+  "0x30": "KC_RIGHT_BRACKET",
+  "0x31": "KC_BACKSLASH",
+  "0x32": "KC_NONUS_HASH",
+  "0x33": "KC_SEMICOLON",
+  "0x34": "KC_QUOTE",
+  "0x35": "KC_GRAVE",
+  "0x36": "KC_COMMA",
+  "0x37": "KC_DOT",
+  "0x38": "KC_SLASH",
+  "0x39": "KC_CAPS_LOCK",
+  "0x3a": "KC_F1",
+  "0x3b": "KC_F2",
+  "0x3c": "KC_F3",
+  "0x3d": "KC_F4",
+  "0x3e": "KC_F5",
+  "0x3f": "KC_F6",
+  "0x40": "KC_F7",
+  "0x41": "KC_F8",
+  "0x42": "KC_F9",
+  "0x43": "KC_F10",
+  "0x44": "KC_F11",
+  "0x45": "KC_F12",
+  "0x46": "KC_PRINT_SCREEN",
+  "0x47": "KC_SCROLL_LOCK",
+  "0x48": "KC_PAUSE",
+  "0x49": "KC_INSERT",
+  "0x4a": "KC_HOME",
+  "0x4b": "KC_PAGE_UP",
+  "0x4c": "KC_DELETE",
+  "0x4d": "KC_END",
+  "0x4e": "KC_PAGE_DOWN",
+  "0x4f": "KC_RIGHT",
+  "0x50": "KC_LEFT",
+  "0x51": "KC_DOWN",
+  "0x52": "KC_UP",
+  "0x53": "KC_NUM_LOCK",
+  "0x54": "KC_KP_SLASH",
+  "0x55": "KC_KP_ASTERISK",
+  "0x56": "KC_KP_MINUS",
+  "0x57": "KC_KP_PLUS",
+  "0x58": "KC_KP_ENTER",
+  "0x59": "KC_KP_1",
+  "0x5a": "KC_KP_2",
+  "0x5b": "KC_KP_3",
+  "0x5c": "KC_KP_4",
+  "0x5d": "KC_KP_5",
+  "0x5e": "KC_KP_6",
+  "0x5f": "KC_KP_7",
+  "0x60": "KC_KP_8",
+  "0x61": "KC_KP_9",
+  "0x62": "KC_KP_0",
+  "0x63": "KC_KP_DOT",
+  "0x64": "KC_NONUS_BACKSLASH",
+  "0x65": "KC_APPLICATION",
+  "0x66": "KC_KB_POWER",
+  "0x67": "KC_KP_EQUAL",
+  "0x68": "KC_F13",
+  "0x69": "KC_F14",
+  "0x6a": "KC_F15",
+  "0x6b": "KC_F16",
+  "0x6c": "KC_F17",
+  "0x6d": "KC_F18",
+  "0x6e": "KC_F19",
+  "0x6f": "KC_F20",
+  "0x70": "KC_F21",
+  "0x71": "KC_F22",
+  "0x72": "KC_F23",
+  "0x73": "KC_F24",
+  "0x74": "KC_EXECUTE",
+  "0x75": "KC_HELP",
+  "0x76": "KC_MENU",
+  "0x77": "KC_SELECT",
+  "0x78": "KC_STOP",
+  "0x79": "KC_AGAIN",
+  "0x7a": "KC_UNDO",
+  "0x7b": "KC_CUT",
+  "0x7c": "KC_COPY",
+  "0x7d": "KC_PASTE",
+  "0x7e": "KC_FIND",
+  "0x7f": "KC_KB_MUTE",
+  "0x80": "KC_KB_VOLUME_UP",
+  "0x81": "KC_KB_VOLUME_DOWN",
+  "0x82": "KC_LOCKING_CAPS_LOCK",
+  "0x83": "KC_LOCKING_NUM_LOCK",
+  "0x84": "KC_LOCKING_SCROLL_LOCK",
+  "0x85": "KC_KP_COMMA",
+  "0x86": "KC_KP_EQUAL_AS400",
+  "0x87": "KC_INTERNATIONAL_1",
+  "0x88": "KC_INTERNATIONAL_2",
+  "0x89": "KC_INTERNATIONAL_3",
+  "0x8a": "KC_INTERNATIONAL_4",
+  "0x8b": "KC_INTERNATIONAL_5",
+  "0x8c": "KC_INTERNATIONAL_6",
+  "0x8d": "KC_INTERNATIONAL_7",
+  "0x8e": "KC_INTERNATIONAL_8",
+  "0x8f": "KC_INTERNATIONAL_9",
+  "0x90": "KC_LANGUAGE_1",
+  "0x91": "KC_LANGUAGE_2",
+  "0x92": "KC_LANGUAGE_3",
+  "0x93": "KC_LANGUAGE_4",
+  "0x94": "KC_LANGUAGE_5",
+  "0x95": "KC_LANGUAGE_6",
+  "0x96": "KC_LANGUAGE_7",
+  "0x97": "KC_LANGUAGE_8",
+  "0x98": "KC_LANGUAGE_9",
+  "0x99": "KC_ALTERNATE_ERASE",
+  "0x9a": "KC_SYSTEM_REQUEST",
+  "0x9b": "KC_CANCEL",
+  "0x9c": "KC_CLEAR",
+  "0x9d": "KC_PRIOR",
+  "0x9e": "KC_RETURN",
+  "0x9f": "KC_SEPARATOR",
+  "0xa0": "KC_OUT",
+  "0xa1": "KC_OPER",
+  "0xa2": "KC_CLEAR_AGAIN",
+  "0xa3": "KC_CRSEL",
+  "0xa4": "KC_EXSEL",
+  "0xe0": "KC_LEFT_CTRL",
+  "0xe1": "KC_LEFT_SHIFT",
+  "0xe2": "KC_LEFT_ALT",
+  "0xe3": "KC_LEFT_GUI",
+  "0xe4": "KC_RIGHT_CTRL",
+  "0xe5": "KC_RIGHT_SHIFT",
+  "0xe6": "KC_RIGHT_ALT",
+  "0xe7": "KC_RIGHT_GUI"
+ },
+ "consumer": {
+  "0xe2": {
+   "code": "0xa8",
+   "name": "KC_AUDIO_MUTE"
+  },
+  "0xe9": {
+   "code": "0xa9",
+   "name": "KC_AUDIO_VOL_UP"
+  },
+  "0xea": {
+   "code": "0xaa",
+   "name": "KC_AUDIO_VOL_DOWN"
+  },
+  "0xb5": {
+   "code": "0xab",
+   "name": "KC_MEDIA_NEXT_TRACK"
+  },
+  "0xb6": {
+   "code": "0xac",
+   "name": "KC_MEDIA_PREV_TRACK"
+  },
+  "0xb3": {
+   "code": "0xbb",
+   "name": "KC_MEDIA_FAST_FORWARD"
+  },
+  "0xb4": {
+   "code": "0xbc",
+   "name": "KC_MEDIA_REWIND"
+  },
+  "0xb7": {
+   "code": "0xad",
+   "name": "KC_MEDIA_STOP"
+  },
+  "0xcc": {
+   "code": "0xb0",
+   "name": "KC_MEDIA_EJECT"
+  },
+  "0xcd": {
+   "code": "0xae",
+   "name": "KC_MEDIA_PLAY_PAUSE"
+  },
+  "0x183": {
+   "code": "0xaf",
+   "name": "KC_MEDIA_SELECT"
+  },
+  "0x18a": {
+   "code": "0xb1",
+   "name": "KC_MAIL"
+  },
+  "0x192": {
+   "code": "0xb2",
+   "name": "KC_CALCULATOR"
+  },
+  "0x194": {
+   "code": "0xb3",
+   "name": "KC_MY_COMPUTER"
+  },
+  "0x19f": {
+   "code": "0xbf",
+   "name": "KC_CONTROL_PANEL"
+  },
+  "0x1cb": {
+   "code": "0xc0",
+   "name": "KC_ASSISTANT"
+  },
+  "0x221": {
+   "code": "0xb4",
+   "name": "KC_WWW_SEARCH"
+  },
+  "0x223": {
+   "code": "0xb5",
+   "name": "KC_WWW_HOME"
+  },
+  "0x224": {
+   "code": "0xb6",
+   "name": "KC_WWW_BACK"
+  },
+  "0x225": {
+   "code": "0xb7",
+   "name": "KC_WWW_FORWARD"
+  },
+  "0x226": {
+   "code": "0xb8",
+   "name": "KC_WWW_STOP"
+  },
+  "0x227": {
+   "code": "0xb9",
+   "name": "KC_WWW_REFRESH"
+  },
+  "0x6f": {
+   "code": "0xbd",
+   "name": "KC_BRIGHTNESS_UP"
+  },
+  "0x70": {
+   "code": "0xbe",
+   "name": "KC_BRIGHTNESS_DOWN"
+  },
+  "0x22a": {
+   "code": "0xba",
+   "name": "KC_WWW_FAVORITES"
+  },
+  "0x29f": {
+   "code": "0xc1",
+   "name": "KC_MISSION_CONTROL"
+  },
+  "0x2a0": {
+   "code": "0xc2",
+   "name": "KC_LAUNCHPAD"
+  }
+ },
+ "system": {
+  "0x81": {
+   "code": "0xa5",
+   "name": "KC_SYSTEM_POWER"
+  },
+  "0x82": {
+   "code": "0xa6",
+   "name": "KC_SYSTEM_SLEEP"
+  },
+  "0x83": {
+   "code": "0xa7",
+   "name": "KC_SYSTEM_WAKE"
+  }
+ }
+}

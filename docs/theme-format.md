@@ -266,4 +266,10 @@ Not yet captured: openApp, window ops, media keys, Action flow (`ControlFlow`, w
   - **Work:** 0xB4 `KC_WWW_SEARCH` (AC Search) opens **Siri/Spotlight**; 0xC1 `KC_MISSION_CONTROL` opens **Mission Control**; 0xC2 `KC_LAUNCHPAD` opens **Launchpad**.
   - **No visible effect:** 0xB5 `KC_WWW_HOME`, 0xB1 `KC_MAIL`, 0xB2 `KC_CALCULATOR`, 0xB3 `KC_MY_COMPUTER`, 0xBF `KC_CONTROL_PANEL`, 0xC0 `KC_ASSISTANT`. It was not checked with Karabiner-EventViewer whether these usages reached macOS.
   - No HID usage carries a URL, and QMK has no keycode for AL Internet Browser (0x196). Opening a URL stays a host action (`shell.openExternal`, which needs no macOS permission).
+- **HID to QMK table:** `app/lib/qmk-keycodes.json`, generated 2026-11-24 from upstream QMK master `80973aa0b5`, `quantum/keycodes.h` plus `KEYCODE2CONSUMER`/`KEYCODE2SYSTEM` in `tmk_core/protocol/report.h`. `app/lib/qmk.js` turns a captured HID usage and the held modifiers into the keycode.
+  - Keyboard page: QMK basic codes 0x04-0xA4 and 0xE0-0xE7 equal the HID usage. That covers F13-F24 (0x68-0x73).
+  - Consumer: 27 QMK keycodes (0xA8-0xC2), each mapped to one consumer usage. A consumer usage outside that list has no QMK keycode, so the device can't send it. `KC_MEDIA_EJECT` (0xB0) sends 0xCC Stop/Eject, not 0xB8 Eject. `KC_MISSION_CONTROL` sends 0x29F and `KC_LAUNCHPAD` sends 0x2A0.
+  - System: 0xA5-0xA7 power, sleep and wake (generic desktop 0x81-0x83).
+  - Modifiers: QMK can't mix left and right modifiers in one keycode (0x1000 makes them all right-hand). The mapper uses the left ones when both sides are held.
+  - The vendor fork matches upstream for the codes tested on the device (mute, volume, 0xB4, 0xC1, 0xC2). 0xC1/0xC2 are recent QMK additions, which suggests the fork isn't old. The rest is not verified.
 - So "mute" and "volume" keys can be `keyboard` actions with these codes, and they work with the host app closed. A host-run `Loudspeaker` action is only needed for picking an output device or setting an exact level.

@@ -6,6 +6,7 @@ import { basename, dirname, extname, join } from 'node:path'
 import { execFileSync, spawn } from 'node:child_process'
 import { createInterface } from 'node:readline'
 import { Session, DEFAULT_SSH } from './lib/session.js'
+import { hidToQmk, isModifier } from './lib/qmk.js'
 
 const STOCK_DIR = '/Applications/ScreenKeyMacOS.app/Contents/MacOS/theme/MK10/'
 const MIME = { '.png': 'image/png', '.gif': 'image/gif', '.mp4': 'video/mp4', '.jpg': 'image/jpeg' }
@@ -185,7 +186,16 @@ function startHidtap(sendCap) {
     }
   }
   const p = spawn(HIDTAP, [], { stdio: ['pipe', 'pipe', 'pipe'] })
-  createInterface({ input: p.stdout }).on('line', (l) => { try { sendCap(JSON.parse(l)) } catch { /* not JSON */ } })
+  const held = new Set() // HID modifier usages down right now, for the QMK keycode of the next press
+  createInterface({ input: p.stdout }).on('line', (l) => {
+    let o
+    try { o = JSON.parse(l) } catch { return }
+    if (o.t === 'hid') {
+      if (isModifier(o.page, o.usage)) o.value ? held.add(o.usage) : held.delete(o.usage)
+      if (o.value) o.qmk = hidToQmk(o.page, o.usage, held)
+    }
+    sendCap(o)
+  })
   p.stderr.on('data', (d) => sendCap({ t: 'error', msg: String(d).trim() }))
   p.on('exit', (code, sig) => sendCap({ t: 'log', msg: `hidtap exited (${sig ?? code})` }))
   return p
