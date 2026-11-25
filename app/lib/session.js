@@ -32,7 +32,7 @@ function statesOf(it) {
     if (!j?.isMultiState || !Array.isArray(j.States)) return undefined
     return {
       state: Number(j.State) || 0,
-      list: j.States.map((s) => ({ path: s.path || undefined, paths: s.paths || undefined, title: s.title, keyString: s.keyString, keycode: s.keycode })),
+      list: j.States.map((s) => ({ path: s.path || undefined, paths: s.paths || undefined, frameDelays: s.frameDelays || undefined, title: s.title, keyString: s.keyString, keycode: s.keycode })),
     }
   } catch {
     return undefined
@@ -127,6 +127,7 @@ export class Session extends EventEmitter {
           titleParam: it.titleParam ? JSON.parse(it.titleParam) : undefined,
           path: it.path || undefined,
           paths: it.paths || undefined,
+          frameDelays: it.frameDelays || undefined,
           text: it.text_str,
           systemData: it.system_data_name,
           digits: num(it.displayNum),

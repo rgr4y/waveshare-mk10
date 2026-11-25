@@ -42,10 +42,28 @@ function assetUrl(key) {
   return ui.assets.get(key)
 }
 
-async function fillImg(img, key) {
+// A `paths` directory with frameDelays ("200,200,...") is a frame animation: play it, one delay per
+// frame. Each call takes over the img; a loop stops once its img leaves the page or is refilled.
+let animSeq = 0
+async function fillImg(img, key, delays) {
   img.removeAttribute('src')
-  const a = await assetUrl(key)
-  if (a) img.src = a.url
+  const token = img.dataset.anim = String(++animSeq)
+  const list = key && delays ? await window.mk10.frames(key) : []
+  if (list.length < 2) {
+    const a = await assetUrl(key)
+    if (a && img.dataset.anim === token) img.src = a.url
+    return
+  }
+  const urls = await Promise.all(list.map(assetUrl))
+  const ds = String(delays).split(',').map(Number)
+  let i = 0
+  const step = () => {
+    if (img.dataset.anim !== token || (i > 0 && !img.isConnected)) return
+    img.src = urls[i % urls.length]?.url ?? ''
+    setTimeout(step, ds[i % ds.length] || 100)
+    i++
+  }
+  step()
 }
 
 // ---- helpers over the summary
@@ -66,7 +84,7 @@ const opener = (p) => keyItems(ui.summary.pages?.[p.parentIndex])
 const stateIndex = (it) => ui.stateView.get(`${ui.page},${it.row},${it.col}`) ?? it.states.state
 function face(it) {
   const st = it.states?.list[stateIndex(it)]
-  return st ? { ...it, path: st.path, paths: st.paths, title: st.title || it.title } : it
+  return st ? { ...it, path: st.path, paths: st.paths, frameDelays: st.frameDelays, title: st.title || it.title } : it
 }
 
 // "Press Key" in the editor: follow page-navigation actions (openPage, oneLevelUp, pageSwitch with
@@ -163,7 +181,7 @@ function renderKeys() {
         t.style.textDecoration = tp.FontUnderline ? 'underline' : 'none'
         const img = el.querySelector('.key-img')
         if (tp.ShowImage === false) img.hidden = true
-        else fillImg(img, it.path || it.paths)
+        else fillImg(img, it.path || it.paths, it.path ? null : it.frameDelays)
         // an image sets the key's image (GIF counts as an image here); a video goes to the background
         wireDrop(el, ANY_MEDIA_RE, (file) => {
           if (!IMAGE_RE.test(file)) return run(window.mk10.setBackgroundVideo(ui.page, file))
@@ -272,7 +290,7 @@ function draw(box, items, dx) {
       tickClock(el)
     } else if (it.type === '114') {
       el = tpl('tpl-sec-image')
-      fillImg(el, it.path || it.paths)
+      fillImg(el, it.path || it.paths, it.path ? null : it.frameDelays)
       el.style.width = `${it.w ?? 240}px`
       el.style.height = `${it.h ?? 296}px`
     } else if (it.type === '113') {
@@ -369,7 +387,7 @@ function renderInspector() {
     $('key-pos').textContent = `${pageName(p)} · row ${sel.row} col ${sel.col}`
     if (document.activeElement !== $('key-title')) $('key-title').value = key.title ?? ''
     const f = face(key)
-    fillImg($('key-thumb'), f.path || f.paths)
+    fillImg($('key-thumb'), f.path || f.paths, f.path ? null : f.frameDelays)
     $('key-states-h').hidden = $('key-states').hidden = !key.states
     $('btn-key-image').hidden = !!key.states // per-state images; item path is not what the device shows
     if (key.states) {

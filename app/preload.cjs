@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('mk10', {
   setBackgroundVideo: call('setBackgroundVideo'),
   push: call('push'),
   pull: call('pull'),
+  frames: call('frames'),
   fonts: call('fonts'),
   syncFonts: call('syncFonts'),
   onFonts: on('fonts'),

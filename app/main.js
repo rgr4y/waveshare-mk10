@@ -193,13 +193,18 @@ async function mcpToggle(on, port = settings.mcp.port) {
 }
 
 // Resolve an asset key; a frame directory (`paths`) resolves to its first frame.
+// frame files of a `paths` directory (frame_0.png, frame_1.png, ...), in frame order
+function frames(dir) {
+  if (!session.theme || !dir) return []
+  const num = (a) => Number(/(\d+)\.\w+$/.exec(a)?.[1] ?? Infinity)
+  return [...session.theme.assets.keys()].filter((a) => a.startsWith(`${dir}/`)).sort((a, b) => num(a) - num(b))
+}
+
 function asset(key) {
   let k = key
   let bytes = session.theme && session.asset(k)
   if (!bytes && session.theme) {
-    const frames = [...session.theme.assets.keys()].filter((a) => a.startsWith(`${key}/`))
-    const num = (a) => Number(/(\d+)\.\w+$/.exec(a)?.[1] ?? Infinity)
-    k = frames.sort((a, b) => num(a) - num(b))[0]
+    k = frames(key)[0]
     bytes = k && session.asset(k)
   }
   return bytes ? { mime: MIME[extname(k).toLowerCase()] ?? 'application/octet-stream', bytes: new Uint8Array(bytes) } : null
@@ -344,6 +349,7 @@ function registerIpc() {
   h('saveAs', saveAs)
   h('summary', () => session.summary())
   h('asset', asset)
+  h('frames', frames)
   h('setKeyTitle', (p, r, c, t) => session.setKeyTitle(p, r, c, t))
   h('setKeyActionField', (p, r, c, f, v) => session.setKeyActionField(p, r, c, f, v))
   h('setKeyImage', setKeyImage)
