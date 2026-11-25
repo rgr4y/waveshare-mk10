@@ -96,7 +96,7 @@ appended to `/tmp/mk10.log`. **Save log…** writes the same lines to a file you
   status (polled every 2 s while Settings is open) and Open buttons for the Accessibility, Screen
   Recording and Automation panes in System Settings. Nothing is requested at startup. The Accessibility
   button triggers the system prompt at most once per session, then opens the pane.
-- **JSON RPC window**: Settings > Developer. A separate window lists every JSON-RPC message Studio
+- **JSON RPC window**: Settings > Developer. A separate window lists the old-style V1 frames the device sends (key events with the key's action, page contracts), decoded, and every JSON-RPC message Studio
   sends to KeyboardDevice over USB serial, and every reply, as formatted JSON in a read-only Monaco
   view (Follow, Wrap, Clear). It replays the last 500 messages when it opens. Long strings, such as
   `saveToFile` base64 chunks, are shortened. While the window is open, Studio holds the port (it
