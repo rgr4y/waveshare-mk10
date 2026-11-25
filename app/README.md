@@ -54,8 +54,9 @@ appended to `/tmp/mk10.log`. **Save log…** writes the same lines to a file you
 - **Close to tray**: the window's close button hides it; the theme, unsaved edits and MCP keep running.
   The Dock icon shows only while the window is visible. Clicking the Dock icon or "Open MK10 Studio"
   brings the window back.
-- **Quit**: Cmd+Q or the tray's Quit really quits. With unsaved edits it shows the window and asks
-  "Quit without saving?" (Cancel / Discard changes).
+- **Quit**: Cmd+Q or the tray's Quit really quits. With edits that are unsaved, or not yet pushed to
+  the device since the theme was opened or last pushed, it shows the window and asks: Cancel, Push to
+  Device… (when unpushed; runs the normal push, then you quit again), or Discard changes / Quit anyway.
 - **Single instance**: launching a second copy focuses the running window instead.
 - **Start at login**: checkbox in Settings > General and in the first-run dialog. A login launch, or
   `--hidden`, starts in the menu bar only (no window, no Dock icon). The OS login item is the source of

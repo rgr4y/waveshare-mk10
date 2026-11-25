@@ -39,12 +39,17 @@ export class Session extends EventEmitter {
   theme = null
   file = null
   dirty = false
+  // edits counts every change; pushedEdits is its value when the last successful push started.
+  // An edit made while a push runs keeps the theme "unpushed".
+  edits = 0
+  pushedEdits = 0
   undoStack = [] // snapshots taken before a key cut/paste/delete
 
   async open(file) {
     this.theme = decodeTheme(await readFile(file))
     this.file = file
     this.dirty = false
+    this.edits = this.pushedEdits = 0
     this.undoStack = []
     this.emit('change', { kind: 'open' })
     return this.summary()
@@ -75,6 +80,7 @@ export class Session extends EventEmitter {
     // undo covers only key clipboard edits; any other edit clears it, so an undo never rolls it back
     if (!KEY_OPS.has(kind)) this.undoStack = []
     this.dirty = true
+    this.edits++
     this.emit('change', { kind })
   }
 
@@ -219,7 +225,19 @@ export class Session extends EventEmitter {
     throw new Error(`no MK10 found: ${host} is not LilAlpine (${why}), and no MK10 USB serial port is present`)
   }
 
+  // true when the theme changed since it was opened or last pushed
+  get unpushed() {
+    return this.edits !== this.pushedEdits
+  }
+
   async push(opts = DEFAULT_PUSH, log = () => {}) {
+    const at = this.edits
+    const r = await this.pushTo(opts, log)
+    this.pushedEdits = at
+    return r
+  }
+
+  async pushTo(opts, log) {
     const o = { ...DEFAULT_PUSH, ...opts }
     if (o.mode === 'auto') {
       o.mode = await this.detectMode(o, log)

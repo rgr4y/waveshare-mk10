@@ -491,13 +491,19 @@ app.whenReady().then(async () => {
 })
 
 app.on('before-quit', (e) => {
-  if (!app.isQuitting && session.dirty && win && !win.forceClose) {
+  const { dirty, unpushed } = session
+  if (!app.isQuitting && (dirty || unpushed) && win && !win.forceClose) {
     if (!win.isVisible()) showWindow()
+    const buttons = ['Cancel', ...(unpushed ? ['Push to Device…'] : []), dirty ? 'Discard changes' : 'Quit anyway']
     const r = dialog.showMessageBoxSync(win, {
-      type: 'warning', buttons: ['Cancel', 'Discard changes'], defaultId: 0, cancelId: 0,
-      message: 'Unsaved changes', detail: 'Quit without saving?',
+      type: 'warning', buttons, defaultId: 0, cancelId: 0,
+      message: dirty && unpushed ? 'Unsaved changes, not pushed to the device' : dirty ? 'Unsaved changes' : 'Changes not pushed to the device',
+      detail: dirty && unpushed ? 'The theme has edits that are neither saved nor on the device. Quit anyway?'
+        : dirty ? 'The device has these changes, but the file does not. Quit without saving?'
+          : 'The file is saved, but the device still shows the previous version. Quit anyway?',
     })
     if (r === 0) { e.preventDefault(); return }
+    if (buttons[r] === 'Push to Device…') { e.preventDefault(); push().catch(() => {}); return } // reported via status
   }
   app.isQuitting = true
   mcp?.close().catch(() => {})

@@ -52,6 +52,18 @@ test('mcp tools over streamable http', { skip: !existsSync(THEME) && 'stock them
     session.setKeyTitle(0, 0, 0, 'x') // any other edit clears undo
     assert.equal(session.undo(), false)
 
+    // unpushed: any edit since open/push; an edit during a push keeps it unpushed (device push stubbed)
+    assert.equal(session.unpushed, true)
+    session.pushTo = async () => { session.setKeyTitle(0, 0, 0, 'during push') }
+    await session.push()
+    assert.equal(session.unpushed, true)
+    session.pushTo = async () => 'ok'
+    await session.push()
+    assert.equal(session.unpushed, false)
+    await assert.rejects(Object.assign(session, { pushTo: async () => { throw new Error('no device') } }).push())
+    session.setKeyTitle(0, 0, 0, 'y')
+    assert.equal(session.unpushed, true)
+
     // guard: foreign Origin rejected
     const res = await fetch(mcp.url, { method: 'POST', headers: { origin: 'http://evil.example', 'content-type': 'application/json' }, body: '{}' })
     assert.equal(res.status, 403)
