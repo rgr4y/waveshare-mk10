@@ -197,7 +197,7 @@ function registerIpc() {
     if (!axPrompted) { axPrompted = true; systemPreferences.isTrustedAccessibilityClient(true) }
     return openPane('accessibility')
   })
-  h('settings', () => ({ ...settings, login: app.getLoginItemSettings(), loginSupported: LOGIN_OK, screenshot: SHOT, onboardPreview: SHOT && argv.includes('--onboard'), settingsFile, version: app.getVersion(), mcpUrl: mcp?.url ?? null, stockDir: existsSync(STOCK_DIR) ? STOCK_DIR : null }))
+  h('settings', () => ({ ...settings, login: app.getLoginItemSettings(), loginSupported: LOGIN_OK, screenshot: SHOT, onboardPreview: SHOT && argv.includes('--onboard'), settingsPreview: SHOT && argv.includes('--settings'), settingsFile, version: app.getVersion(), mcpUrl: mcp?.url ?? null, stockDir: existsSync(STOCK_DIR) ? STOCK_DIR : null }))
   h('setPref', async (key, value) => {
     if (!PREFS.has(key) || typeof value !== 'boolean') throw new Error(`unknown setting ${key}`)
     settings[key] = value

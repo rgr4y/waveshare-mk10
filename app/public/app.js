@@ -316,8 +316,11 @@ async function init() {
   const showPerms = async () => {
     const p = await window.mk10.permissions().catch(() => null)
     if (!p) return
-    $('perm-accessibility').textContent = p.accessibility ? 'granted' : 'not granted'
-    $('perm-screen').textContent = p.screen
+    // screen is getMediaAccessStatus: granted | denied | restricted | not-determined | unknown
+    const show = (id, ok, label) => { $(id).textContent = label; $(id).dataset.ok = ok }
+    show('perm-accessibility', p.accessibility, p.accessibility ? 'Granted' : 'Not granted')
+    const s = p.screen.replace('-', ' ')
+    show('perm-screen', p.screen === 'granted', s[0].toUpperCase() + s.slice(1))
   }
   const openSettings = () => {
     if ($('settings-dlg').open) return
@@ -338,6 +341,7 @@ async function init() {
     run(window.mk10.setPref('onboarded', true))
   })
   if ((!cfg.onboarded && !cfg.screenshot) || cfg.onboardPreview) $('onboard-dlg').showModal() // --screenshot --onboard previews it
+  if (cfg.settingsPreview) openSettings() // --screenshot --settings previews it
   $('btn-settings').addEventListener('click', openSettings)
   $('mcp-badge').addEventListener('click', openSettings)
   $('reopen-last').checked = cfg.reopenLast !== false

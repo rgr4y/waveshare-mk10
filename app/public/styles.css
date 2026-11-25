@@ -192,6 +192,13 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 .kv dt { color: var(--muted); font-size: 12px; }
 .kv dd { margin: 0; word-break: break-all; user-select: text; }
 .kv dd input { padding: var(--sp-1) var(--sp-1-5); }
+.perms .kv-row { grid-template-columns: 128px 1fr; align-items: center; }
+.perms dd { display: flex; align-items: center; gap: var(--sp-2); word-break: normal; }
+.perm { color: var(--muted); }
+.perm[data-ok=true] { color: var(--ok); }
+.perm[data-ok=false] { color: var(--err); }
+.icon-btn { display: inline-flex; align-items: center; justify-content: center; padding: var(--sp-1); }
+.icon { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .device-pop { inset: 52px 14px auto auto; margin: 0; width: 300px; padding: var(--sp-1) var(--sp-4) var(--sp-3); background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 12px 40px rgba(0, 0, 0, .5); }
 #btn-device { flex: none; }
 .inline { display: inline-flex; align-items: center; gap: var(--sp-1); cursor: pointer; }
