@@ -215,16 +215,39 @@ function fillKv(dl, rows, onEdit) {
   }))
 }
 
+function renderPageInspector(p) {
+  const pages = ui.summary.pages
+  const folder = p.parentIndex !== undefined
+  const k = folder ? opener(p) : null
+  $('pg-title').textContent = pageName(p)
+  fillKv($('pg-info'), [
+    ['kind', folder ? `folder in ${pageName(pages[p.parentIndex])}` : 'top-level page'],
+    ...(folder ? [['opened by', k ? `key "${(k.title ?? '').trim()}", row ${k.row} col ${k.col}` : 'no key']] : []),
+    ...(folder ? [] : [['folders', String(pages.filter((c) => c.parentIndex === p.index).length)]]),
+    ['keys', String(keyItems(p).length)],
+    ['shown at start', p.name === ui.summary.currentPage ? 'yes' : 'no'],
+    ['theme index', String(p.index)],
+  ])
+  const vid = videoItem(p)
+  fillKv($('pg-video'), [['video', vid ? base(vid.path ?? '(none)') : 'none: this page has no video slot']])
+  $('btn-pg-video').hidden = !vid
+  const img = (p.items ?? []).find((i) => i.type === '114' && i.backgroundType === 'secondary')
+  fillKv($('pg-panel'), [['image', img ? base(img.path || img.paths || '(none)') : 'none']])
+}
+
 function renderInspector() {
   const p = curPage()
   const sel = ui.sel
   const key = sel?.kind === 'key' ? keyAt(p, sel.row, sel.col) : null
   const vid = sel?.kind === 'video' ? videoItem(p) : null
-  $('insp-none').hidden = !!(key || vid)
+  const pg = sel?.kind === 'page' ? p : null
+  $('insp-none').hidden = !!(key || vid || pg)
   $('insp-key').hidden = !key
   $('insp-video').hidden = !vid
+  $('insp-page').hidden = !pg
+  if (pg) renderPageInspector(pg)
   if (key) {
-    $('key-pos').textContent = `page ${ui.page} · row ${sel.row} col ${sel.col}`
+    $('key-pos').textContent = `${pageName(p)} · row ${sel.row} col ${sel.col}`
     if (document.activeElement !== $('key-title')) $('key-title').value = key.title ?? ''
     fillImg($('key-thumb'), key.path || key.paths)
     fillKv($('key-action'), actionRows(key.action), (field, value) =>
@@ -300,7 +323,7 @@ async function onChange(e) {
     ui.assets.forEach((p) => p.then((a) => a && URL.revokeObjectURL(a.url)))
     ui.assets.clear()
     ui.videoKey = null
-    ui.sel = null
+    ui.sel = { kind: 'page' }
     ui.page = 0
     // start on the page the device shows
     const ci = s.pages?.findIndex((p) => p.name === s.currentPage) ?? -1
@@ -398,6 +421,7 @@ async function init() {
     if (ui.sel?.kind === 'key') run(window.mk10.setKeyImage(ui.page, ui.sel.row, ui.sel.col))
   })
   $('btn-video').addEventListener('click', () => run(window.mk10.setBackgroundVideo(ui.page)))
+  $('btn-pg-video').addEventListener('click', () => run(window.mk10.setBackgroundVideo(ui.page)))
   $('key-title').addEventListener('change', (e) => {
     if (ui.sel?.kind === 'key') run(window.mk10.setKeyTitle(ui.page, ui.sel.row, ui.sel.col, e.target.value))
   })
