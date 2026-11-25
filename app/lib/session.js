@@ -251,18 +251,51 @@ export class Session extends EventEmitter {
   // One push at a time, from any caller (UI, menu, quit prompt, MCP). confirm(o) runs after auto
   // detection with the resolved mode; false cancels and push returns null.
   async push(opts = DEFAULT_PUSH, log = () => {}, confirm = null) {
-    if (this.pushing) throw new Error('a push is already in progress')
-    this.pushing = true
-    this.emit('change', { kind: 'push' })
-    try {
+    return this.deviceLock(async () => {
       const at = this.edits
       const r = await this.pushTo(opts, log, confirm)
       if (r !== null) this.pushedEdits = at
       return r
+    })
+  }
+
+  // push and pull share one lock: one device operation at a time
+  async deviceLock(fn) {
+    if (this.pushing) throw new Error('a push or pull is already in progress')
+    this.pushing = true
+    this.emit('change', { kind: 'push' })
+    try {
+      return await fn()
     } finally {
       this.pushing = false
       this.emit('change', { kind: 'push' })
     }
+  }
+
+  // Pull the theme the device loads (config.json defaultTheme) into a local file. ssh only: the stock
+  // firmware's serial API has no file read (its methods: deleteFiles, getFilesBySuffix, getInfo,
+  // keyboardInput, playAudio, saveToFile, setBacklight, setFileCRC, setVolume, stopAudio).
+  // pickDest(remotePath) returns the local path, or null to cancel. Returns the local path, or null.
+  async pull(opts = DEFAULT_PUSH, log = () => {}, pickDest = async () => null) {
+    return this.deviceLock(async () => {
+      const o = { ...DEFAULT_PUSH, ...opts }
+      if (o.mode === 'auto') {
+        o.mode = await this.detectMode(o, log)
+        log(`auto: ${o.mode === 'ssh' ? 'LilAlpine' : 'stock firmware'} detected`)
+      }
+      if (o.mode !== 'ssh') throw new Error('Pull needs LilAlpine (ssh): the stock firmware has no way to read a file back over USB')
+      const { stdout } = await run('ssh', ['-o', 'ConnectTimeout=5', o.host, `cat ${CONFIG}`], { timeout: TIMEOUT })
+      const remote = JSON.parse(stdout).defaultTheme
+      // device data: refuse anything that isn't a plain absolute path before it goes into scp
+      if (typeof remote !== 'string' || !/^\/[\w./-]+\.Theme$/i.test(remote)) throw new Error(`config.json defaultTheme is not a plain .Theme path: ${JSON.stringify(remote)}`)
+      const dest = await pickDest(remote)
+      if (!dest) return null
+      log(`scp <- ${o.host}:${remote}`)
+      await run('scp', ['-q', '-o', 'ConnectTimeout=5', `${o.host}:${remote}`, dest], { timeout: TIMEOUT })
+      decodeTheme(await readFile(dest)) // fail here, not on open, if the copy is not a theme
+      log(`pulled ${remote} -> ${dest}`)
+      return dest
+    })
   }
 
   async pushTo(opts, log, confirm) {

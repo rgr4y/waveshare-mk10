@@ -70,6 +70,27 @@ async function openPath(file) {
   return s
 }
 
+async function pull() {
+  if (session.dirty || session.unpushed) {
+    const r = await dialog.showMessageBox(win, {
+      type: 'warning', buttons: ['Cancel', 'Pull and replace'], defaultId: 0, cancelId: 0,
+      message: 'Replace the open theme with the one on the device?',
+      detail: session.dirty ? 'The open theme has unsaved changes.' : 'The open theme has edits not pushed to the device.',
+    })
+    if (r.response !== 1) return null
+  }
+  const pickDest = async (remote) => {
+    const r = await dialog.showSaveDialog(win, {
+      title: 'Save the device theme as', defaultPath: join(app.getPath('documents'), basename(remote)),
+      filters: [{ name: 'ScreenKey theme', extensions: ['Theme'] }],
+    })
+    return r.canceled ? null : r.filePath
+  }
+  const dest = await task('Pull from device', () => session.pull(pushOpts(), log, pickDest))
+  if (!dest) return status('Pull cancelled')
+  return openPath(dest)
+}
+
 async function open() {
   const defaultPath = settings.lastFile ? dirname(settings.lastFile) : existsSync(STOCK_DIR) ? STOCK_DIR : undefined
   const r = await dialog.showOpenDialog(win, {
@@ -307,6 +328,7 @@ function registerIpc() {
   h('setKeyImage', setKeyImage)
   h('setBackgroundVideo', setBackgroundVideo)
   h('push', push)
+  h('pull', pull)
   h('keyOp', keyOp)
   h('openCapture', openCapture)
   h('saveCaptureLog', async (text) => {
@@ -372,6 +394,8 @@ function buildMenu() {
         { label: 'Open…', accelerator: 'CmdOrCtrl+O', click: guard(open) },
         { label: 'Save', accelerator: 'CmdOrCtrl+S', click: guard(save) },
         { label: 'Save As…', accelerator: 'CmdOrCtrl+Shift+S', click: guard(saveAs) },
+        { type: 'separator' },
+        { label: 'Pull from Device…', click: guard(pull) },
         { type: 'separator' },
         { role: 'close' },
       ],

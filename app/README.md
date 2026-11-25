@@ -41,6 +41,10 @@ Paste replaces the key in the target slot or fills an empty one. MCP: `copy_key`
 A cell covered by a key-area widget (clock digits, GIF, gauge) is not empty: the editor draws it and
 Paste refuses it.
 
+Pull from device (top bar, or File > Pull from Device…) downloads the theme the device loads
+(`config.json` `defaultTheme`) over ssh, saves it where you choose and opens it. LilAlpine only: the stock
+firmware's USB API has no file read. Push and pull share one lock. Key capture is in Settings.
+
 Right-click > Press Key follows a navigation key in the editor: openPage opens its folder, oneLevelUp
 goes to the parent, pageSwitch (pageSwitchMode 0) goes to top-level page `jumpToPage`. Other actions run
 on the device or host, so the status line only names them.

@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('mk10', {
   setKeyImage: call('setKeyImage'),
   setBackgroundVideo: call('setBackgroundVideo'),
   push: call('push'),
+  pull: call('pull'),
   keyOp: call('keyOp'),
   openCapture: call('openCapture'),
   saveCaptureLog: call('saveCaptureLog'),
