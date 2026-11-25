@@ -65,6 +65,17 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 - [ ] Clip with audio: the audio is dropped and the clip still plays.
 - [ ] Animated GIF as video: works or fails cleanly.
 
+## 5b. Key clipboard
+
+- [ ] Right-click a key: Cut, Copy, Paste, Delete Key. On an empty slot only Paste is enabled, and only after a key was copied.
+- [ ] Copy a key, click an empty slot, Cmd+V: the key appears there with its image and title. The status says "Paste key r… c…: done".
+- [ ] Cut a GIF key, paste it on another page: it still animates (frames come along).
+- [ ] Delete or Backspace on a selected key empties the slot. Cmd+Z brings it back. Cmd+Z after a title edit says "nothing to undo".
+- [ ] Cmd+C / Cmd+V inside the key title box and the MCP command box copy text, not keys.
+- [ ] Copy a key, open another theme, paste: it works there too. Pasting an openPage key into a theme without its folder logs a warning.
+- [ ] Copy a key, paste it into a text editor: readable JSON starting `{"mk10studio":"key","v":1`.
+- [ ] Push a theme with a pasted key: it shows and works on the device.
+
 ## 6. Save
 
 - [ ] **Save** while the stock theme from the `.app` bundle is open: it goes to **Save As** instead. The bundle file is untouched; compare its sha256 before and after.
@@ -136,5 +147,5 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 
 - Action **values** are editable (existing text fields only). Changing the action type or adding actions, and running host actions (URL or app on press), is Phase 3.
 - Widget editing and the live stats feed are Phase 4. The stats feed protocol is verified; the app doesn't send it yet.
-- Adding or removing pages and keys.
+- Adding or removing pages. Keys can be added and removed only through the key clipboard (5b).
 - Animated GIF keys are replaced with a static image.

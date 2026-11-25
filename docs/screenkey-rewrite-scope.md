@@ -151,7 +151,7 @@ v2 option: a replacement renderer on Alpine (fb0 + fbtft panels directly, own JS
 | 3a | Resident app | Menu-bar tray, close-to-tray, Dock icon only while the editor is open, single instance; first-run onboarding (MCP off by default); start at login (`--hidden`); read-only permissions status (see "macOS permissions"). The long-lived serial owner and key events on connect were dropped 2026-11-24: the device is reached over ssh/scp. **built 2026-11-24**, hand checks pending (validation §7b) | 0.5–1 day |
 | 3b | Actions | Key event listener → run the key's action from the open theme: URL, app, file/dir, shell cmd, password paste; action-value editing **done 2026-11-24** | 2–3 days |
 | 3c | Action palette | Drag an action type from a grouped, searchable list onto a key (vendor UX). Templates come from real vendor examples, because field order differs per type and the firmware ignores bad fields. All 17 types are in `app/lib/action-templates.json` (from the vendor allThemeTest) | 1–2 days |
-| 3d | Key clipboard | Cut, copy and paste keys (Cmd+X/C/V and the context menu), within a theme and across themes. See "Key clipboard" below | 0.5–1 day |
+| 3d | Key clipboard | Cut, copy and paste keys (Cmd+X/C/V and the context menu), within a theme and across themes. See "Key clipboard" below. **built 2026-11-24**, hand checks pending (validation §5b). Not built: the copy flash, and greying Edit > Paste (it stays enabled for text fields; the right-click Paste does grey out) | 0.5–1 day |
 | 4 | Parity | Info-panel widgets editing; sensor feed (V1 cmd 1, format known; answer `deviceRequestSystemData`); weather; boot logo export | 1–2 weeks |
 | 5 | Polish | Profiles, theme import/merge, packaging + Developer ID signing + notarization | 3–5 days |
 

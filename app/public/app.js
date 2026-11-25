@@ -126,13 +126,19 @@ function renderKeys() {
         const img = el.querySelector('.key-img')
         if (tp.ShowImage === false) img.hidden = true
         else fillImg(img, it.path || it.paths)
-        el.dataset.selected = String(ui.sel?.kind === 'key' && ui.sel.row === row && ui.sel.col === col)
-        el.addEventListener('click', () => select({ kind: 'key', row, col }))
         wireDrop(el, IMAGE_RE, (file) => {
           select({ kind: 'key', row, col })
           return run(window.mk10.setKeyImage(ui.page, row, col, file))
         })
       }
+      // empty slots select too, so a paste has a target
+      el.dataset.selected = String(ui.sel?.kind === 'key' && ui.sel.row === row && ui.sel.col === col)
+      el.addEventListener('click', () => select({ kind: 'key', row, col }))
+      el.addEventListener('contextmenu', (e) => {
+        e.preventDefault()
+        select({ kind: 'key', row, col })
+        run(window.mk10.keyMenu(ui.page, row, col, !!it))
+      })
       tiles.push(el)
     }
   }
@@ -250,6 +256,7 @@ function renderInspector() {
   const vid = sel?.kind === 'video' ? videoItem(p) : null
   const pg = sel?.kind === 'page' ? p : null
   $('insp-none').hidden = !!(key || vid || pg)
+  $('insp-hint').textContent = sel?.kind === 'key' ? 'Empty slot. Paste a key here (Cmd+V or right-click).' : 'Click a page, a key or the background video.'
   $('insp-key').hidden = !key
   $('insp-video').hidden = !vid
   $('insp-page').hidden = !pg
@@ -318,7 +325,6 @@ async function refresh() {
   ui.summary = s
   if (s.pages) {
     if (!s.pages[ui.page]) ui.page = Math.max(s.pages.findIndex((p) => p.name === s.currentPage), 0)
-    if (ui.sel?.kind === 'key' && !keyAt(s.pages[ui.page], ui.sel.row, ui.sel.col)) ui.sel = null
   }
   render()
 }
@@ -456,7 +462,17 @@ async function init() {
   document.addEventListener('dragover', (e) => e.preventDefault())
   document.addEventListener('drop', (e) => e.preventDefault())
   new ResizeObserver(fit).observe($('stage'))
+  // Edit menu / shortcuts: text fields and selected text keep native behavior; otherwise act on the key
+  const typing = () => ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName) || !!window.getSelection()?.toString()
+  const keyEdit = (op) => {
+    if (op === 'undo') return run(window.mk10.keyOp('undo'))
+    if (ui.sel?.kind !== 'key' || op === 'redo') return
+    if (op !== 'paste' && !keyAt(curPage(), ui.sel.row, ui.sel.col)) return
+    run(window.mk10.keyOp(op, ui.page, ui.sel.row, ui.sel.col))
+  }
+  window.mk10.onEdit((op) => (typing() || document.querySelector('dialog[open]') ? run(window.mk10.nativeEdit(op)) : keyEdit(op)))
   window.addEventListener('keydown', (e) => {
+    if ((e.key === 'Backspace' || e.key === 'Delete') && !typing() && !document.querySelector('dialog[open]')) keyEdit('delete')
     if (e.key === 'Escape' && document.activeElement?.tagName !== 'INPUT') select(null)
   })
 

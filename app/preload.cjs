@@ -20,6 +20,9 @@ contextBridge.exposeInMainWorld('mk10', {
   setKeyImage: call('setKeyImage'),
   setBackgroundVideo: call('setBackgroundVideo'),
   push: call('push'),
+  keyOp: call('keyOp'),
+  keyMenu: call('keyMenu'),
+  nativeEdit: call('nativeEdit'),
   mcpToggle: call('mcpToggle'),
   settings: call('settings'),
   setSsh: call('setSsh'),
@@ -35,4 +38,5 @@ contextBridge.exposeInMainWorld('mk10', {
   onSelect: on('select'),
   onMcp: on('mcp'),
   onOpenSettings: on('openSettings'),
+  onEdit: on('edit'),
 })

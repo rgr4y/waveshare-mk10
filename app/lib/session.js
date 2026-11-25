@@ -7,6 +7,7 @@ import { promisify } from 'node:util'
 import {
   decodeTheme, encodeTheme, decodeControlData, editableActionFields,
   setKeyTitle, setKeyImage, setBackgroundVideo, setKeyActionField,
+  copyKey, pasteKey, removeKey, parseKeyClip,
 } from './theme.js'
 import { toKeyPng, toDeviceMp4 } from './media.js'
 import { Device } from './device.js'
@@ -20,6 +21,7 @@ export const DEFAULT_SSH = { host: 'root@10.0.1.48', remote: DEFAULT_REMOTE }
 export const DEFAULT_PUSH = { mode: 'auto', port: null, ...DEFAULT_SSH }
 const CONFIG = '/mnt/SDCARD/config.json'
 
+const KEY_OPS = new Set(['keyCut', 'keyPaste', 'keyDelete', 'undo'])
 const num = (v) => (v === undefined || v === '' ? undefined : Number(v))
 
 function actionOf(it) {
@@ -37,11 +39,13 @@ export class Session extends EventEmitter {
   theme = null
   file = null
   dirty = false
+  undoStack = [] // snapshots taken before a key cut/paste/delete
 
   async open(file) {
     this.theme = decodeTheme(await readFile(file))
     this.file = file
     this.dirty = false
+    this.undoStack = []
     this.emit('change', { kind: 'open' })
     return this.summary()
   }
@@ -68,6 +72,8 @@ export class Session extends EventEmitter {
   }
 
   touch(kind) {
+    // undo covers only key clipboard edits; any other edit clears it, so an undo never rolls it back
+    if (!KEY_OPS.has(kind)) this.undoStack = []
     this.dirty = true
     this.emit('change', { kind })
   }
@@ -109,6 +115,63 @@ export class Session extends EventEmitter {
   asset(key) {
     this.need()
     return this.theme.assets.get(key)
+  }
+
+  // ---- key clipboard: copy returns the clipboard text; cut/paste/delete are undoable
+  copyKey(page, row, col) {
+    this.need()
+    return JSON.stringify(copyKey(this.theme, page, row, col))
+  }
+
+  canPaste(text) {
+    return !!this.theme && !!parseKeyClip(text)
+  }
+
+  snapshot() {
+    // ponytail: whole-theme snapshot (json clone + shallow asset map, buffers shared), last 20 kept
+    this.undoStack.push({ json: structuredClone(this.theme.json), assets: new Map(this.theme.assets) })
+    if (this.undoStack.length > 20) this.undoStack.shift()
+  }
+
+  cutKey(page, row, col) {
+    const text = this.copyKey(page, row, col)
+    this.deleteKey(page, row, col, 'keyCut')
+    return text
+  }
+
+  deleteKey(page, row, col, kind = 'keyDelete') {
+    this.need()
+    this.snapshot()
+    try {
+      removeKey(this.theme, page, row, col)
+    } catch (e) {
+      this.undoStack.pop()
+      throw e
+    }
+    this.touch(kind)
+  }
+
+  pasteKey(page, row, col, text) {
+    this.need()
+    this.snapshot()
+    let warnings
+    try {
+      warnings = pasteKey(this.theme, page, row, col, text)
+    } catch (e) {
+      this.undoStack.pop()
+      throw e
+    }
+    this.touch('keyPaste')
+    return warnings
+  }
+
+  undo() {
+    const s = this.undoStack.pop()
+    if (!s) return false
+    this.theme.json = s.json
+    this.theme.assets = s.assets
+    this.touch('undo')
+    return true
   }
 
   setKeyTitle(page, row, col, title) {

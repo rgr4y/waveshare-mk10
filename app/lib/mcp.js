@@ -95,6 +95,12 @@ function buildServer(session, { log, pushOpts }) {
     { page, videoPath: z.string() }, async ({ page, videoPath }) =>
       ok({ asset: await session.setBackgroundVideo(page, videoPath) }))
 
+  tool('copy_key', `Copy a key as clipboard JSON ({"mk10studio":"key","v":1,"item","assets"}); paste it with paste_key, here or into another theme. ${LAYOUT}`,
+    { page, row, col }, ({ page, row, col }) => ok({ clip: session.copyKey(page, row, col) }))
+
+  tool('paste_key', `Paste clipboard JSON from copy_key onto a slot: replaces the key there or fills an empty slot. Images come along. Returns warnings (e.g. an openPage target missing from this theme). ${LAYOUT}`,
+    { page, row, col, clip: z.string() }, ({ page, row, col, clip }) => ok({ warnings: session.pasteKey(page, row, col, clip) }))
+
   s.registerTool('get_asset', {
     description: 'Fetch a theme asset by its path (e.g. a key image path from get_page). PNGs come back as image content; other assets return size and type only.',
     inputSchema: { path: z.string() },

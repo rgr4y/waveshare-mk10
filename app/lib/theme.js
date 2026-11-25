@@ -209,3 +209,82 @@ export function setBackgroundVideo(theme, pageIndex, mp4Buffer) {
   dropIfOrphan(theme, old, false)
   return key
 }
+
+// ---- key clipboard (Phase 3d). Plain-text JSON so a key pastes across themes, app instances and editors:
+// {"mk10studio":"key","v":1,"item":{...type 115 item minus slot fields},"assets":{"<asset key>":"<base64>"}}
+const SLOT_FIELDS = ['row', 'col', 'x', 'y', 'id', 'itemName']
+const assetRef = (v) => typeof v === 'string' && v.startsWith('/')
+
+// asset keys an item field points at: the exact file, or every file under a `paths` directory
+function assetsUnder(theme, ref) {
+  if (theme.assets.has(ref)) return [ref]
+  return [...theme.assets.keys()].filter((k) => k.startsWith(ref + '/'))
+}
+
+export function copyKey(theme, pageIndex, row, col) {
+  const it = needItem(theme, pageIndex, row, col)
+  const item = Object.fromEntries(Object.entries(it).filter(([k]) => !SLOT_FIELDS.includes(k)))
+  const assets = {}
+  for (const v of Object.values(item)) {
+    if (assetRef(v)) for (const k of assetsUnder(theme, v)) assets[k] = theme.assets.get(k).toString('base64')
+  }
+  return { mk10studio: 'key', v: 1, item, assets }
+}
+
+// null unless text is a key clipboard this version can paste (a type 115 item whose action decodes)
+export function parseKeyClip(text) {
+  let c
+  try { c = JSON.parse(text) } catch { return null }
+  if (c?.mk10studio !== 'key' || c.v !== 1 || !c.item || String(c.item.type) !== '115') return null
+  if (typeof c.assets !== 'object' || c.assets === null) return null
+  if (c.item.controlData) {
+    try { decodeControlData(c.item.controlData) } catch { return null }
+  }
+  return c
+}
+
+function dropItemOrphans(theme, it) {
+  for (const v of Object.values(it)) if (assetRef(v)) dropIfOrphan(theme, v, !theme.assets.has(v))
+}
+
+export function removeKey(theme, pageIndex, row, col) {
+  const items = page(theme, pageIndex).items ?? []
+  const it = needItem(theme, pageIndex, row, col)
+  items.splice(items.indexOf(it), 1)
+  dropItemOrphans(theme, it)
+}
+
+// Paste onto (page,row,col): replaces a key there, or fills an empty slot. Assets keep their key when
+// the theme already holds the same bytes there; otherwise they get new UUID keys and the item's
+// references are rewritten. Returns warnings (e.g. an openPage target missing from this theme).
+export function pasteKey(theme, pageIndex, row, col, clip) {
+  const c = parseKeyClip(typeof clip === 'string' ? clip : JSON.stringify(clip))
+  if (!c) throw new Error('clipboard holds no MK10 Studio key')
+  const p = page(theme, pageIndex)
+  const bytes = Object.fromEntries(Object.entries(c.assets).map(([k, b]) => [k, Buffer.from(b, 'base64')]))
+  const item = structuredClone(c.item)
+  for (const [f, v] of Object.entries(item)) {
+    if (!assetRef(v)) continue
+    const keys = Object.keys(bytes).filter((k) => k === v || k.startsWith(v + '/'))
+    if (!keys.length || keys.every((k) => theme.assets.get(k)?.equals(bytes[k]))) continue
+    const dot = v.lastIndexOf('.')
+    const nv = `${v.slice(0, v.lastIndexOf('/'))}/${randomUUID()}${keys.includes(v) && dot > v.lastIndexOf('/') ? v.slice(dot) : ''}`
+    for (const k of keys) theme.assets.set(k === v ? nv : nv + k.slice(v.length), bytes[k])
+    item[f] = nv
+  }
+  const warnings = []
+  if (item.controlData) {
+    const cd = decodeControlData(item.controlData)
+    const target = cd.type === 'openPage' && cd.fields.find(([k]) => k === 'pageName')?.[1].value
+    if (target && !theme.json.pages.some((q) => q.pageName === target)) warnings.push(`openPage target ${target} is not in this theme`)
+  }
+  const old = getItem(theme, pageIndex, row, col)
+  const ids = theme.json.pages.flatMap((q) => (q.items ?? []).map((i) => Number(i.id))).filter(Number.isFinite)
+  const id = String(Math.max(0, ...ids) + 1)
+  Object.assign(item, { row: String(row), col: String(col), x: String(col * 128), y: String(row * 128), id, itemName: `control${id}` })
+  p.items ??= []
+  if (old) p.items[p.items.indexOf(old)] = item
+  else p.items.push(item)
+  if (old) dropItemOrphans(theme, old)
+  return warnings
+}

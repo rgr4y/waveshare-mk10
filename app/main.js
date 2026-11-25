@@ -1,5 +1,5 @@
 // Electron main: owns the single Session; all edits (UI, MCP) go through it.
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell, systemPreferences, Tray } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, shell, systemPreferences, Tray } from 'electron'
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { existsSync, watch } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
@@ -163,6 +163,39 @@ function asset(key) {
   return bytes ? { mime: MIME[extname(k).toLowerCase()] ?? 'application/octet-stream', bytes: new Uint8Array(bytes) } : null
 }
 
+// ---- key clipboard: the system clipboard holds the key as plain-text JSON (see theme.js copyKey)
+const slot = (row, col) => `r${row} c${col}`
+async function keyOp(op, page, row, col) {
+  if (op === 'copy') {
+    clipboard.writeText(session.copyKey(page, row, col))
+    return status(`Copied key ${slot(row, col)}`)
+  }
+  if (op === 'cut') return task(`Cut key ${slot(row, col)}`, () => clipboard.writeText(session.cutKey(page, row, col)))
+  if (op === 'delete') return task(`Delete key ${slot(row, col)}`, () => session.deleteKey(page, row, col))
+  if (op === 'undo') return task('Undo', () => { if (!session.undo()) throw new Error('nothing to undo') })
+  if (op === 'paste') {
+    return task(`Paste key ${slot(row, col)}`, () => {
+      const text = clipboard.readText()
+      if (!session.canPaste(text)) throw new Error('the clipboard holds no MK10 Studio key')
+      for (const w of session.pasteKey(page, row, col, text)) log(`paste: ${w}`)
+    })
+  }
+  throw new Error(`unknown key op ${op}`)
+}
+
+function keyMenu(page, row, col, hasKey) {
+  const go = (op) => () => keyOp(op, page, row, col).catch(() => {}) // reported via status
+  Menu.buildFromTemplate([
+    { label: 'Cut', enabled: hasKey, click: go('cut') },
+    { label: 'Copy', enabled: hasKey, click: go('copy') },
+    { label: 'Paste', enabled: session.canPaste(clipboard.readText()), click: go('paste') },
+    { type: 'separator' },
+    { label: 'Delete Key', enabled: hasKey, click: go('delete') },
+  ]).popup({ window: win })
+}
+
+const NATIVE_EDIT = new Set(['undo', 'redo', 'cut', 'copy', 'paste', 'delete'])
+
 const PRIVACY_PANES = { accessibility: 'Privacy_Accessibility', screen: 'Privacy_ScreenCapture', automation: 'Privacy_Automation' }
 const openPane = (pane) => {
   if (!Object.hasOwn(PRIVACY_PANES, pane)) throw new Error(`Unknown privacy pane: ${pane}`)
@@ -185,6 +218,9 @@ function registerIpc() {
   h('setKeyImage', setKeyImage)
   h('setBackgroundVideo', setBackgroundVideo)
   h('push', push)
+  h('keyOp', keyOp)
+  h('keyMenu', keyMenu)
+  h('nativeEdit', (op) => { if (NATIVE_EDIT.has(op)) win.webContents[op]() })
   h('mcpToggle', (on, port) => task(on ? 'Start MCP' : 'Stop MCP', () => mcpToggle(on, port)))
   h('setLoginItem', (on) => {
     if (!LOGIN_OK) throw new Error('Start at login needs a packaged, signed build (dev runs as "Electron")')
@@ -239,7 +275,20 @@ function buildMenu() {
         { role: 'close' },
       ],
     },
-    { role: 'editMenu' },
+    {
+      // Edit items go to the renderer: a focused text field gets the native action, otherwise the selected key
+      label: 'Edit',
+      submenu: [
+        { label: 'Undo', accelerator: 'CmdOrCtrl+Z', click: () => send('edit', 'undo') },
+        { label: 'Redo', accelerator: 'Shift+CmdOrCtrl+Z', click: () => send('edit', 'redo') },
+        { type: 'separator' },
+        { label: 'Cut', accelerator: 'CmdOrCtrl+X', click: () => send('edit', 'cut') },
+        { label: 'Copy', accelerator: 'CmdOrCtrl+C', click: () => send('edit', 'copy') },
+        { label: 'Paste', accelerator: 'CmdOrCtrl+V', click: () => send('edit', 'paste') },
+        { label: 'Delete Key', click: () => send('edit', 'delete') },
+        { role: 'selectAll' },
+      ],
+    },
     { role: 'viewMenu' },
     { role: 'windowMenu' },
   ]))

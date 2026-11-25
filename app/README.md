@@ -32,6 +32,13 @@ The first-run dialog offers it, ticked by default (with Start at login). Enable 
 default 47110, bound to 127.0.0.1. The URL and the `claude mcp add` command show when on. Edits made via
 MCP appear live in the UI.
 
+### Key clipboard
+Right-click a key (or an empty slot) for Cut, Copy, Paste and Delete Key. With no text field focused,
+Cmd+X / Cmd+C / Cmd+V act on the selected key or slot, Backspace/Delete clears it, and Cmd+Z undoes the
+last cut, paste or delete (up to 20; any other edit clears the undo list). The clipboard holds the key
+as plain-text JSON with its images embedded, so it pastes into another theme or another running copy.
+Paste replaces the key in the target slot or fills an empty one. MCP: `copy_key` and `paste_key`.
+
 ### Resident app
 - **Tray**: a text-only "MK10" item in the menu bar. Menu: current theme name, Open MK10 Studio, Push to
   device (disabled with no theme open), MCP server (checkbox, starts and stops it), Quit MK10 Studio.

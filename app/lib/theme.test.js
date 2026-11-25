@@ -9,7 +9,7 @@ import { QWriter } from './qdatastream.js'
 import {
   decodeTheme, encodeTheme, formatQtJson, decodeControlData, encodeControlData,
   pages, listKeys, getItem, setKeyTitle, setKeyImage, setBackgroundVideo,
-  editableActionFields, setKeyActionField,
+  editableActionFields, setKeyActionField, copyKey, pasteKey, removeKey, parseKeyClip,
 } from './theme.js'
 
 // Pristine stock theme (ScreenKeyMacOS v1.1 bundle, captured 2026-11-24 before an accidental vendor-app save); sha in SHA256SUMS.txt
@@ -144,4 +144,45 @@ test('real theme: openPage pageName must name an existing page', { skip }, () =>
   const { pi, it } = found
   assert.throws(() => setKeyActionField(t, pi, Number(it.row), Number(it.col), 'pageName', 'no-such-page'), /no page named/)
   setKeyActionField(t, pi, Number(it.row), Number(it.col), 'pageName', t.json.pages[0].pageName)
+})
+
+test('real theme: key clipboard copy, cut, paste across themes, asset reuse and rekeying', { skip }, () => {
+  const a = decodeTheme(load())
+  const gif = listKeys(a, 0).find((k) => k.item.paths) // GIF key: frames in a `paths` directory
+  const png = listKeys(a, 0).find((k) => k.item.path && !k.item.paths)
+  const text = JSON.stringify(copyKey(a, 0, png.row, png.col))
+  assert.ok(parseKeyClip(text))
+  assert.equal(parseKeyClip('{"mk10studio":"key","v":2,"item":{"type":"115"},"assets":{}}'), null)
+  assert.equal(parseKeyClip('hello'), null)
+
+  // same theme, empty slot: same bytes already there, so the asset key is reused, not duplicated
+  const empty = [0, 1].flatMap((r) => [0, 1, 2, 3, 4].map((c) => [r, c])).find(([r, c]) => !getItem(a, 2, r, c))
+  const nAssets = a.assets.size
+  pasteKey(a, 2, empty[0], empty[1], text)
+  const pasted = getItem(a, 2, empty[0], empty[1])
+  assert.equal(pasted.path, png.item.path)
+  assert.equal(a.assets.size, nAssets)
+  assert.equal(pasted.x, String(empty[1] * 128))
+  assert.notEqual(pasted.id, png.item.id)
+
+  // cut the GIF key: its frames go once nothing references them; pasting brings them back under new keys
+  const gclip = JSON.stringify(copyKey(a, 0, gif.row, gif.col))
+  const frames = [...a.assets.keys()].filter((k) => k.startsWith(gif.item.paths + '/'))
+  assert.ok(frames.length > 1)
+  removeKey(a, 0, gif.row, gif.col)
+  assert.equal(getItem(a, 0, gif.row, gif.col), undefined)
+  assert.ok(frames.every((k) => !a.assets.has(k)))
+  pasteKey(a, 0, gif.row, gif.col, gclip)
+  const back = getItem(a, 0, gif.row, gif.col)
+  assert.notEqual(back.paths, gif.item.paths)
+  assert.equal([...a.assets.keys()].filter((k) => k.startsWith(back.paths + '/')).length, frames.length)
+
+  // into another theme: replaces the key there, warns when an openPage target is missing
+  const b = decodeTheme(load())
+  b.json.pages = b.json.pages.slice(0, 2)
+  const opener = listKeys(a, 0).find((k) => decodeControlData(k.item.controlData).type === 'openPage')
+  const warn = pasteKey(b, 1, 0, 0, JSON.stringify(copyKey(a, 0, opener.row, opener.col)))
+  assert.match(warn[0], /openPage target .* is not in this theme/)
+  assert.equal(getItem(b, 1, 0, 0).title, opener.item.title)
+  assert.deepEqual(decodeTheme(encodeTheme(a)).json, a.json)
 })
