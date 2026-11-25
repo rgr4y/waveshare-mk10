@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('mk10', {
   setBackgroundVideo: call('setBackgroundVideo'),
   push: call('push'),
   keyOp: call('keyOp'),
+  openCapture: call('openCapture'),
   keyMenu: call('keyMenu'),
   nativeEdit: call('nativeEdit'),
   mcpToggle: call('mcpToggle'),
@@ -39,4 +40,5 @@ contextBridge.exposeInMainWorld('mk10', {
   onMcp: on('mcp'),
   onOpenSettings: on('openSettings'),
   onEdit: on('edit'),
+  onCapture: on('capture'),
 })

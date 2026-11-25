@@ -221,3 +221,18 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 .settings #mcp-port { width: 100px; }
 .settings #mcp-cmd { font: 11px ui-monospace, Menlo, monospace; user-select: text; }
 .settings .switch { margin: var(--sp-1-5) 0 var(--sp-0-5); }
+
+/* top bar: proof-of-concept key capture */
+button.danger { background: var(--err); border-color: var(--err); color: #fff; }
+button.danger:hover:not(:disabled) { filter: brightness(1.1); }
+
+/* key capture window */
+body.capture { padding: var(--sp-4); overflow: auto; }
+.cap-head { margin-bottom: var(--sp-3); }
+.cap-status { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); margin-top: var(--sp-2); }
+.cap-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.cap-table th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; padding: var(--sp-1) var(--sp-2); border-bottom: 1px solid var(--line); }
+.cap-table td { padding: var(--sp-1) var(--sp-2); border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.cap-table tr[data-src=HID] .c-src { color: var(--ok); }
+.cap-table tr[data-src=Error] .c-detail { color: var(--err); }
+.c-key { font-weight: 600; }

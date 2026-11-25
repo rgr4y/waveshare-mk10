@@ -3,6 +3,8 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, shel
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { existsSync, watch } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
+import { execFileSync, spawn } from 'node:child_process'
+import { createInterface } from 'node:readline'
 import { Session, DEFAULT_SSH } from './lib/session.js'
 
 const STOCK_DIR = '/Applications/ScreenKeyMacOS.app/Contents/MacOS/theme/MK10/'
@@ -163,6 +165,49 @@ function asset(key) {
   return bytes ? { mime: MIME[extname(k).toLowerCase()] ?? 'application/octet-stream', bytes: new Uint8Array(bytes) } : null
 }
 
+// ---- key capture window (proof of concept for keybinding). Two sources:
+// 'input': Electron before-input-event, what the app sees (menu shortcuts are blocked while it is focused);
+// 'hid': native/hidtap (IOHIDManager), raw HID usages incl. consumer keys that macOS handles itself.
+const HIDTAP_SRC = join(import.meta.dirname, 'native', 'hidtap.swift')
+const HIDTAP = join(import.meta.dirname, 'native', 'build', 'hidtap')
+let capWin = null
+
+function startHidtap(sendCap) {
+  if (!existsSync(HIDTAP)) {
+    // ponytail: compiled on first use with swiftc; packaging builds it ahead (Phase 5)
+    sendCap({ t: 'log', msg: 'building native/build/hidtap with swiftc…' })
+    try {
+      execFileSync('swiftc', ['-O', HIDTAP_SRC, '-o', HIDTAP], { timeout: 60_000 })
+    } catch (e) {
+      sendCap({ t: 'error', msg: `swiftc failed: ${e.stderr?.toString().trim() || e.message}` })
+      return null
+    }
+  }
+  const p = spawn(HIDTAP, [], { stdio: ['pipe', 'pipe', 'pipe'] })
+  createInterface({ input: p.stdout }).on('line', (l) => { try { sendCap(JSON.parse(l)) } catch { /* not JSON */ } })
+  p.stderr.on('data', (d) => sendCap({ t: 'error', msg: String(d).trim() }))
+  p.on('exit', (code, sig) => sendCap({ t: 'log', msg: `hidtap exited (${sig ?? code})` }))
+  return p
+}
+
+function openCapture() {
+  if (capWin && !capWin.isDestroyed()) return capWin.focus()
+  capWin = new BrowserWindow({
+    width: 860, height: 600, title: 'Key capture', backgroundColor: '#14161a',
+    webPreferences: { preload: join(import.meta.dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true },
+  })
+  const w = capWin
+  const sendCap = (o) => { if (!w.isDestroyed()) w.webContents.send('mk10:capture', o) }
+  let tap = null
+  w.webContents.on('before-input-event', (e, i) => {
+    e.preventDefault() // keep Cmd+Q/W/C… from reaching menus: everything is captured
+    sendCap({ t: 'input', type: i.type, key: i.key, code: i.code, repeat: i.isAutoRepeat, shift: i.shift, control: i.control, alt: i.alt, meta: i.meta })
+  })
+  w.webContents.once('did-finish-load', () => { tap = startHidtap(sendCap) })
+  w.on('closed', () => { tap?.stdin.end(); tap?.kill(); capWin = null })
+  w.loadFile(join(import.meta.dirname, 'public', 'capture.html'))
+}
+
 // ---- key clipboard: the system clipboard holds the key as plain-text JSON (see theme.js copyKey)
 const slot = (row, col) => `r${row} c${col}`
 async function keyOp(op, page, row, col) {
@@ -196,7 +241,7 @@ function keyMenu(page, row, col, hasKey) {
 
 const NATIVE_EDIT = new Set(['undo', 'redo', 'cut', 'copy', 'paste', 'delete'])
 
-const PRIVACY_PANES = { accessibility: 'Privacy_Accessibility', screen: 'Privacy_ScreenCapture', automation: 'Privacy_Automation' }
+const PRIVACY_PANES = { accessibility: 'Privacy_Accessibility', screen: 'Privacy_ScreenCapture', automation: 'Privacy_Automation', input: 'Privacy_ListenEvent' }
 const openPane = (pane) => {
   if (!Object.hasOwn(PRIVACY_PANES, pane)) throw new Error(`Unknown privacy pane: ${pane}`)
   return shell.openExternal(`x-apple.systempreferences:com.apple.preference.security?${PRIVACY_PANES[pane]}`)
@@ -219,6 +264,7 @@ function registerIpc() {
   h('setBackgroundVideo', setBackgroundVideo)
   h('push', push)
   h('keyOp', keyOp)
+  h('openCapture', openCapture)
   h('keyMenu', keyMenu)
   h('nativeEdit', (op) => { if (NATIVE_EDIT.has(op)) win.webContents[op]() })
   h('mcpToggle', (on, port) => task(on ? 'Start MCP' : 'Stop MCP', () => mcpToggle(on, port)))

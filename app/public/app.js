@@ -394,6 +394,7 @@ async function init() {
   if ((!cfg.onboarded && !cfg.screenshot) || cfg.onboardPreview) $('onboard-dlg').showModal() // --screenshot --onboard previews it
   if (cfg.settingsPreview) openSettings() // --screenshot --settings previews it
   $('btn-settings').addEventListener('click', openSettings)
+  $('btn-capture').addEventListener('click', () => run(window.mk10.openCapture()))
   $('mcp-badge').addEventListener('click', openSettings)
   $('reopen-last').checked = cfg.reopenLast !== false
   $('reopen-last').addEventListener('change', (e) => run(window.mk10.setPref('reopenLast', e.target.checked)))

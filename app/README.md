@@ -39,6 +39,13 @@ last cut, paste or delete (up to 20; any other edit clears the undo list). The c
 as plain-text JSON with its images embedded, so it pastes into another theme or another running copy.
 Paste replaces the key in the target slot or fills an empty one. MCP: `copy_key` and `paste_key`.
 
+### Key capture (proof of concept)
+The red **Capture keys** button opens a window that logs every key press from two sources: what the app
+receives (`before-input-event`, menu shortcuts blocked while it has focus), and raw HID usages from
+`native/hidtap` (IOHIDManager, passive: keys still work). HID covers consumer keys macOS handles itself
+(volume, brightness, media) and F13-F24. It needs Input Monitoring (in a dev run the grant shows as
+"Electron"). The helper is compiled with `swiftc` on first use into `native/build/` (gitignored).
+
 ### Resident app
 - **Tray**: a text-only "MK10" item in the menu bar. Menu: current theme name, Open MK10 Studio, Push to
   device (disabled with no theme open), MCP server (checkbox, starts and stops it), Quit MK10 Studio.
