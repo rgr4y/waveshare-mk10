@@ -12,6 +12,7 @@ const ui = {
 
 const IMAGE_RE = /\.(png|jpe?g|gif|webp|bmp|tiff?|heic|svg)$/i
 const VIDEO_RE = /\.(mp4|mov|m4v|mkv|avi|webm|gif)$/i
+const ANY_MEDIA_RE = new RegExp(`${IMAGE_RE.source}|${VIDEO_RE.source}`, 'i')
 const base = (p) => String(p).split('/').pop()
 
 // ---- status / log
@@ -126,11 +127,16 @@ function renderKeys() {
         const img = el.querySelector('.key-img')
         if (tp.ShowImage === false) img.hidden = true
         else fillImg(img, it.path || it.paths)
-        wireDrop(el, IMAGE_RE, (file) => {
+        // an image sets the key's image (GIF counts as an image here); a video goes to the background
+        wireDrop(el, ANY_MEDIA_RE, (file) => {
+          if (!IMAGE_RE.test(file)) return run(window.mk10.setBackgroundVideo(ui.page, file))
           select({ kind: 'key', row, col })
           return run(window.mk10.setKeyImage(ui.page, row, col, file))
         })
       }
+      // empty slots take clicks (select, right-click Paste) and cover the background video, so a video
+      // dropped on one still goes to the background; the page Inspector also replaces it
+      else wireDrop(el, VIDEO_RE, (file) => run(window.mk10.setBackgroundVideo(ui.page, file)))
       // empty slots select too, so a paste has a target
       el.dataset.selected = String(ui.sel?.kind === 'key' && ui.sel.row === row && ui.sel.col === col)
       el.addEventListener('click', () => select({ kind: 'key', row, col }))
@@ -256,7 +262,7 @@ function renderInspector() {
   const vid = sel?.kind === 'video' ? videoItem(p) : null
   const pg = sel?.kind === 'page' ? p : null
   $('insp-none').hidden = !!(key || vid || pg)
-  $('insp-hint').textContent = sel?.kind === 'key' ? 'Empty slot. Paste a key here (Cmd+V or right-click).' : 'Click a page, a key or the background video.'
+  $('insp-hint').textContent = sel?.kind === 'key' ? 'Empty slot. Paste a key here (Cmd+V or right-click). The background video is in the page Inspector (click the page).' : 'Click a page or a key.'
   $('insp-key').hidden = !key
   $('insp-video').hidden = !vid
   $('insp-page').hidden = !pg

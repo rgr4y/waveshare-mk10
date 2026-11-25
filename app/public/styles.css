@@ -151,7 +151,6 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 .keys { position: absolute; left: 0; top: 0; width: 640px; height: 256px; pointer-events: none; }
 .key { position: absolute; width: 128px; height: 128px; pointer-events: auto; cursor: pointer; overflow: hidden; }
 .key:hover { box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .25); }
-.key.empty { pointer-events: none; }
 .key-img { position: absolute; inset: 0; width: 128px; height: 128px; object-fit: contain; pointer-events: none; }
 .key-img[src=""], .key-img:not([src]) { display: none; }
 .key-title {
