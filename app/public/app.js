@@ -313,6 +313,12 @@ async function init() {
   // settings dialog (native <dialog>: Esc and the Done button close it)
   const openSettings = () => { if (!$('settings-dlg').open) $('settings-dlg').showModal() }
   window.mk10.onOpenSettings(openSettings)
+  // first-run onboarding: closing it (button or Esc) counts as onboarded; MCP only if ticked
+  $('onboard-dlg').addEventListener('close', () => {
+    if ($('onboard-mcp').checked) run(window.mk10.mcpToggle(true, cfg.mcp.port)).then(() => {}, () => {})
+    run(window.mk10.setPref('onboarded', true))
+  })
+  if (!cfg.onboarded && !cfg.screenshot) $('onboard-dlg').showModal()
   $('btn-settings').addEventListener('click', openSettings)
   $('mcp-badge').addEventListener('click', openSettings)
   $('reopen-last').checked = cfg.reopenLast !== false

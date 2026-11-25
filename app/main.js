@@ -19,7 +19,7 @@ const session = new Session()
 let win = null
 let mcp = null
 let tray = null
-let settings = { lastFile: null, reopenLast: true, mcp: { enabled: false, port: 47110 }, ssh: { ...DEFAULT_SSH } }
+let settings = { lastFile: null, reopenLast: true, onboarded: false, mcp: { enabled: false, port: 47110 }, ssh: { ...DEFAULT_SSH } }
 let settingsFile
 
 // ---- settings
@@ -157,7 +157,7 @@ function asset(key) {
   return bytes ? { mime: MIME[extname(k).toLowerCase()] ?? 'application/octet-stream', bytes: new Uint8Array(bytes) } : null
 }
 
-const PREFS = new Set(['reopenLast']) // boolean prefs the renderer may set
+const PREFS = new Set(['reopenLast', 'onboarded']) // boolean prefs the renderer may set
 
 function registerIpc() {
   const h = (name, fn) => ipcMain.handle(`mk10:${name}`, (_e, ...a) => fn(...a))
@@ -173,7 +173,7 @@ function registerIpc() {
   h('setBackgroundVideo', setBackgroundVideo)
   h('push', push)
   h('mcpToggle', (on, port) => task(on ? 'Start MCP' : 'Stop MCP', () => mcpToggle(on, port)))
-  h('settings', () => ({ ...settings, settingsFile, version: app.getVersion(), mcpUrl: mcp?.url ?? null, stockDir: existsSync(STOCK_DIR) ? STOCK_DIR : null }))
+  h('settings', () => ({ ...settings, screenshot: SHOT, settingsFile, version: app.getVersion(), mcpUrl: mcp?.url ?? null, stockDir: existsSync(STOCK_DIR) ? STOCK_DIR : null }))
   h('setPref', async (key, value) => {
     if (!PREFS.has(key) || typeof value !== 'boolean') throw new Error(`unknown setting ${key}`)
     settings[key] = value

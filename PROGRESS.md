@@ -640,3 +640,7 @@ Verification
   - Until the next image, the device loads the stand-in as a module (`extra/mk10-atsha-compat.ko`, listed in `/etc/modules`). The rebuilt kernel (boot.img `47849bde4ca5`, modules tgz `d7d42638c280`, 63 .ko) has it built in and is staged in LilAlpine `boards/MK10-T113/`; no image built yet.
   - At boot, i2c2 logs `incomplete xfer (dev addr: 0x64)` about seven times. Hypothesis: the mainline driver's wake pulse, which the chip NACKs; the RNG works anyway.
   - The kernel warns that the backup GPT is not at the end of the card (7864319 != 61067263). Check whether growfs fixes it on the next boot.
+
+## 2026-11-24 (night): first-run onboarding dialog
+- Added `#onboard-dlg` (welcome + MCP checkbox, off by default, `#onboard-more` slot for later rows). Shows once when `onboarded` is unset; button or Esc sets `onboarded`, MCP starts only if ticked. `settings` IPC now includes `screenshot` so `--screenshot` runs skip the dialog.
+- Verified: npm test, lint, layout grep, screenshot run (no dialog, exits). Unverified: the interactive first-run flow (Rob's checklist).
