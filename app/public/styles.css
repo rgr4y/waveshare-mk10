@@ -172,6 +172,8 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 .secondary { position: absolute; left: 656px; top: 0; width: 240px; height: 296px; overflow: hidden; background: #0b0d11; pointer-events: none; }
 .sec { position: absolute; }
 .sec-image { object-fit: fill; }
+.widgets { overflow: hidden; }
+.sec-digits { display: flex; align-items: center; justify-content: center; }
 .sec-text { color: #fff; font-weight: 700; white-space: nowrap; font-family: Arial, Helvetica, sans-serif; line-height: 1; text-shadow: 0 1px 2px rgba(0, 0, 0, .5); }
 .sec-ring { width: 56px; height: 56px; border-radius: 50%; border: 6px solid transparent; background: conic-gradient(from 225deg, #ff4fa3, #ffb347 40%, #4fd0ff 80%, transparent 80%) border-box; mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px)); }
 .sec-box {

@@ -185,4 +185,12 @@ test('real theme: key clipboard copy, cut, paste across themes, asset reuse and 
   assert.match(warn[0], /openPage target .* is not in this theme/)
   assert.equal(getItem(b, 1, 0, 0).title, opener.item.title)
   assert.deepEqual(decodeTheme(encodeTheme(a)).json, a.json)
+
+  // a key-area widget (clock digits, type 111 child) makes its cell occupied even with no key there
+  const pi = a.json.pages.findIndex((q) => (q.items ?? []).some((i) => String(i.type) === '111' && i.backgroundType === 'child'))
+  assert.ok(pi >= 0, 'stock theme has a clock page')
+  const clk = a.json.pages[pi].items.find((i) => String(i.type) === '111' && i.backgroundType === 'child')
+  const [cr, cc] = [Math.floor(Number(clk.y) / 128), Math.floor(Number(clk.x) / 128)]
+  assert.equal(getItem(a, pi, cr, cc), undefined)
+  assert.throws(() => pasteKey(a, pi, cr, cc, text), /holds a widget/)
 })

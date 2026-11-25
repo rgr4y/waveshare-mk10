@@ -279,6 +279,11 @@ export function pasteKey(theme, pageIndex, row, col, clip) {
     if (target && !theme.json.pages.some((q) => q.pageName === target)) warnings.push(`openPage target ${target} is not in this theme`)
   }
   const old = getItem(theme, pageIndex, row, col)
+  // a key-area widget (clock digits, GIF, gauge: backgroundType "child") in an empty cell is not free space
+  const n = (v) => Number(v) || 0
+  const under = !old && (p.items ?? []).filter((i) => String(i.type) !== '115' && i.backgroundType === 'child' && n(i.x) < 656 &&
+    n(i.x) < col * 128 + 128 && n(i.x) + (n(i.w) || 1) > col * 128 && n(i.y) < row * 128 + 128 && n(i.y) + (n(i.h) || 1) > row * 128)
+  if (under?.length) throw new Error(`r${row} c${col} holds a widget (type ${under.map((i) => i.type).join(', ')}), not a key slot`)
   const ids = theme.json.pages.flatMap((q) => (q.items ?? []).map((i) => Number(i.id))).filter(Number.isFinite)
   const id = String(Math.max(0, ...ids) + 1)
   Object.assign(item, { row: String(row), col: String(col), x: String(col * 128), y: String(row * 128), id, itemName: `control${id}` })

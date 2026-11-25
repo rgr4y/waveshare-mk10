@@ -167,16 +167,39 @@ function renderBackground() {
   })
 }
 
-const CLOCK = { hour: () => String(new Date().getHours()).padStart(2, '0'), minute: () => String(new Date().getMinutes()).padStart(2, '0') }
+const CLOCK = { hour: () => String(new Date().getHours()).padStart(2, '0'), minute: () => String(new Date().getMinutes()).padStart(2, '0'), second: () => String(new Date().getSeconds()).padStart(2, '0') }
 
-function renderSecondary() {
-  const items = (curPage()?.items ?? []).filter((i) => i.type !== '115' && i.type !== '100' && i.backgroundType !== 'main')
+// widgets: every item that is neither a key (115) nor the background video. backgroundType "child"
+// widgets sit on the key area (x < 656) at their own x/y, e.g. clock digits or GIFs in key cells.
+const widgetItems = (p) => (p?.items ?? []).filter((i) => i.type !== '115' && i.type !== '100' && i.backgroundType !== 'main')
+const onKeyArea = (i) => i.backgroundType === 'child' && i.x < 656
+const WIDGET_NAMES = { 111: 'clock digits', 113: 'text', 114: 'image', 101: 'ring', 109: 'ring', 102: 'bar' }
+const widgetLabel = (i) => [WIDGET_NAMES[i.type] ?? `type ${i.type}`, i.systemData].filter(Boolean).join(' ')
+// key-area widgets overlapping cell (row,col); items without a size count as a point at x/y
+const cellWidgets = (p, row, col) => widgetItems(p).filter((i) => onKeyArea(i) &&
+  i.x < col * 128 + 128 && i.x + (i.w || 1) > col * 128 && i.y < row * 128 + 128 && i.y + (i.h || 1) > row * 128)
+
+function renderWidgets() {
+  const all = widgetItems(curPage())
+  draw($('widgets'), all.filter(onKeyArea), 0)
+  draw($('secondary'), all.filter((i) => !onKeyArea(i)), 656)
+}
+
+function draw(box, items, dx) {
   // approximate device z-order: images under gauges under text
-  const rank = (t) => (t === '114' ? 0 : t === '113' ? 2 : 1)
+  const rank = (t) => (t === '114' ? 0 : t === '113' || t === '111' ? 2 : 1)
   items.sort((a, b) => rank(a.type) - rank(b.type))
-  $('secondary').replaceChildren(...items.map((it) => {
+  box.replaceChildren(...items.map((it) => {
     let el
-    if (it.type === '114') {
+    if (it.type === '111') {
+      // digital clock: system_data_name hour/minute, drawn by the device in its own digit font
+      el = tpl('tpl-sec-text')
+      el.classList.add('sec-digits')
+      el.textContent = CLOCK[it.systemData]?.() ?? '--'
+      el.style.width = `${it.w ?? 128}px`
+      el.style.height = `${it.h ?? 128}px`
+      el.style.fontSize = `${Math.round((it.h ?? 128) * 0.6)}px`
+    } else if (it.type === '114') {
       el = tpl('tpl-sec-image')
       fillImg(el, it.path || it.paths)
       el.style.width = `${it.w ?? 240}px`
@@ -196,7 +219,7 @@ function renderSecondary() {
       if (it.w) el.style.width = `${it.w}px`
       if (it.h) el.style.height = `${it.h}px`
     }
-    el.style.left = `${it.x - 656}px`
+    el.style.left = `${it.x - dx}px`
     el.style.top = `${it.y}px`
     return el
   }))
@@ -262,7 +285,9 @@ function renderInspector() {
   const vid = sel?.kind === 'video' ? videoItem(p) : null
   const pg = sel?.kind === 'page' ? p : null
   $('insp-none').hidden = !!(key || vid || pg)
-  $('insp-hint').textContent = sel?.kind === 'key' ? 'Empty slot. Paste a key here (Cmd+V or right-click). The background video is in the page Inspector (click the page).' : 'Click a page or a key.'
+  const under = sel?.kind === 'key' && !key ? cellWidgets(p, sel.row, sel.col) : []
+  $('insp-hint').textContent = under.length ? `No key here, but not empty: ${under.map(widgetLabel).join(', ')}. Paste is blocked on this cell.`
+    : sel?.kind === 'key' ? 'Empty slot. Paste a key here (Cmd+V or right-click). The background video is in the page Inspector (click the page).' : 'Click a page or a key.'
   $('insp-key').hidden = !key
   $('insp-video').hidden = !vid
   $('insp-page').hidden = !pg
@@ -283,7 +308,7 @@ function render() {
   renderPages()
   renderKeys()
   renderBackground()
-  renderSecondary()
+  renderWidgets()
   renderInspector()
   fit()
 }
@@ -428,8 +453,11 @@ async function init() {
 
   window.mk10.onStatus(setStatus)
   window.mk10.onLog(addLog)
-  window.mk10.onChange((e) => { onChange(e) })
-  window.mk10.onSelect(({ page, row, col }) => {
+  // a select sent right after an open must land after that open's page reset, not before it
+  let changing = Promise.resolve()
+  window.mk10.onChange((e) => { changing = onChange(e) })
+  window.mk10.onSelect(async ({ page, row, col }) => {
+    await changing.catch(() => {})
     ui.page = page
     ui.sel = Number.isNaN(row) ? { kind: 'video' } : { kind: 'key', row, col }
     render()
