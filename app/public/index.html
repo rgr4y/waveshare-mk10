@@ -141,6 +141,13 @@
       </section>
 
       <section>
+        <h3>Device fonts</h3>
+        <p class="hint">The MK10 draws titles and clocks with its own fonts. Studio copies them from the device over ssh (LilAlpine) for the preview; they stay in Studio's data folder.</p>
+        <p id="fonts-info" class="hint"></p>
+        <button id="btn-fonts" type="button">Copy fonts from device</button>
+      </section>
+
+      <section>
         <h3>Key capture</h3>
         <p class="hint">Shows every key event the Mac sees, with its QMK keycode (proof of concept for keybinding).</p>
         <button id="btn-capture" type="button">Capture keys…</button>

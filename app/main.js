@@ -1,12 +1,19 @@
 // Electron main: owns the single Session; all edits (UI, MCP) go through it.
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, shell, systemPreferences, Tray } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, net, protocol, shell, systemPreferences, Tray } from 'electron'
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { createWriteStream, existsSync, mkdirSync, statSync, watch } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
 import { execFileSync, spawn } from 'node:child_process'
+import { pathToFileURL } from 'node:url'
 import { createInterface } from 'node:readline'
 import { Session, DEFAULT_SSH } from './lib/session.js'
 import { hidToQmk, isModifier } from './lib/qmk.js'
+import { fontManifest, syncDeviceFonts } from './lib/fonts.js'
+
+// device fonts, copied from the MK10 over ssh, served to the renderer as mk10font://f/<file>
+protocol.registerSchemesAsPrivileged([{ scheme: 'mk10font', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }])
+const fontDir = () => join(app.getPath('userData'), 'device-fonts')
+let fonts = [] // manifest: [{file, family, weight, style}]
 
 const STOCK_DIR = '/Applications/ScreenKeyMacOS.app/Contents/MacOS/theme/MK10/'
 const MIME = { '.png': 'image/png', '.gif': 'image/gif', '.mp4': 'video/mp4', '.jpg': 'image/jpeg' }
@@ -88,6 +95,7 @@ async function pull() {
   }
   const dest = await task('Pull from device', () => session.pull(pushOpts(), log, pickDest))
   if (!dest) return status('Pull cancelled')
+  firstFonts()
   return openPath(dest)
 }
 
@@ -150,11 +158,24 @@ async function push() {
       ? `Copies the theme to ${o.remote}, points config.json at it and restarts keyboard-device.`
       : `Writes the theme to ${o.remote} as a new timestamped file (~10 s for 12 MB), tells the device to load it, then deletes older mk10studio pushes.`,
   })).response === 0
+  let mode
+  const ask = async (o) => { mode = o.mode; return confirm(o) }
   // the lock covers detection and the confirm dialog too, so the mode can't change underneath
-  const r = await task('Push', () => session.push(pushOpts(), log, confirm))
+  const r = await task('Push', () => session.push(pushOpts(), log, ask))
   if (r === null) status('Push cancelled')
+  else if (mode === 'ssh') firstFonts()
   return r
 }
+
+// Copy the device's fonts (ssh only: the stock firmware can't send files back).
+async function syncFonts() {
+  if (session.pushing) throw new Error('a push or pull is running; copy fonts after it')
+  fonts = await task('Copy fonts from device', () => syncDeviceFonts(settings.ssh.host, fontDir(), { log }))
+  send('fonts', fonts)
+  return fonts.length
+}
+// after the first ssh push or pull: fetch fonts once, in the background
+const firstFonts = () => { if (!fonts.length) syncFonts().catch(() => {}) } // reported via status
 
 async function mcpToggle(on, port = settings.mcp.port) {
   if (mcp) { await mcp.close(); mcp = null }
@@ -329,6 +350,8 @@ function registerIpc() {
   h('setBackgroundVideo', setBackgroundVideo)
   h('push', push)
   h('pull', pull)
+  h('fonts', () => fonts)
+  h('syncFonts', syncFonts)
   h('keyOp', keyOp)
   h('openCapture', openCapture)
   h('saveCaptureLog', async (text) => {
@@ -495,6 +518,12 @@ else app.on('second-instance', () => { if (win) showWindow() })
 app.whenReady().then(async () => {
   if (!gotLock) return
   await loadSettings()
+  fonts = await fontManifest(fontDir())
+  protocol.handle('mk10font', (req) => {
+    const name = decodeURIComponent(new URL(req.url).pathname.slice(1))
+    if (!name || name.includes('/') || name.startsWith('.')) return new Response('bad font name', { status: 400 })
+    return net.fetch(pathToFileURL(join(fontDir(), name)).toString())
+  })
   if (!LOGIN_OK && !SHOT && app.getLoginItemSettings().openAtLogin) {
     app.setLoginItemSettings({ openAtLogin: false })
     console.log('dev build: removed the "Electron" login item an earlier dev run added')

@@ -267,7 +267,7 @@ function draw(box, items, dx) {
         const [family, , , , weight] = (it.font ?? '').split(',')
         el.style.fontFamily = `"${family || 'Microsoft YaHei'}", "PingFang SC", "Helvetica Neue", sans-serif`
         el.style.fontWeight = qtWeight(weight)
-        el.style.fontSize = `${Math.round((it.h ?? 128) * 0.75)}px`
+        el.style.fontSize = `${Math.round((it.h ?? 128) * 0.71)}px`
       }
       tickClock(el)
     } else if (it.type === '114') {
@@ -458,6 +458,20 @@ async function onChange(e) {
   await refresh()
 }
 
+// Device fonts (copied from the MK10) override same-named system fonts, so titles and clocks use the
+// faces the device draws with. Faces load only when something on screen uses them.
+const fontFaces = []
+function registerFonts(list) {
+  for (const f of fontFaces.splice(0)) document.fonts.delete(f)
+  for (const { file, family, weight, style } of list ?? []) {
+    const f = new FontFace(family, `url("mk10font://f/${encodeURIComponent(file)}")`, { weight: String(weight), style })
+    document.fonts.add(f)
+    fontFaces.push(f)
+  }
+  const n = new Set((list ?? []).map((f) => f.file)).size
+  $('fonts-info').textContent = n ? `${n} font files from the device` : 'None yet: copied after the first ssh push or pull'
+}
+
 async function init() {
   const cfg = await window.mk10.settings()
   $('ssh-host').value = cfg.ssh.host
@@ -509,6 +523,9 @@ async function init() {
   $('btn-settings').addEventListener('click', openSettings)
   $('btn-capture').addEventListener('click', () => run(window.mk10.openCapture()))
   $('btn-pull').addEventListener('click', () => run(window.mk10.pull()))
+  $('btn-fonts').addEventListener('click', () => run(window.mk10.syncFonts()))
+  window.mk10.onFonts(registerFonts)
+  registerFonts(await window.mk10.fonts())
   $('mcp-badge').addEventListener('click', openSettings)
   $('reopen-last').checked = cfg.reopenLast !== false
   $('reopen-last').addEventListener('change', (e) => run(window.mk10.setPref('reopenLast', e.target.checked)))

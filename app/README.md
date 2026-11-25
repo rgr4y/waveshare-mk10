@@ -45,6 +45,11 @@ Pull from device (top bar, or File > Pull from Device…) downloads the theme th
 (`config.json` `defaultTheme`) over ssh, saves it where you choose and opens it. LilAlpine only: the stock
 firmware's USB API has no file read. Push and pull share one lock. Key capture is in Settings.
 
+Device fonts: the MK10 draws titles and clocks with its own fonts (`/usr/share/fonts`, e.g. Microsoft
+YaHei). After the first ssh push or pull, Studio copies them (~85 MB, about a minute) into
+`~/Library/Application Support/mk10-studio/device-fonts` and uses them in the preview; Settings > Device
+fonts copies them again. They come from your device and are not shipped with Studio.
+
 Right-click > Press Key follows a navigation key in the editor: openPage opens its folder, oneLevelUp
 goes to the parent, pageSwitch (pageSwitchMode 0) goes to top-level page `jumpToPage`. Other actions run
 on the device or host, so the status line only names them.
