@@ -158,3 +158,11 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 - [x] openPage pointed at a folder under another page: opens it, and back works.
 - [x] Push, Pull and Device settings stay disabled for a whole push.
 - [x] Auto mode on LilAlpine logs the detection and pushes over ssh.
+
+### Checked in the app, 2026-11-25
+- [x] Cut a key, right-click an empty slot: Paste is enabled and restores it; Cmd+Z undoes.
+- [x] Paste onto a widget cell (clock digits, GIF folder images) is refused. Paste onto a key (e.g. Page 0's GIF folder key) replaces it, by design.
+- [x] Right-click > Press Key: folder, back, pageSwitch and the toggle key's state preview.
+- [x] Quit with unpushed edits: Push to Device…, Discard and Cancel each work.
+- [x] Device fonts: deleting the cache and pulling copies them back; the Settings button re-copies.
+- [x] Capture keys (Settings): the QMK column fills for normal keys and F-keys.
