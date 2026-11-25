@@ -279,7 +279,7 @@ function refreshTray() {
   if (!tray) return
   const guard = (fn) => () => fn().catch(() => {}) // already reported via status
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: session.file ? basename(session.file) : 'No theme open', enabled: false },
+    { label: session.file ? basename(session.file, extname(session.file)) : 'No theme open', enabled: false },
     { label: 'Open MK10 Studio', click: showWindow },
     { label: 'Push to device', enabled: !!session.theme, click: guard(push) },
     { label: 'MCP server', type: 'checkbox', checked: !!mcp, click: guard(() => task(mcp ? 'Stop MCP' : 'Start MCP', () => mcpToggle(!mcp))) },

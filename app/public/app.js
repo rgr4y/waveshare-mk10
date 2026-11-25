@@ -61,7 +61,7 @@ function pageLabel(p) {
 function renderTop() {
   const s = ui.summary
   const has = !!s.file
-  $('filename').textContent = has ? s.file.split('/').pop() : 'No file open'
+  $('filename').textContent = has ? s.file.split('/').pop().replace(/\.theme$/i, '') : 'No file open'
   $('filename').title = s.file ?? ''
   $('dirty').hidden = !s.dirty
   $('btn-save').disabled = !has
