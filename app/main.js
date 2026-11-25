@@ -1,7 +1,7 @@
 // Electron main: owns the single Session; all edits (UI, MCP) go through it.
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, shell, systemPreferences, Tray } from 'electron'
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
-import { existsSync, mkdirSync, statSync, watch } from 'node:fs'
+import { createWriteStream, existsSync, mkdirSync, statSync, watch } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
 import { execFileSync, spawn } from 'node:child_process'
 import { createInterface } from 'node:readline'
@@ -230,14 +230,21 @@ function openCapture() {
     webPreferences: { preload: join(import.meta.dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   })
   const w = capWin
-  const sendCap = (o) => { if (!w.isDestroyed()) w.webContents.send('mk10:capture', o) }
+  // every event also goes to stderr as a JSON line, and in dev runs to /tmp/mk10.log (appended)
+  const file = app.isPackaged ? null : createWriteStream('/tmp/mk10.log', { flags: 'a' })
+  const sendCap = (o) => {
+    const line = `${JSON.stringify({ ts: new Date().toISOString(), ...o })}\n`
+    process.stderr.write(line)
+    file?.write(line)
+    if (!w.isDestroyed()) w.webContents.send('mk10:capture', o)
+  }
   let tap = null
   w.webContents.on('before-input-event', (e, i) => {
     e.preventDefault() // keep Cmd+Q/W/C… from reaching menus: everything is captured
     sendCap({ t: 'input', type: i.type, key: i.key, code: i.code, repeat: i.isAutoRepeat, shift: i.shift, control: i.control, alt: i.alt, meta: i.meta })
   })
   w.webContents.once('did-finish-load', () => { tap = startHidtap(sendCap) })
-  w.on('closed', () => { tap?.stdin.end(); tap?.kill(); capWin = null })
+  w.on('closed', () => { tap?.stdin.end(); tap?.kill(); file?.end(); capWin = null })
   w.loadFile(join(import.meta.dirname, 'public', 'capture.html'))
 }
 

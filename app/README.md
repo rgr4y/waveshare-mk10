@@ -45,6 +45,8 @@ receives (`before-input-event`, menu shortcuts blocked while it has focus), and 
 `native/hidtap` (IOHIDManager, passive: keys still work). HID covers consumer keys macOS handles itself
 (volume, brightness, media) and F13-F24. It needs Input Monitoring (in a dev run the grant shows as
 "Electron"). The helper is compiled with `swiftc` on first use into `native/build/` (gitignored).
+While the window is open, every event is also written as a JSON line to stderr, and in dev runs
+appended to `/tmp/mk10.log`. **Save log…** writes the same lines to a file you choose.
 
 ### Resident app
 - **Tray**: a text-only "MK10" item in the menu bar. Menu: current theme name, Open MK10 Studio, Push to
