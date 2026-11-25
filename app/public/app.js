@@ -274,7 +274,8 @@ function actionRows(a) {
   const hide = new Set(['iconPath', 'parentDescription', 'AISoundControlKeyword', 'editable'])
   const edit = new Set(a.editable ?? [])
   return Object.entries(a).filter(([k, v]) => !hide.has(k) && (v !== '' || edit.has(k)))
-    .map(([k, v]) => [k, String(v), edit.has(k), fieldLabel(a.type, k)])
+    // keyboard_switch is a toggle: each press steps to the next state (States list below)
+    .map(([k, v]) => [k, k === 'type' && v === 'keyboard_switch' ? 'keyboard_switch (toggle)' : String(v), edit.has(k), fieldLabel(a.type, k)])
 }
 
 // deviceVolumeadjustValue (type deviceVolume) -> "Adjust value"; the raw name stays in the tooltip
