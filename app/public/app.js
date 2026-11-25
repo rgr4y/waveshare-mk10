@@ -390,16 +390,6 @@ function renderPageInspector(p) {
   fillKv($('pg-panel'), [['image', img ? base(img.path || img.paths || '(none)') : 'none']])
 }
 
-// Raw JSON editor: for keys whose action has fields the form can't edit (int/bool, locked strings),
-// toggle states, no action, or an action we can't decode.
-function needsRaw(key) {
-  const a = key.action
-  if (!a || a.type === 'undecodable' || key.states) return true
-  const edit = new Set(a.editable ?? [])
-  const skip = new Set(['type', 'editable', 'iconPath', 'parentDescription', 'AISoundControlKeyword'])
-  return Object.entries(a).some(([k, v]) => !skip.has(k) && !edit.has(k) && v !== '')
-}
-
 // pretty JSON, but one line per controlData field: ["jumpToPage", {"type":2,"null":0,"value":1}]
 const rawText = (raw) => `{\n${Object.entries(raw).map(([k, v]) => `  ${JSON.stringify(k)}: ${k === 'controlData' && Array.isArray(v)
   ? `[\n${v.map((f) => `    ${JSON.stringify(f)}`).join(',\n')}\n  ]`
@@ -441,8 +431,9 @@ function renderInspector() {
       const cur = stateIndex(key)
       fillKv($('key-states'), key.states.list.map((s, i) => [`state ${i + 1}${i === cur ? ' (shown)' : ''}`, `${s.keyString ?? ''} · keycode ${s.keycode}`]))
     }
-    $('insp-raw').hidden = !needsRaw(key)
-    if (needsRaw(key)) loadRaw()
+    // every key: even the "complete" forms miss item fields (soundFile, opacity, titleParam, ...)
+    $('insp-raw').hidden = false
+    loadRaw()
     fillKv($('key-action'), actionRows(key.action), (field, value) =>
       run(window.mk10.setKeyActionField(ui.page, sel.row, sel.col, field, value)),
     key.action?.type === 'openPage' ? { pageName: pageOptions } : {})
