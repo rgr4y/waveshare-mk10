@@ -60,6 +60,7 @@ export class Session extends EventEmitter {
   // An edit made while a push runs keeps the theme "unpushed".
   edits = 0
   pushedEdits = 0
+  held = null // Device kept open while the JSON RPC window is on; serial calls reuse it
   undoStack = [] // snapshots taken before a key cut/paste/delete
 
   async open(file) {
@@ -347,15 +348,11 @@ export class Session extends EventEmitter {
   // ~10 s for 12 MB. Never sends getInfo (it blanks the panel).
   async pushSerial({ port, remote } = DEFAULT_PUSH, log = () => {}) {
     this.need()
-    const path = port || (await Device.list())[0]?.path
-    if (!path) throw new Error('MK10 serial port not found (is it plugged in? is ScreenKey running?)')
     const base = remote.replace(/\.Theme$/, '')
     const target = `${base}-${Date.now()}.Theme`
     const buf = encodeTheme(this.theme)
-    const dev = new Device()
-    await dev.open(path)
-    try {
-      log(`serial ${path}: writing ${(buf.length / 1e6).toFixed(1)} MB to ${target}`)
+    await this.withDevice(async (dev) => {
+      log(`serial ${dev.port.path}: writing ${(buf.length / 1e6).toFixed(1)} MB to ${target}`)
       let last = 0
       await dev.pushFile(buf, target, (done, total) => {
         const pct = Math.floor((done / total) * 10) * 10
@@ -370,11 +367,45 @@ export class Session extends EventEmitter {
         const r = (await dev.call('deleteFiles', { filePaths: stale })).result
         log(`removed old pushes: ${(r?.deletedFiles ?? []).join(', ') || 'none'}${r?.failedFiles?.length ? `; failed: ${r.failedFiles.join(', ')}` : ''}`)
       }
+    }, port)
+    log('pushed')
+    return target
+  }
+
+  // Run fn on an open Device. The port is exclusive (serialport locks it), so a held Device is
+  // reused; otherwise a fresh one is opened and closed afterwards.
+  async withDevice(fn, port = null) {
+    if (this.held?.isOpen) return fn(this.held)
+    const path = port || (await Device.list())[0]?.path
+    if (!path) throw new Error('MK10 serial port not found (is it plugged in? is ScreenKey running?)')
+    const dev = new Device()
+    await dev.open(path)
+    try {
+      return await fn(dev)
     } finally {
       await dev.close()
     }
-    log('pushed')
-    return target
+  }
+
+  // Keep the serial port open (on) so the device's unsolicited messages arrive, or release it.
+  // Returns whether a Device is held. Not found or busy (a push holds it) returns false; the
+  // caller retries.
+  async holdDevice(on) {
+    if (!on) {
+      const d = this.held
+      this.held = null
+      await d?.close()
+      return false
+    }
+    if (this.held?.isOpen) return true
+    const path = (await Device.list())[0]?.path
+    if (!path) return false
+    const dev = new Device()
+    dev.on('error', () => {}) // a port error ends in 'close', which drops it below
+    dev.on('close', () => { if (this.held === dev) this.held = null })
+    await dev.open(path)
+    this.held = dev
+    return true
   }
 
   // Device levels over the USB serial JSON API ({"method":M,"parameters":{"level":N}}, vendor demo
@@ -389,15 +420,7 @@ export class Session extends EventEmitter {
     if (this.pushing) throw new Error(`push in progress: ${name} waits until it finishes`)
     const n = Math.round(Number(level))
     if (!(n >= 0 && n <= max)) throw new Error(`${name} must be 0-${max}, got ${level}`)
-    const path = (await Device.list())[0]?.path
-    if (!path) throw new Error('MK10 serial port not found (is it plugged in? is ScreenKey running?)')
-    const dev = new Device()
-    await dev.open(path)
-    try {
-      await dev.call(method, { level: n })
-    } finally {
-      await dev.close()
-    }
+    await this.withDevice((dev) => dev.call(method, { level: n }))
     return n
   }
 

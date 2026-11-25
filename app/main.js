@@ -301,12 +301,15 @@ function openCapture() {
   w.loadFile(join(import.meta.dirname, 'public', 'capture.html'))
 }
 
-// ---- developer: JSON-RPC window. Shows every message Studio's serial Device sends or gets
-// (pushes, levels). The port is only open during those calls, so nothing streams in between.
+// ---- developer: JSON-RPC window. Shows every message Studio's serial Device sends or gets.
+// While it is open Studio holds the port (retried every 2 s: unplug, busy), so the device's own
+// messages stream too; pushes and levels reuse the held port. Holding it locks out the vendor app.
 // Long strings (saveToFile base64 chunks) are cut so the log stays readable.
 const RPC_KEEP = 500
 const rpcLog = [] // last RPC_KEEP entries, replayed when the window opens
 let rpcWin = null
+let rpcHold = null // retry timer while the window is open
+const holdPort = () => session.holdDevice(true).catch(() => {}) // busy or gone: next tick retries
 const clip = (v) => typeof v === 'string' && v.length > 200 ? `${v.slice(0, 80)}… (${v.length} chars)`
   : Array.isArray(v) ? v.map(clip) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, clip(x)])) : v
 wire.on('msg', (e) => {
@@ -324,9 +327,15 @@ function setRpcWindow(on) {
     webPreferences: { preload: join(import.meta.dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   })
   const w = rpcWin
-  w.webContents.once('did-finish-load', () => w.webContents.send('mk10:rpc', rpcLog))
+  w.webContents.once('did-finish-load', () => {
+    w.webContents.send('mk10:rpc', rpcLog)
+    holdPort()
+    rpcHold = setInterval(holdPort, 2000)
+  })
   w.on('closed', () => {
     rpcWin = null
+    clearInterval(rpcHold)
+    session.holdDevice(false).catch(() => {})
     if (app.isQuitting || !settings.jsonRpcWindow) return
     settings.jsonRpcWindow = false // closed by hand: same as Disable
     saveSettings().catch(() => {})
