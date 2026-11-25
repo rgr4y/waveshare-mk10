@@ -196,15 +196,23 @@ function actionRows(a) {
   const hide = new Set(['iconPath', 'parentDescription', 'AISoundControlKeyword', 'editable'])
   const edit = new Set(a.editable ?? [])
   return Object.entries(a).filter(([k, v]) => !hide.has(k) && (v !== '' || edit.has(k)))
-    .map(([k, v]) => [k, String(v), edit.has(k)])
+    .map(([k, v]) => [k, String(v), edit.has(k), fieldLabel(a.type, k)])
+}
+
+// deviceVolumeadjustValue (type deviceVolume) -> "Adjust value"; the raw name stays in the tooltip
+function fieldLabel(type, k) {
+  const rest = k.toLowerCase().startsWith(type.toLowerCase()) && k.length > type.length ? k.slice(type.length) : k
+  const words = rest.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase()
+  return (words[0].toUpperCase() + words.slice(1)).replace(/\burl\b/gi, 'URL')
 }
 
 function fillKv(dl, rows, onEdit) {
   // keep a field the user is typing in: don't rebuild under an active input
   if (dl.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') return
-  dl.replaceChildren(...rows.map(([k, v, editable]) => {
+  dl.replaceChildren(...rows.map(([k, v, editable, label]) => {
     const r = tpl(editable && onEdit ? 'tpl-kv-edit' : 'tpl-kv')
-    r.querySelector('dt').textContent = k
+    r.querySelector('dt').textContent = label ?? k
+    if (label) r.querySelector('dt').title = k
     const input = r.querySelector('input')
     if (input) {
       input.value = v

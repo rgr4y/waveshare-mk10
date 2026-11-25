@@ -194,7 +194,7 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 .insp-section button { margin-top: var(--sp-1); }
 .kv { margin: 0; display: grid; gap: var(--sp-1); }
 .kv-row { display: grid; grid-template-columns: 96px 1fr; gap: var(--sp-2); }
-.kv dt { color: var(--muted); font-size: 12px; }
+.kv dt { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
 .kv dd { margin: 0; word-break: break-all; user-select: text; }
 .kv dd input { padding: var(--sp-1) var(--sp-1-5); }
 .perms .kv-row { grid-template-columns: 128px 1fr; align-items: center; }
