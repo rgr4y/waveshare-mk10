@@ -14,6 +14,8 @@ const argv = process.argv.slice(2)
 const flag = (name) => { const i = argv.indexOf(name); return i < 0 ? undefined : (argv[i + 1] ?? true) }
 const DEV = argv.includes('--dev')
 const SHOT = !!flag('--screenshot')
+// a dev run is the generic, unsigned "Electron" binary: never register that as a login item
+const LOGIN_OK = app.isPackaged
 
 const session = new Session()
 let win = null
@@ -180,14 +182,18 @@ function registerIpc() {
   h('setBackgroundVideo', setBackgroundVideo)
   h('push', push)
   h('mcpToggle', (on, port) => task(on ? 'Start MCP' : 'Stop MCP', () => mcpToggle(on, port)))
-  h('setLoginItem', (on) => { app.setLoginItemSettings({ openAtLogin: !!on }); return app.getLoginItemSettings() })
+  h('setLoginItem', (on) => {
+    if (!LOGIN_OK) throw new Error('Start at login needs a packaged, signed build (dev runs as "Electron")')
+    app.setLoginItemSettings({ openAtLogin: !!on })
+    return app.getLoginItemSettings()
+  })
   h('permissions', () => ({ accessibility: systemPreferences.isTrustedAccessibilityClient(false), screen: systemPreferences.getMediaAccessStatus('screen') }))
   h('openPrivacyPane', openPane)
   h('requestAccessibility', () => {
     if (!axPrompted) { axPrompted = true; systemPreferences.isTrustedAccessibilityClient(true) }
     return openPane('accessibility')
   })
-  h('settings', () => ({ ...settings, login: app.getLoginItemSettings(), screenshot: SHOT, onboardPreview: SHOT && argv.includes('--onboard'), settingsFile, version: app.getVersion(), mcpUrl: mcp?.url ?? null, stockDir: existsSync(STOCK_DIR) ? STOCK_DIR : null }))
+  h('settings', () => ({ ...settings, login: app.getLoginItemSettings(), loginSupported: LOGIN_OK, screenshot: SHOT, onboardPreview: SHOT && argv.includes('--onboard'), settingsFile, version: app.getVersion(), mcpUrl: mcp?.url ?? null, stockDir: existsSync(STOCK_DIR) ? STOCK_DIR : null }))
   h('setPref', async (key, value) => {
     if (!PREFS.has(key) || typeof value !== 'boolean') throw new Error(`unknown setting ${key}`)
     settings[key] = value
@@ -311,6 +317,10 @@ else app.on('second-instance', () => { if (win) showWindow() })
 app.whenReady().then(async () => {
   if (!gotLock) return
   await loadSettings()
+  if (!LOGIN_OK && !SHOT && app.getLoginItemSettings().openAtLogin) {
+    app.setLoginItemSettings({ openAtLogin: false })
+    console.log('dev build: removed the "Electron" login item an earlier dev run added')
+  }
   registerIpc()
   buildMenu()
   createWindow()

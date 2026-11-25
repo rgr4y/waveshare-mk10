@@ -334,7 +334,7 @@ async function init() {
   // first-run onboarding: closing it (button or Esc) counts as onboarded; MCP only if ticked
   $('onboard-dlg').addEventListener('close', () => {
     if ($('onboard-mcp').checked) run(window.mk10.mcpToggle(true, cfg.mcp.port)).then(() => {}, () => {})
-    if ($('onboard-login').checked) run(window.mk10.setLoginItem(true))
+    if (cfg.loginSupported && $('onboard-login').checked) run(window.mk10.setLoginItem(true))
     run(window.mk10.setPref('onboarded', true))
   })
   if ((!cfg.onboarded && !cfg.screenshot) || cfg.onboardPreview) $('onboard-dlg').showModal() // --screenshot --onboard previews it
@@ -347,6 +347,11 @@ async function init() {
     $('login-status').textContent = l.status === 'requires-approval' ? 'Approve MK10 Studio in System Settings \u2192 General \u2192 Login Items' : (l.status ?? '')
   }
   showLogin(cfg.login)
+  if (!cfg.loginSupported) {
+    $('onboard-more').hidden = true
+    $('login-item').disabled = true
+    $('login-status').textContent = 'Dev build: needs the packaged, signed app'
+  }
   $('login-item').addEventListener('change', (e) => run(window.mk10.setLoginItem(e.target.checked)).then((l) => l && showLogin(l)))
   $('about-version').textContent = cfg.version ?? ''
   $('about-settings').textContent = cfg.settingsFile ?? ''
