@@ -62,6 +62,8 @@ Type 111 rendering (seen in the stock theme and mk10studio.Theme, 2026-11-24): o
 | 114 | 14 | dynamic image (gif) on secondary/child | `path` (.gif asset), `system_data_name` |
 | 115 | 65 | physical key (the 128x128 LCD key) | `row`,`col`,`title`,`titleParam` (JSON string: font/colour/alignment),`soundFile`,`opacity`,`controlData` (action), `path` (static icon) / `paths` (dir of frame_N.png) + `frameDelays` (ms, CSV) for animated icons, `scaledWidthTo/HeightTo` 128 |
 
+Multi-state keys (seen 2026-11-24 on a `keyboard_switch` key, mk10studio.Theme page 9): the type 115 item has a `jsonData` string field, `{"isMultiState":true,"State":0,"States":[{"path","paths","title","frameDelays","keycode","keyString"}, ...]}`. Each press moves to the next state; the device shows that state's image and title and sends its `keycode` (HID usage: 10 = G, 4 = A). `State` is the state it starts on. The item's own `path` (`/static/icon/dark/keyboard_128x128.png`) is not what the device draws. The controlData for `keyboard_switch` holds no keys; they are only in `jsonData`.
+
 `system_data_name` values seen include `CPU Usage`, `GPU...`, `date`, `hour`, `minute`, `randomNumbers`, `平均分贝`
 (data source for gauges/labels; `system_data_flag` "1" = bound to live data (guess)).
 Colours are strings `r=..,g=..,b=..,a=..`; fonts are `QFont::toString()` (`Arial,72,-1,5,75,0,0,0,0,0`).

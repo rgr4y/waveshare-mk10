@@ -159,6 +159,15 @@ export function setKeyActionField(theme, pageIndex, row, col, field, value) {
 
 // True if any item field (or controlData string field) points at the asset key
 // (exact path, or a `paths` directory containing it). Undecodable controlData counts as referenced.
+// image paths a multi-state key keeps per state, inside its jsonData string
+function stateRefs(it) {
+  try {
+    return (JSON.parse(it.jsonData).States ?? []).flatMap((s) => [s.path, s.paths]).filter((v) => typeof v === 'string' && v.startsWith('/'))
+  } catch {
+    return []
+  }
+}
+
 function isReferenced(theme, key) {
   const hit = (s) => typeof s === 'string' && s.startsWith('/') && (s === key || key.startsWith(s + '/'))
   for (const p of theme.json.pages) {
@@ -170,6 +179,8 @@ function isReferenced(theme, key) {
           } catch {
             return true
           }
+        } else if (f === 'jsonData' && v) {
+          if (stateRefs(it).some(hit)) return true
         } else if (hit(v)) return true
       }
     }
@@ -228,6 +239,7 @@ export function copyKey(theme, pageIndex, row, col) {
   for (const v of Object.values(item)) {
     if (assetRef(v)) for (const k of assetsUnder(theme, v)) assets[k] = theme.assets.get(k).toString('base64')
   }
+  for (const v of stateRefs(item)) for (const k of assetsUnder(theme, v)) assets[k] = theme.assets.get(k).toString('base64')
   return { mk10studio: 'key', v: 1, item, assets }
 }
 
@@ -244,7 +256,7 @@ export function parseKeyClip(text) {
 }
 
 function dropItemOrphans(theme, it) {
-  for (const v of Object.values(it)) if (assetRef(v)) dropIfOrphan(theme, v, !theme.assets.has(v))
+  for (const v of [...Object.values(it), ...stateRefs(it)]) if (assetRef(v)) dropIfOrphan(theme, v, !theme.assets.has(v))
 }
 
 export function removeKey(theme, pageIndex, row, col) {
@@ -273,6 +285,12 @@ export function pasteKey(theme, pageIndex, row, col, clip) {
     item[f] = nv
   }
   const warnings = []
+  for (const v of stateRefs(item)) {
+    for (const k of Object.keys(bytes).filter((k) => k === v || k.startsWith(v + '/'))) {
+      if (!theme.assets.has(k)) theme.assets.set(k, bytes[k])
+      else if (!theme.assets.get(k).equals(bytes[k])) warnings.push(`state image ${k} differs in this theme; the key shows this theme's copy`)
+    }
+  }
   if (item.controlData) {
     const cd = decodeControlData(item.controlData)
     const target = cd.type === 'openPage' && cd.fields.find(([k]) => k === 'pageName')?.[1].value

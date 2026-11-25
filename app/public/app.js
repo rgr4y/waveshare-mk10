@@ -5,6 +5,7 @@ const tpl = (id) => $(id).content.firstElementChild.cloneNode(true)
 const ui = {
   summary: { file: null },
   page: 0,
+  stateView: new Map(), // `${page},${row},${col}` -> preview state of a multi-state key
   sel: null, // {kind:'key', row, col} | {kind:'video'}
   assets: new Map(), // key -> Promise<{url, mime}|null>
   videoKey: null,
@@ -60,11 +61,26 @@ const topPages = () => (ui.summary.pages ?? []).filter((p) => p.parentIndex === 
 const opener = (p) => keyItems(ui.summary.pages?.[p.parentIndex])
   .find((k) => k.action?.type === 'openPage' && k.action.pageName === p.name)
 
+// A multi-state key shows the image and title of its current state; Press Key steps the preview state
+// (editor only, the theme keeps its State).
+const stateIndex = (it) => ui.stateView.get(`${ui.page},${it.row},${it.col}`) ?? it.states.state
+function face(it) {
+  const st = it.states?.list[stateIndex(it)]
+  return st ? { ...it, path: st.path, paths: st.paths, title: st.title || it.title } : it
+}
+
 // "Press Key" in the editor: follow page-navigation actions (openPage, oneLevelUp, pageSwitch with
 // pageSwitchMode 0). Anything else runs on the device or host, so the editor only says so.
 function pressKey(page, row, col) {
   const pages = ui.summary.pages ?? []
-  const a = keyAt(pages[page], row, col)?.action
+  const key = keyAt(pages[page], row, col)
+  if (key?.states && page === ui.page) {
+    const n = (stateIndex(key) + 1) % key.states.list.length
+    ui.stateView.set(`${page},${row},${col}`, n)
+    setStatus({ msg: `Press: state ${n + 1} of ${key.states.list.length} (${key.states.list[n].keyString ?? ''}), preview only` })
+    return render()
+  }
+  const a = key?.action
   if (!a) return
   let to
   if (a.type === 'openPage') to = pages.findIndex((p) => p.name === a.pageName)
@@ -128,7 +144,8 @@ function renderKeys() {
   const tiles = []
   for (let row = 0; row < 2; row++) {
     for (let col = 0; col < 5; col++) {
-      const it = keyAt(p, row, col)
+      const raw = keyAt(p, row, col)
+      const it = raw && face(raw)
       const el = tpl(it ? 'tpl-key' : 'tpl-empty-key')
       el.style.left = `${col * 128}px`
       el.style.top = `${row * 128}px`
@@ -149,6 +166,7 @@ function renderKeys() {
         // an image sets the key's image (GIF counts as an image here); a video goes to the background
         wireDrop(el, ANY_MEDIA_RE, (file) => {
           if (!IMAGE_RE.test(file)) return run(window.mk10.setBackgroundVideo(ui.page, file))
+          if (raw.states) return setStatus({ error: true, msg: 'Multi-state key: its images are per state; replacing them is not supported yet' })
           select({ kind: 'key', row, col })
           return run(window.mk10.setKeyImage(ui.page, row, col, file))
         })
@@ -319,7 +337,14 @@ function renderInspector() {
   if (key) {
     $('key-pos').textContent = `${pageName(p)} · row ${sel.row} col ${sel.col}`
     if (document.activeElement !== $('key-title')) $('key-title').value = key.title ?? ''
-    fillImg($('key-thumb'), key.path || key.paths)
+    const f = face(key)
+    fillImg($('key-thumb'), f.path || f.paths)
+    $('key-states-h').hidden = $('key-states').hidden = !key.states
+    $('btn-key-image').hidden = !!key.states // per-state images; item path is not what the device shows
+    if (key.states) {
+      const cur = stateIndex(key)
+      fillKv($('key-states'), key.states.list.map((s, i) => [`state ${i + 1}${i === cur ? ' (shown)' : ''}`, `${s.keyString ?? ''} · keycode ${s.keycode}`]))
+    }
     fillKv($('key-action'), actionRows(key.action), (field, value) =>
       run(window.mk10.setKeyActionField(ui.page, sel.row, sel.col, field, value)))
   }
@@ -394,6 +419,7 @@ async function onChange(e) {
     ui.videoKey = null
     ui.sel = { kind: 'page' }
     ui.page = 0
+    ui.stateView.clear()
     // start on the page the device shows
     const ci = s.pages?.findIndex((p) => p.name === s.currentPage) ?? -1
     if (ci >= 0) ui.page = ci

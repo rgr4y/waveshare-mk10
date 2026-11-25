@@ -24,6 +24,21 @@ const CONFIG = '/mnt/SDCARD/config.json'
 const KEY_OPS = new Set(['keyCut', 'keyPaste', 'keyDelete', 'undo'])
 const num = (v) => (v === undefined || v === '' ? undefined : Number(v))
 
+// Multi-state keys (e.g. keyboard_switch, a toggle): item jsonData holds the per-state image, title and
+// keycode; State is the state the device shows first. Plain keys have no jsonData.
+function statesOf(it) {
+  try {
+    const j = it.jsonData ? JSON.parse(it.jsonData) : null
+    if (!j?.isMultiState || !Array.isArray(j.States)) return undefined
+    return {
+      state: Number(j.State) || 0,
+      list: j.States.map((s) => ({ path: s.path || undefined, paths: s.paths || undefined, title: s.title, keyString: s.keyString, keycode: s.keycode })),
+    }
+  } catch {
+    return undefined
+  }
+}
+
 function actionOf(it) {
   if (!it.controlData) return undefined
   try {
@@ -115,6 +130,7 @@ export class Session extends EventEmitter {
           text: it.text_str,
           systemData: it.system_data_name,
           action: actionOf(it),
+          states: statesOf(it),
         })),
       })),
     }

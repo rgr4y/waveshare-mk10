@@ -186,6 +186,23 @@ test('real theme: key clipboard copy, cut, paste across themes, asset reuse and 
   assert.equal(getItem(b, 1, 0, 0).title, opener.item.title)
   assert.deepEqual(decodeTheme(encodeTheme(a)).json, a.json)
 
+  // multi-state key: state images live in jsonData; they count as references and travel with a copy
+  const ms = a.json.pages[0].items.find((i) => String(i.type) === '115')
+  const stateImg = '/image/MK10/cache/state-test.png'
+  a.assets.set(stateImg, Buffer.from('state'))
+  ms.jsonData = JSON.stringify({ State: 0, isMultiState: true, States: [{ path: stateImg, keycode: 10, keyString: 'G' }, { path: ms.path, keycode: 4, keyString: 'A' }] })
+  const msClip = copyKey(a, 0, Number(ms.row), Number(ms.col))
+  assert.ok(msClip.assets[stateImg])
+  const c = decodeTheme(load())
+  pasteKey(c, 1, 0, 0, JSON.stringify(msClip))
+  assert.equal(c.assets.get(stateImg).toString(), 'state')
+  removeKey(c, 1, 0, 0)
+  assert.equal(c.assets.has(stateImg), false)
+  pasteKey(c, 1, 0, 0, JSON.stringify(msClip))
+  pasteKey(c, 1, 0, 1, JSON.stringify(msClip))
+  removeKey(c, 1, 0, 0)
+  assert.ok(c.assets.has(stateImg), 'still used by the other copy')
+
   // a key-area widget (clock digits, type 111 child) makes its cell occupied even with no key there
   const pi = a.json.pages.findIndex((q) => (q.items ?? []).some((i) => String(i.type) === '111' && i.backgroundType === 'child'))
   assert.ok(pi >= 0, 'stock theme has a clock page')
