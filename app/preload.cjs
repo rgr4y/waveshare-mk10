@@ -52,4 +52,7 @@ contextBridge.exposeInMainWorld('mk10', {
   onOpenSettings: on('openSettings'),
   onEdit: on('edit'),
   onCapture: on('capture'),
+  clearRpc: call('clearRpc'),
+  onRpc: on('rpc'),
+  onRpcWindow: on('rpcWindow'),
 })

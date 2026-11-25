@@ -9,6 +9,10 @@ export const VID = '1d6b'
 export const PID = '0104'
 export const CHUNK = 64 * 1024
 
+// Every JSON-RPC message any Device sends or receives, for the developer window:
+// {dir: 'tx'|'rx'|'open'|'close', path, msg}. Listeners must not mutate msg.
+export const wire = new EventEmitter()
+
 export class Device extends EventEmitter {
   constructor() {
     super()
@@ -37,6 +41,7 @@ export class Device extends EventEmitter {
     port.on('data', (chunk) => this.#onData(chunk))
     port.on('error', (e) => this.emit('error', e))
     port.on('close', () => {
+      wire.emit('msg', { dir: 'close', path })
       this.port = null
       this.#failAll(new Error('port closed'))
       this.emit('close')
@@ -46,6 +51,7 @@ export class Device extends EventEmitter {
         if (err) return reject(err)
         this.port = port
         this.parser = new FrameParser()
+        wire.emit('msg', { dir: 'open', path })
         resolve()
       })
     })
@@ -67,8 +73,10 @@ export class Device extends EventEmitter {
         msg = JSON.parse(f.data.toString('utf8'))
       } catch {
         this.emit('badjson', f)
+        wire.emit('msg', { dir: 'rx', path: this.port?.path, msg: { badJson: f.data.toString('utf8') } })
         continue
       }
+      wire.emit('msg', { dir: 'rx', path: this.port?.path, msg })
       if (msg.ack_method !== undefined) {
         const i = this.pending.findIndex((p) => p.method === msg.ack_method)
         if (i < 0) {
@@ -110,6 +118,7 @@ export class Device extends EventEmitter {
     const payload = { method }
     if (params !== undefined) payload.parameters = params
     const frame = pack(CMD_JSON, Buffer.from(JSON.stringify(payload)), this.nextId++ >>> 0)
+    wire.emit('msg', { dir: 'tx', path: this.port?.path, msg: payload })
     return new Promise((resolve, reject) => {
       const p = { method, resolve, reject }
       p.timer = setTimeout(() => {
@@ -152,6 +161,7 @@ export class Device extends EventEmitter {
       }
       const timer = setTimeout(() => done(new Error(`reloadTheme: no echo within ${timeout} ms`)), timeout)
       this.on('raw', onRaw)
+      wire.emit('msg', { dir: 'tx', path: this.port?.path, msg: { v1: 'reloadTheme', path } })
       this.#write(packV1(V1_RELOAD, want)).catch(done)
     })
   }

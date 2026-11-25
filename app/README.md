@@ -96,6 +96,13 @@ appended to `/tmp/mk10.log`. **Save log…** writes the same lines to a file you
   status (polled every 2 s while Settings is open) and Open buttons for the Accessibility, Screen
   Recording and Automation panes in System Settings. Nothing is requested at startup. The Accessibility
   button triggers the system prompt at most once per session, then opens the pane.
+- **JSON RPC window**: Settings > Developer. A separate window lists every JSON-RPC message Studio
+  sends to KeyboardDevice over USB serial, and every reply, as formatted JSON in a read-only Monaco
+  view (Follow, Wrap, Clear). It replays the last 500 messages when it opens. Long strings, such as
+  `saveToFile` base64 chunks, are shortened. The port is open only during a serial push or a
+  brightness or volume change, so nothing streams between those. ssh pushes and the vendor app's
+  traffic don't appear. Closing the window unticks the setting. A ticked setting reopens the window
+  at launch.
 
 ### Push to device
 "Push to device" encodes the in-memory theme and makes it the active layout. Mode is picked in the

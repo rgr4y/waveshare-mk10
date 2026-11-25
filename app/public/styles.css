@@ -265,3 +265,9 @@ body.capture { padding: var(--sp-4); overflow: auto; }
 .level { display: flex; align-items: center; gap: var(--sp-2); flex: none; font-size: 12px; color: var(--muted); }
 .level input { width: 90px; }
 #key-sound { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; align-self: center; }
+
+/* JSON RPC window (Settings > Developer) */
+body.rpc { display: flex; flex-direction: column; height: 100vh; margin: 0; overflow: hidden; }
+.rpc-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--line); }
+.rpc-head #rpc-count { margin-left: auto; }
+.rpc-editor { flex: 1; min-height: 0; }

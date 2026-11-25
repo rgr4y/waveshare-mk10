@@ -9,6 +9,7 @@ import { createInterface } from 'node:readline'
 import { Session, DEFAULT_SSH } from './lib/session.js'
 import { hidToQmk, isModifier } from './lib/qmk.js'
 import { fontManifest, syncDeviceFonts } from './lib/fonts.js'
+import { wire } from './lib/device.js'
 
 // device fonts, copied from the MK10 over ssh, served to the renderer as mk10font://f/<file>
 protocol.registerSchemesAsPrivileged([{ scheme: 'mk10font', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }])
@@ -300,6 +301,40 @@ function openCapture() {
   w.loadFile(join(import.meta.dirname, 'public', 'capture.html'))
 }
 
+// ---- developer: JSON-RPC window. Shows every message Studio's serial Device sends or gets
+// (pushes, levels). The port is only open during those calls, so nothing streams in between.
+// Long strings (saveToFile base64 chunks) are cut so the log stays readable.
+const RPC_KEEP = 500
+const rpcLog = [] // last RPC_KEEP entries, replayed when the window opens
+let rpcWin = null
+const clip = (v) => typeof v === 'string' && v.length > 200 ? `${v.slice(0, 80)}… (${v.length} chars)`
+  : Array.isArray(v) ? v.map(clip) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, clip(x)])) : v
+wire.on('msg', (e) => {
+  const entry = { ts: Date.now(), dir: e.dir, path: e.path, msg: clip(e.msg) }
+  rpcLog.push(entry)
+  if (rpcLog.length > RPC_KEEP) rpcLog.shift()
+  if (rpcWin && !rpcWin.isDestroyed()) rpcWin.webContents.send('mk10:rpc', [entry])
+})
+
+function setRpcWindow(on) {
+  if (!on) return rpcWin?.close()
+  if (rpcWin && !rpcWin.isDestroyed()) return rpcWin.focus()
+  rpcWin = new BrowserWindow({
+    width: 760, height: 720, title: 'JSON RPC', backgroundColor: '#14161a',
+    webPreferences: { preload: join(import.meta.dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true },
+  })
+  const w = rpcWin
+  w.webContents.once('did-finish-load', () => w.webContents.send('mk10:rpc', rpcLog))
+  w.on('closed', () => {
+    rpcWin = null
+    if (app.isQuitting || !settings.jsonRpcWindow) return
+    settings.jsonRpcWindow = false // closed by hand: same as Disable
+    saveSettings().catch(() => {})
+    send('rpcWindow', false)
+  })
+  w.loadFile(join(import.meta.dirname, 'public', 'rpc.html'))
+}
+
 // ---- key clipboard: the system clipboard holds the key as plain-text JSON (see theme.js copyKey)
 const slot = (row, col) => `r${row} c${col}`
 async function keyOp(op, page, row, col) {
@@ -347,7 +382,7 @@ const openPane = (pane) => {
 }
 let axPrompted = false // the system "grant access" prompt shows at most once per app session
 
-const PREFS = new Set(['reopenLast', 'onboarded']) // boolean prefs the renderer may set
+const PREFS = new Set(['reopenLast', 'onboarded', 'jsonRpcWindow']) // boolean prefs the renderer may set
 
 function registerIpc() {
   const h = (name, fn) => ipcMain.handle(`mk10:${name}`, (_e, ...a) => fn(...a))
@@ -401,7 +436,9 @@ function registerIpc() {
     if (!PREFS.has(key) || typeof value !== 'boolean') throw new Error(`unknown setting ${key}`)
     settings[key] = value
     await saveSettings()
+    if (key === 'jsonRpcWindow') setRpcWindow(value)
   })
+  h('clearRpc', () => { rpcLog.length = 0 })
   h('setSsh', async (ssh) => {
     if (session.pushing) throw new Error('push in progress: device settings are locked until it finishes')
     settings.ssh = { host: String(ssh.host), remote: String(ssh.remote) }
@@ -550,6 +587,7 @@ app.whenReady().then(async () => {
   buildMenu()
   createWindow()
   if (!SHOT) createTray()
+  if (settings.jsonRpcWindow && !SHOT) setRpcWindow(true)
   if (DEV) watchPublic()
   win.webContents.once('did-finish-load', async () => {
     const shot = flag('--screenshot')

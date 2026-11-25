@@ -688,6 +688,9 @@ async function init() {
   $('login-item').addEventListener('change', (e) => run(window.mk10.setLoginItem(e.target.checked)).then((l) => l && showLogin(l)))
   $('about-version').textContent = cfg.version ?? ''
   $('about-settings').textContent = cfg.settingsFile ?? ''
+  $('json-rpc-window').checked = !!cfg.jsonRpcWindow
+  $('json-rpc-window').addEventListener('change', (e) => run(window.mk10.setPref('jsonRpcWindow', e.target.checked)))
+  window.mk10.onRpcWindow((on) => { $('json-rpc-window').checked = on })
   $('btn-mcp-copy').addEventListener('click', () => {
     navigator.clipboard.writeText($('mcp-cmd').value).then(
       () => setStatus({ msg: 'Copied MCP command' }),
