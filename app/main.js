@@ -276,6 +276,16 @@ function registerIpc() {
   h('push', push)
   h('keyOp', keyOp)
   h('openCapture', openCapture)
+  h('saveCaptureLog', async (text) => {
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    const r = await dialog.showSaveDialog(capWin ?? win, {
+      title: 'Save key capture log', defaultPath: join(app.getPath('desktop'), `mk10-keycapture-${stamp}.jsonl`),
+      filters: [{ name: 'JSON lines', extensions: ['jsonl'] }],
+    })
+    if (r.canceled) return null
+    await writeFile(r.filePath, String(text))
+    return r.filePath
+  })
   h('keyMenu', keyMenu)
   h('nativeEdit', (op) => { if (NATIVE_EDIT.has(op)) win.webContents[op]() })
   h('mcpToggle', (on, port) => task(on ? 'Start MCP' : 'Stop MCP', () => mcpToggle(on, port)))

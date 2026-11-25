@@ -38,7 +38,12 @@ function addRow(src, ev, key, detail, dev, qmk = '') {
   while (body.children.length > 300) body.lastElementChild.remove()
 }
 
+// every raw event, oldest first, for Save log (JSON lines, one event per line, with a timestamp)
+const events = []
+
 window.mk10.onCapture((o) => {
+  events.push({ ts: new Date().toISOString(), ...o })
+  if (events.length > 20000) events.shift()
   if (o.t === 'input') {
     const mods = ['meta', 'control', 'alt', 'shift'].filter((m) => o[m]).join('+')
     return addRow('App', `${o.type === 'keyDown' ? 'down' : 'up'}${o.repeat ? ' (repeat)' : ''}`, o.key, o.code, mods)
@@ -61,4 +66,15 @@ window.mk10.onCapture((o) => {
 })
 
 $('cap-pane').addEventListener('click', () => window.mk10.openPrivacyPane('input'))
-$('cap-clear').addEventListener('click', () => $('cap-rows').replaceChildren())
+$('cap-clear').addEventListener('click', () => { $('cap-rows').replaceChildren()
+  // keep the permission and device-list events so a saved log still says what was listening
+  events.splice(0, events.length, ...events.filter((e) => e.t === 'access' || e.t === 'open'))
+})
+$('cap-save').addEventListener('click', async () => {
+  try {
+    const path = await window.mk10.saveCaptureLog(events.map((e) => JSON.stringify(e)).join('\n') + '\n')
+    if (path) $('cap-saved').textContent = `Saved ${events.length} events to ${path}`
+  } catch (e) {
+    $('cap-saved').textContent = `Save failed: ${e.message}`
+  }
+})

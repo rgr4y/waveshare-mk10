@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('mk10', {
   push: call('push'),
   keyOp: call('keyOp'),
   openCapture: call('openCapture'),
+  saveCaptureLog: call('saveCaptureLog'),
   keyMenu: call('keyMenu'),
   nativeEdit: call('nativeEdit'),
   mcpToggle: call('mcpToggle'),
