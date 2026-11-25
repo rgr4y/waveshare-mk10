@@ -657,3 +657,34 @@ Verification
 ## 2026-11-24 Docs: resident app (bead 3a-pv0.8)
 - `app/README.md` gets a Resident app section (tray, close-to-tray, Cmd+Q dirty prompt, single instance, start at login/`--hidden`, read-only Permissions) and the MCP text now says off by default. Validation gets §7b; §6's close-window check became a Cmd+Q check. Scope row 3a marked built, hand checks pending.
 - Verified: `grep 7b`, lint. Unverified: all §7b checks (Rob's).
+
+## 2026-11-24: Studio onboarding defaults, spacing scale, dev login guard, auto push mode
+
+- Outcome
+  - `b596fa9`: onboarding ticks MCP and Start at login by default; `--screenshot --onboard` previews the dialog.
+  - `df747c3`: every margin, padding and gap in `styles.css` uses one spacing scale (`--sp-*`, Tailwind's 4px steps). Dialog actions sit in a right-aligned footer with `--sp-6` above. Tailwind itself was not added: that needs a build step.
+  - `82f5e75`: dev runs (`!app.isPackaged`, the unsigned "Electron" binary) never register a login item. The onboarding row is hidden and the Settings row is disabled. A dev launch removes a login item an earlier dev run added.
+  - `3e0f9aa`: push mode `auto` is the new default. It checks the ssh host for `/etc/alpine-release`: LilAlpine pushes over ssh, otherwise an MK10 USB serial port means stock firmware and a serial push. With neither, it errors. Saved `serial`/`ssh` choices still win.
+  - Finding: with the atsha stand-in loaded, KeyboardDevice on LilAlpine brings up the ACM gadget (`/dev/ttyGS0`, `acm.usb0`), so a USB serial port appears on the Mac under LilAlpine too. Ssh is checked first for that reason.
+- Verification
+  - `npm test` (19 pass), lint, and the layout grep were clean after each commit. Screenshots: onboarding dialog (both ticked, footer spacing), and the Settings login row disabled in dev.
+  - `detectMode` against `root@10.0.1.48` returned `ssh`. Against an unused IP it returned `serial`, because the USB port is present.
+  - Not run: a real push in auto mode, the dev-launch login item removal, a stock-firmware detection.
+
+## 2026-11-25 — Kernel fork push, secrets scrub, 3a bead cleanup
+
+- Outcome
+  - Kernel pushed to the fork `rgr4y/tina-t113-linux-5.4-new` master (`150c69d4f..3f12a86a1`, 12 commits). Chonk has no HTTPS credentials, so the push went over a one-off SSH URL and the remote config is unchanged. The fork is PUBLIC; Rob was warned and has not decided what to do with it.
+  - Secrets check of waveshare-mk10 (Sonnet agent, read-only): gitleaks over 25 commits found no leaks, and the manual sweep found no keys, tokens, Wi-Fi credentials or home paths. Findings accepted by Rob: the GC9307 datasheet PDFs stay, and `opkg`, the commit email and the LAN IPs were left alone.
+  - Device USB serial scrubbed from history with `git filter-repo`. Both mentions in `docs/theme-format.md` became `MK10_XXXXXXXXX`. The serial line in `mk10-studio-mcp-live.png` was blanked and the redacted image swapped into the commit that added it. A case-insensitive search for the serial across all history finds nothing.
+    - Every commit hash changed (HEAD `26402bb` → `7245fff`), so hashes quoted in earlier PROGRESS entries are stale. The repo has no remote, so nothing is affected downstream.
+  - LilAlpine userland for the own kernel: `403cb44` (zram on, README), `d15709c` (`MK10_BOOT_IMG` p4 splice), `6646ea7` (`fetch.sh` keeps our modules). Kernel tree `35ca7acae` adds `mkbootimg.py`.
+  - GC9307 (`aa0fd56ee`, applied as `4a924d4c1`) is in the kernel via `0d8d542e3`.
+  - Phase 3a beads: dropped `.1`–`.3` (DeviceLink, USB push through it, key events) because the device is reached over ssh/scp. The epic's Skipped section records why, and the DeviceLink references were removed from the texts of `.4` and `.8`. `.4` tray was committed as `1d5bb08`.
+  - Hardware video decoding was checked on the device. The player holds `/dev/cedar_dev`, `/dev/ion` and `/dev/g2d`, loads libVE and the vdecoder libs, and uses about 9% CPU. The load is in `KeyboardDevice` (about 84% CPU in a `top` snapshot), and Rob judged it similar to the vendor kernel, so nothing was changed.
+- Verification
+  - Serial scrub: history search clean. A bundle was taken before the rewrite.
+  - Not verified: whether the app's frame push uses SPI DMA, and the stock-kernel CPU comparison (a judgment by Rob, not measured).
+- Follow-up
+  - Delete `backups/pre-serial-scrub-20261124.bundle`. It is gitignored and still contains the serial.
+  - Decide where waveshare-mk10 gets a remote (none yet), and whether the kernel fork stays public.
