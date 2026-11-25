@@ -252,15 +252,19 @@ function openCapture() {
 const slot = (row, col) => `r${row} c${col}`
 async function keyOp(op, page, row, col) {
   if (op === 'copy') {
-    clipboard.writeText(session.copyKey(page, row, col))
+    await clipboard.writeText(session.copyKey(page, row, col))
     return status(`Copied key ${slot(row, col)}`)
   }
-  if (op === 'cut') return task(`Cut key ${slot(row, col)}`, () => clipboard.writeText(session.cutKey(page, row, col)))
+  if (op === 'cut') return task(`Cut key ${slot(row, col)}`, async () => {
+    // copy first, then cut: a failed clipboard write must not lose the key
+    await clipboard.writeText(session.copyKey(page, row, col))
+    session.cutKey(page, row, col)
+  })
   if (op === 'delete') return task(`Delete key ${slot(row, col)}`, () => session.deleteKey(page, row, col))
   if (op === 'undo') return task('Undo', () => { if (!session.undo()) throw new Error('nothing to undo') })
   if (op === 'paste') {
-    return task(`Paste key ${slot(row, col)}`, () => {
-      const text = clipboard.readText()
+    return task(`Paste key ${slot(row, col)}`, async () => {
+      const text = await clipboard.readText() // Electron 45: the clipboard API is async
       if (!session.canPaste(text)) throw new Error('the clipboard holds no MK10 Studio key')
       for (const w of session.pasteKey(page, row, col, text)) log(`paste: ${w}`)
     })
@@ -268,12 +272,13 @@ async function keyOp(op, page, row, col) {
   throw new Error(`unknown key op ${op}`)
 }
 
-function keyMenu(page, row, col, hasKey) {
+async function keyMenu(page, row, col, hasKey) {
+  const canPaste = session.canPaste(await clipboard.readText())
   const go = (op) => () => keyOp(op, page, row, col).catch(() => {}) // reported via status
   Menu.buildFromTemplate([
     { label: 'Cut', enabled: hasKey, click: go('cut') },
     { label: 'Copy', enabled: hasKey, click: go('copy') },
-    { label: 'Paste', enabled: session.canPaste(clipboard.readText()), click: go('paste') },
+    { label: 'Paste', enabled: canPaste, click: go('paste') },
     { type: 'separator' },
     { label: 'Delete Key', enabled: hasKey, click: go('delete') },
   ]).popup({ window: win })
