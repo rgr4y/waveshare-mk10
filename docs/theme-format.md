@@ -78,7 +78,7 @@ QVariant value; all values here QString/int/bool). Verified by full parse (every
 | `openWeb` | 25 | `Url`, `description`, `iconPath`, `AISoundControlKeyword` |
 | `oneLevelUp` | 6 | `pageName`="parentPage" |
 | `openPage` | 2 | `pageName` = uuid of the target (folder) page |
-| `pageSwitch` | 7 | `pageSwitchMode` (int), `jumpToPage` (int, page index) |
+| `pageSwitch` | 7 | `pageSwitchMode` (int), `jumpToPage` (int: index among top-level pages, i.e. pages without `parentPageName`, in theme order; not the theme page index. Checked on the device 2026-11-25) |
 | `password` | 1 | `password`, `isCopyPaste`, `isInputEnter` |
 
 (Strings like `键盘`, `页面切换` are Chinese UI labels, host-GUI display only.)

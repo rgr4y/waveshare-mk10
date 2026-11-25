@@ -69,7 +69,7 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 
 - [ ] Right-click a key: Cut, Copy, Paste, Delete Key. On an empty slot only Paste is enabled, and only after a key was copied.
 - [ ] Clock page / GIF folder: cells with widgets but no key show the widget; the Inspector names it; Paste there fails with "holds a widget".
-- [ ] Right-click > Press Key on a folder key opens the folder, on oneLevelUp returns to the parent, on a pageSwitch key goes to the page the device goes to (checks the jumpToPage numbering guess).
+- [ ] Right-click > Press Key on a folder key opens the folder, on oneLevelUp returns to the parent, on a pageSwitch key goes to the page the device goes to (jumpToPage numbering confirmed on the device 2026-11-25).
 - [ ] Copy a key, click an empty slot, Cmd+V: the key appears there with its image and title. The status says "Paste key r… c…: done".
 - [ ] Cut a GIF key, paste it on another page: it still animates (frames come along).
 - [ ] Delete or Backspace on a selected key empties the slot. Cmd+Z brings it back. Cmd+Z after a title edit says "nothing to undo".
@@ -151,3 +151,10 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 - Widget editing and the live stats feed are Phase 4. The stats feed protocol is verified; the app doesn't send it yet.
 - Adding or removing pages. Keys can be added and removed only through the key clipboard (5b).
 - Animated GIF keys are replaced with a static image.
+
+### Checked on the device (LilAlpine, ssh), 2026-11-25
+- [x] pageSwitch jumpToPage 3 from Page 0 lands on Studio's "Page 3" (top-level numbering).
+- [x] Raw JSON edit of an int action field, Apply, push: the device follows it and loads the theme.
+- [x] openPage pointed at a folder under another page: opens it, and back works.
+- [x] Push, Pull and Device settings stay disabled for a whole push.
+- [x] Auto mode on LilAlpine logs the detection and pushes over ssh.

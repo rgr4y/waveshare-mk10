@@ -72,8 +72,8 @@ const keyItems = (p) => (p?.items ?? []).filter((i) => i.type === '115')
 const keyAt = (p, row, col) => keyItems(p).find((i) => i.row === row && i.col === col)
 const videoItem = (p) => (p?.items ?? []).find((i) => i.type === '100' && i.backgroundType === 'main')
 
-// Top-level pages are numbered 0..5 in theme order: pageSwitch.jumpToPage values in the stock theme
-// (1, 2, 3, 4 from page 0) fit that numbering, not the raw theme index (guess, not checked on the device).
+// Top-level pages are numbered 0..5 in theme order, and pageSwitch.jumpToPage uses that numbering, not
+// the raw theme index (checked on the device 2026-11-25: jumpToPage 3 lands on the 4th top-level page).
 // Folders are pages with a parent; a parent key's openPage action names the folder.
 const topPages = () => (ui.summary.pages ?? []).filter((p) => p.parentIndex === undefined)
 const opener = (p) => keyItems(ui.summary.pages?.[p.parentIndex])
