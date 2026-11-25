@@ -9,20 +9,28 @@ let append = (entries) => { pending.push(...entries) }
 window.mk10.onRpc((entries) => append(entries))
 
 const time = (ts) => new Date(ts).toLocaleTimeString([], { hour12: false }) + `.${String(ts % 1000).padStart(3, '0')}`
+// One JSON value per line: '{ "a": 1, "b": [ 2 ] }'. JSON.stringify escapes newlines inside
+// strings, so every newline in its indented output is structural.
+const line = (v) => JSON.stringify(v, null, 1)?.replace(/\n\s*/g, ' ') ?? 'undefined'
+// a top-level array (V1 cmd 13: state map, action map) gets one element per line
+const body = (v) => Array.isArray(v) && v.length ? `[${v.map(line).join(',\n ')}]` : line(v)
+
 // V1 (old-style) frames get their cmd and name in the header line and only the payload below
 const format = (e) => {
   if (e.dir === 'open' || e.dir === 'close') return `// ${time(e.ts)} ${ARROW[e.dir]} ${e.path ?? ''}\n`
   const v1 = e.msg?.v1 !== undefined
   const head = v1 ? ` V1 cmd ${e.msg.v1} ${e.msg.name}${e.msg.type ? ` (type ${e.msg.type})` : ''}` : ''
-  return `// ${time(e.ts)} ${ARROW[e.dir]}${head}\n${JSON.stringify(v1 ? e.msg.payload : e.msg, null, 2)}\n`
+  return `// ${time(e.ts)} ${ARROW[e.dir]}${head}\n${body(v1 ? e.msg.payload : e.msg)}\n`
 }
 
 window.require.config({ paths: { vs: '../node_modules/monaco-editor/min/vs' } })
 window.require(['vs/editor/editor.main'], () => {
   const monaco = window.monaco
-  // jsonc: the per-entry header lines are comments
+  // 'json' highlighting ('jsonc' isn't registered in this build). The log isn't one JSON
+  // document and the header lines are comments, so diagnostics are off.
+  ;(monaco.json ?? monaco.languages.json)?.jsonDefaults?.setDiagnosticsOptions({ validate: false, allowComments: true })
   const ed = monaco.editor.create($('rpc-editor'), {
-    value: '', language: 'jsonc', theme: 'vs-dark', readOnly: true, automaticLayout: true,
+    value: '', language: 'json', theme: 'vs-dark', readOnly: true, automaticLayout: true,
     minimap: { enabled: false }, fontSize: 12, tabSize: 2, scrollBeyondLastLine: false, wordWrap: 'off',
   })
   const model = ed.getModel()
