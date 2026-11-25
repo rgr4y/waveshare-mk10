@@ -196,6 +196,9 @@ const widgetLabel = (i) => [WIDGET_NAMES[i.type] ?? `type ${i.type}`, i.systemDa
 const cellWidgets = (p, row, col) => widgetItems(p).filter((i) => onKeyArea(i) &&
   i.x < col * 128 + 128 && i.x + (i.w || 1) > col * 128 && i.y < row * 128 + 128 && i.y + (i.h || 1) > row * 128)
 
+// clock widgets tick like the device's
+setInterval(() => document.querySelectorAll('[data-clock]').forEach((el) => { el.textContent = CLOCK[el.dataset.clock]() }), 1000)
+
 function renderWidgets() {
   const all = widgetItems(curPage())
   draw($('widgets'), all.filter(onKeyArea), 0)
@@ -213,6 +216,7 @@ function draw(box, items, dx) {
       el = tpl('tpl-sec-text')
       el.classList.add('sec-digits')
       el.textContent = CLOCK[it.systemData]?.() ?? '--'
+      if (CLOCK[it.systemData]) el.dataset.clock = it.systemData
       el.style.width = `${it.w ?? 128}px`
       el.style.height = `${it.h ?? 128}px`
       el.style.fontSize = `${Math.round((it.h ?? 128) * 0.6)}px`
@@ -224,6 +228,7 @@ function draw(box, items, dx) {
     } else if (it.type === '113') {
       el = tpl('tpl-sec-text')
       const clock = it.text === 'Text' ? CLOCK[it.systemData] : null
+      if (clock) el.dataset.clock = it.systemData
       el.textContent = clock ? clock() : it.text === 'Text' && /usage/i.test(it.systemData ?? '') ? '--%' : (it.text ?? '')
       el.style.fontSize = clock || it.text === '：' ? '48px' : it.text === 'Text' ? '18px' : '14px'
     } else if (it.type === '109' || it.type === '101') {
