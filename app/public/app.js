@@ -17,11 +17,15 @@ const ANY_MEDIA_RE = new RegExp(`${IMAGE_RE.source}|${VIDEO_RE.source}`, 'i')
 const base = (p) => String(p).split('/').pop()
 
 // ---- status / log
+// Status toast (bottom right): busy stays until the next status, others fade out; click dismisses.
+let toastTimer
 function setStatus({ msg, busy, error }) {
   const el = $('status')
   el.textContent = msg
   el.dataset.state = error ? 'error' : busy ? 'busy' : 'idle'
-  el.title = msg
+  el.hidden = !msg
+  clearTimeout(toastTimer)
+  if (!busy) toastTimer = setTimeout(() => { el.hidden = true }, error ? 8000 : 3500)
 }
 
 function addLog(line) {
@@ -683,6 +687,7 @@ async function init() {
   $('btn-open-stock').hidden = !cfg.stockDir
 
   window.mk10.onStatus(setStatus)
+  $('status').addEventListener('click', (e) => { e.currentTarget.hidden = true })
   window.mk10.onLog(addLog)
   // a select sent right after an open must land after that open's page reset, not before it
   let changing = Promise.resolve()

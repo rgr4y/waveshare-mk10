@@ -50,9 +50,19 @@ h3 { margin: var(--sp-4) 0 var(--sp-2); font-size: 12px; color: var(--text); fon
 .actions { display: flex; gap: var(--sp-2); }
 .badge { color: var(--ok); border-color: var(--ok); font-size: 11px; padding: var(--sp-0-5) var(--sp-2); flex: none; }
 #btn-settings { flex: none; }
-.status { margin-left: auto; color: var(--muted); font-size: 12px; max-width: 38%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.status[data-state=busy] { color: var(--warn); }
-.status[data-state=error] { color: var(--err); }
+/* top bar never wraps: buttons stay one line, the file name and dev stamp truncate */
+.topbar button, .brand { white-space: nowrap; flex: none; }
+.file { min-width: 0; flex: 0 1 auto; }
+#filename { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.push-right { margin-left: auto; }
+@media (max-width: 1100px) { .level span { display: none; } }
+@media (max-width: 900px) { .level input { width: 60px; } .topbar { gap: var(--sp-2); } }
+
+/* status toast */
+.toast { position: fixed; right: var(--sp-4); bottom: var(--sp-4); z-index: 100; max-width: min(480px, calc(100vw - 32px)); padding: var(--sp-2) var(--sp-3); background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-left: 3px solid var(--muted); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .45); font-size: 12px; overflow-wrap: anywhere; cursor: pointer; }
+.toast[hidden] { display: none; }
+.toast[data-state=busy] { border-left-color: var(--warn); }
+.toast[data-state=error] { border-left-color: var(--err); color: var(--err); }
 
 button {
   font: inherit;

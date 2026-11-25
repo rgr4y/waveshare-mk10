@@ -18,8 +18,7 @@
       <button id="btn-pull" type="button" title="Download the theme the device loads (LilAlpine, ssh) and open it">Pull</button>
     </div>
     <button id="mcp-badge" type="button" class="badge" hidden title="MCP server running (Settings)">MCP</button>
-    <div id="status" class="status" data-state="idle">Ready</div>
-    <label class="level" title="Device brightness (USB serial). Starts at the last value set here; the device can't report its own."><span>Brightness</span><input id="brightness" type="range" min="0" max="100" step="1"></label>
+    <label class="level push-right" title="Device brightness (USB serial). Starts at the last value set here; the device can't report its own."><span>Brightness</span><input id="brightness" type="range" min="0" max="100" step="1"></label>
     <label class="level" title="Device speaker volume, 0-7 (USB serial). Starts at the last value set here; the device can't report its own."><span>Volume</span><input id="volume" type="range" min="0" max="7" step="1"></label>
     <button id="btn-settings" type="button" title="Settings (Cmd+,)">Settings</button>
     <button id="btn-device" type="button" popovertarget="device-pop" title="Device connection settings">Device: <span id="device-mode"></span></button>
@@ -216,5 +215,6 @@
   <template id="tpl-kv-select"><div class="kv-row"><dt></dt><dd><select></select></dd></div></template>
   <template id="tpl-option"><option></option></template>
   <template id="tpl-kv-edit"><div class="kv-row"><dt></dt><dd><input type="text" spellcheck="false"></dd></div></template>
+  <div id="status" class="toast" data-state="idle" role="status" aria-live="polite" title="Click to dismiss" hidden></div>
 </body>
 </html>
