@@ -121,7 +121,7 @@ async function push() {
   if (!session.theme) return null
   const o = pushOpts()
   if (o.mode === 'auto') {
-    o.mode = await task('Detecting MK10 firmware', () => session.detectMode(o))
+    o.mode = await task('Detecting MK10 firmware', () => session.detectMode(o, log))
     log(`auto: ${o.mode === 'ssh' ? 'LilAlpine' : 'stock firmware'} detected`)
   }
   const r = await dialog.showMessageBox(win, {

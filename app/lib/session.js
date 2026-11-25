@@ -144,18 +144,22 @@ export class Session extends EventEmitter {
   // LilAlpine answers ssh and has /etc/alpine-release, so ssh wins when it answers. Stock Tina has no
   // ssh, only the vendor app's USB serial port (LilAlpine runs the same app, so it has the port too
   // and a serial push still works there). Errors when neither is found: never guesses a mode.
-  async detectMode({ host } = DEFAULT_SSH) {
-    const alpine = await run('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=3', host, 'test -f /etc/alpine-release && echo lilalpine'], { timeout: 8000 })
-      .then(({ stdout }) => stdout.trim() === 'lilalpine', () => false)
-    if (alpine) return 'ssh'
+  // A busy device (theme reload, SPI frame push) can take seconds to finish the ssh handshake, so the
+  // probe gets 10 s and logs why ssh failed before it falls back to serial.
+  async detectMode({ host } = DEFAULT_SSH, log = () => {}) {
+    const why = await run('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', host, 'test -f /etc/alpine-release && echo lilalpine'], { timeout: 10000 })
+      .then(({ stdout }) => (stdout.trim() === 'lilalpine' ? null : 'answers over ssh but has no /etc/alpine-release'),
+        (e) => (e.killed ? 'no answer within 10 s' : (e.stderr || e.message).trim().split('\n').pop()))
+    if (!why) return 'ssh'
+    log(`auto: ${host} is not LilAlpine (${why})`)
     if ((await Device.list()).length) return 'serial'
-    throw new Error(`no MK10 found: ${host} does not answer as LilAlpine over ssh, and no MK10 USB serial port is present`)
+    throw new Error(`no MK10 found: ${host} is not LilAlpine (${why}), and no MK10 USB serial port is present`)
   }
 
   async push(opts = DEFAULT_PUSH, log = () => {}) {
     const o = { ...DEFAULT_PUSH, ...opts }
     if (o.mode === 'auto') {
-      o.mode = await this.detectMode(o)
+      o.mode = await this.detectMode(o, log)
       log(`auto: ${o.mode === 'ssh' ? 'LilAlpine' : 'stock firmware'} detected, pushing over ${o.mode}`)
     }
     if (o.mode === 'ssh') return this.pushSsh(o, log)
