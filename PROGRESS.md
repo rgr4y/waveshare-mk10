@@ -802,7 +802,8 @@ Verification
   - Not verified: a LilAlpine reboot with the new services (the mixer service did survive an earlier reboot), an image build.
   - Watchdog-only reset (Rob): `watchdog -T 5 -t 600 /dev/watchdog`, never fed. Down after 5 s, ping back after 26 s, fresh boot.
   - JSON RPC window: driven over CDP. Settings toggle opens it, replayed and appended entries render in Monaco, untick closes it. `Device.call` emits `tx` before writing. Not checked against live device traffic.
-  - Not verified: `reboot` with `mk10-reboot-wdt` installed.
+  - `reboot` with `mk10-reboot-wdt` (Rob): back in about 15 s; the service's trace file shows it armed (`1aa770c` added the trace because OpenRC closes `rc.log` before the shutdown runlevel). A plain reboot did not hang, so the PSCI hang theory looks wrong for this board; the watchdog stays as a fallback.
+  - Serial push (Rob): 22.1 MB, 10% steps, reload, pushed. No toast appeared during it; cause not found yet.
 - Follow-up
   - Reboot: `mk10-reboot-wdt` covers a hang without proving one exists (the guess is that PSCI `SYSTEM_RESET` at priority 129 hangs before `sunxi_wdt_restart` at 128). Test `reboot` once. A kernel priority change on chonk is the cleaner fix if the hang is real.
   - Phase 3b page tracking: unique per-page keycodes versus a V1 cmd 13 listen with `mkv1.py`. The 3b/3c bead list still needs Rob's verdicts.

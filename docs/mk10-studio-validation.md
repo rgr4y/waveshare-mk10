@@ -91,7 +91,7 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 ## 7. Push (USB serial)
 
 - [ ] **Push to device** shows a confirm dialog. Cancel does nothing.
-- [ ] Push. The log shows progress in 10% steps, then `reload …`, `removed old pushes …` (on the second push and later), then `pushed`. About 10 s for 12 MB.
+- [x] Push. The log shows progress in 10% steps, then `reload …`, `removed old pushes …` (on the second push and later), then `pushed`. About 10 s for 12 MB.
 - [ ] The device shows the edits: titles, images, video. Press keys: hotkeys still work.
 - [ ] Push again. Only one `mk10studio-*.Theme` remains:
       `ssh root@10.0.1.48 'ls -la /data/theme/MK10/*.Theme'`
@@ -178,5 +178,5 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 - [x] With the window open, Studio holds the port and device events stream: JSON `keyStateChanged` plus decoded V1 cmd 13 key events (with the key's action) and cmd 15 page contracts (Rob's presses on the soundboard and stock keys).
 
 ### Still to check
-- [ ] `reboot` with `mk10-reboot-wdt` installed (shutdown runlevel): the device is back within ~40 s. `poweroff` also ends in a reset (expected).
+- [x] `reboot` with `mk10-reboot-wdt` installed: back in about 15 s, and `/var/log/mk10-reboot-wdt.log` shows `armed /dev/watchdog 10s` (Rob, 2026-11-25). `poweroff` also ends in a reset (expected, untested).
 - [ ] Settings > Developer > JSON RPC window: move the Volume slider. A `setVolume` → and its ack ← appear. A serial push shows `saveToFile` with shortened `data`. Closing the window releases the port.
