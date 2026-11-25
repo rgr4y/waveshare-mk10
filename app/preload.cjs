@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('mk10', {
   settings: call('settings'),
   setSsh: call('setSsh'),
   setPref: call('setPref'),
+  setLoginItem: call('setLoginItem'),
   pathFor: (file) => webUtils.getPathForFile(file),
   onChange: on('change'),
   onStatus: on('status'),

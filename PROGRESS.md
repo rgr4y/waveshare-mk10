@@ -644,3 +644,7 @@ Verification
 ## 2026-11-24 (night): first-run onboarding dialog
 - Added `#onboard-dlg` (welcome + MCP checkbox, off by default, `#onboard-more` slot for later rows). Shows once when `onboarded` is unset; button or Esc sets `onboarded`, MCP starts only if ticked. `settings` IPC now includes `screenshot` so `--screenshot` runs skip the dialog.
 - Verified: npm test, lint, layout grep, screenshot run (no dialog, exits). Unverified: the interactive first-run flow (Rob's checklist).
+
+## 2026-11-24 (night): start at login
+- `setLoginItem` IPC + `login` in the settings result (OS is the source of truth); Settings > General checkbox and onboarding row. Window starts hidden with no Dock icon when `wasOpenedAtLogin` or `--hidden`.
+- Verified: npm test, lint, layout grep, `--settings` screenshot. Unverified: real login item registration, logout/login hidden start, `npm start -- --hidden`, unticking (Rob's checklist).

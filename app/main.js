@@ -173,7 +173,8 @@ function registerIpc() {
   h('setBackgroundVideo', setBackgroundVideo)
   h('push', push)
   h('mcpToggle', (on, port) => task(on ? 'Start MCP' : 'Stop MCP', () => mcpToggle(on, port)))
-  h('settings', () => ({ ...settings, screenshot: SHOT, settingsFile, version: app.getVersion(), mcpUrl: mcp?.url ?? null, stockDir: existsSync(STOCK_DIR) ? STOCK_DIR : null }))
+  h('setLoginItem', (on) => { app.setLoginItemSettings({ openAtLogin: !!on }); return app.getLoginItemSettings() })
+  h('settings', () => ({ ...settings, login: app.getLoginItemSettings(), screenshot: SHOT, settingsFile, version: app.getVersion(), mcpUrl: mcp?.url ?? null, stockDir: existsSync(STOCK_DIR) ? STOCK_DIR : null }))
   h('setPref', async (key, value) => {
     if (!PREFS.has(key) || typeof value !== 'boolean') throw new Error(`unknown setting ${key}`)
     settings[key] = value
@@ -223,9 +224,11 @@ function buildMenu() {
 
 // ---- window
 function createWindow() {
+  // login launch (or --hidden): menu bar only, no window, no Dock icon
+  const hidden = app.getLoginItemSettings().wasOpenedAtLogin || argv.includes('--hidden')
   win = new BrowserWindow({
     width: 1360, height: 760, minWidth: 1100, minHeight: 600, backgroundColor: '#14161a',
-    show: !flag('--screenshot'),
+    show: !flag('--screenshot') && !hidden,
     webPreferences: {
       preload: join(import.meta.dirname, 'preload.cjs'),
       contextIsolation: true, nodeIntegration: false, sandbox: true,
@@ -237,6 +240,7 @@ function createWindow() {
     win.hide()
     app.dock.hide()
   })
+  if (hidden && !SHOT) app.dock.hide()
   win.loadFile(join(import.meta.dirname, 'public', 'index.html'))
   return win
 }
