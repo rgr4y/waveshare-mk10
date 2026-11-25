@@ -37,6 +37,7 @@ function actionOf(it) {
 
 export class Session extends EventEmitter {
   theme = null
+  pushing = false
   file = null
   dirty = false
   // edits counts every change; pushedEdits is its value when the last successful push started.
@@ -91,6 +92,7 @@ export class Session extends EventEmitter {
     return {
       file: this.file,
       dirty: this.dirty,
+      pushing: this.pushing,
       currentPage: json.main?.currentPage,
       assetCount: assets.size,
       pages: json.pages.map((p, index) => ({
@@ -230,19 +232,30 @@ export class Session extends EventEmitter {
     return this.edits !== this.pushedEdits
   }
 
-  async push(opts = DEFAULT_PUSH, log = () => {}) {
-    const at = this.edits
-    const r = await this.pushTo(opts, log)
-    this.pushedEdits = at
-    return r
+  // One push at a time, from any caller (UI, menu, quit prompt, MCP). confirm(o) runs after auto
+  // detection with the resolved mode; false cancels and push returns null.
+  async push(opts = DEFAULT_PUSH, log = () => {}, confirm = null) {
+    if (this.pushing) throw new Error('a push is already in progress')
+    this.pushing = true
+    this.emit('change', { kind: 'push' })
+    try {
+      const at = this.edits
+      const r = await this.pushTo(opts, log, confirm)
+      if (r !== null) this.pushedEdits = at
+      return r
+    } finally {
+      this.pushing = false
+      this.emit('change', { kind: 'push' })
+    }
   }
 
-  async pushTo(opts, log) {
+  async pushTo(opts, log, confirm) {
     const o = { ...DEFAULT_PUSH, ...opts }
     if (o.mode === 'auto') {
       o.mode = await this.detectMode(o, log)
       log(`auto: ${o.mode === 'ssh' ? 'LilAlpine' : 'stock firmware'} detected, pushing over ${o.mode}`)
     }
+    if (confirm && !(await confirm(o))) return null
     if (o.mode === 'ssh') return this.pushSsh(o, log)
     if (o.mode === 'serial') return this.pushSerial(o, log)
     throw new Error(`unknown push mode ${o.mode}`)

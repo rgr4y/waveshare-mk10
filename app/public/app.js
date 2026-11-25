@@ -97,7 +97,9 @@ function renderTop() {
   $('filename').title = s.file ?? ''
   $('dirty').hidden = !s.dirty
   $('btn-save').disabled = !has
-  $('btn-push').disabled = !has
+  $('btn-push').disabled = !has || !!s.pushing
+  // device settings stay as they were for the push in flight
+  for (const id of ['push-mode', 'ssh-host', 'ssh-remote']) $(id).disabled = !!s.pushing
   $('empty').hidden = has
   $('panel').hidden = !has
 }

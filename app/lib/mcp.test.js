@@ -61,6 +61,20 @@ test('mcp tools over streamable http', { skip: !existsSync(THEME) && 'stock them
     await session.push()
     assert.equal(session.unpushed, false)
     await assert.rejects(Object.assign(session, { pushTo: async () => { throw new Error('no device') } }).push())
+    // one push at a time; the lock is released after a failure
+    let release
+    session.pushTo = () => new Promise((r) => { release = r })
+    const first = session.push()
+    assert.equal(session.summary().pushing, true)
+    await assert.rejects(session.push(), /already in progress/)
+    release('ok')
+    await first
+    assert.equal(session.pushing, false)
+    // confirm declined: nothing is written and the theme stays unpushed
+    delete session.pushTo
+    session.setKeyTitle(0, 0, 0, 'z')
+    assert.equal(await session.push({ mode: 'serial' }, () => {}, async () => false), null)
+    assert.equal(session.unpushed, true)
     session.setKeyTitle(0, 0, 0, 'y')
     assert.equal(session.unpushed, true)
 

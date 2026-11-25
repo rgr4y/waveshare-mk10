@@ -122,20 +122,17 @@ const pushOpts = () => ({ mode: settings.pushMode ?? 'auto', port: process.env.M
 
 async function push() {
   if (!session.theme) return null
-  const o = pushOpts()
-  if (o.mode === 'auto') {
-    o.mode = await task('Detecting MK10 firmware', () => session.detectMode(o, log))
-    log(`auto: ${o.mode === 'ssh' ? 'LilAlpine' : 'stock firmware'} detected`)
-  }
-  const r = await dialog.showMessageBox(win, {
+  const confirm = async (o) => (await dialog.showMessageBox(win, {
     type: 'question', buttons: ['Push', 'Cancel'], defaultId: 0, cancelId: 1,
     message: o.mode === 'ssh' ? `Push to ${o.host} over ssh?` : 'Push to MK10 over USB?',
     detail: o.mode === 'ssh'
       ? `Copies the theme to ${o.remote}, points config.json at it and restarts keyboard-device.`
       : `Writes the theme to ${o.remote} as a new timestamped file (~10 s for 12 MB), tells the device to load it, then deletes older mk10studio pushes.`,
-  })
-  if (r.response !== 0) return null
-  return task('Push', () => session.push(o, log))
+  })).response === 0
+  // the lock covers detection and the confirm dialog too, so the mode can't change underneath
+  const r = await task('Push', () => session.push(pushOpts(), log, confirm))
+  if (r === null) status('Push cancelled')
+  return r
 }
 
 async function mcpToggle(on, port = settings.mcp.port) {
@@ -343,6 +340,7 @@ function registerIpc() {
     await saveSettings()
   })
   h('setSsh', async (ssh) => {
+    if (session.pushing) throw new Error('push in progress: device settings are locked until it finishes')
     settings.ssh = { host: String(ssh.host), remote: String(ssh.remote) }
     if (['auto', 'serial', 'ssh'].includes(ssh.mode)) settings.pushMode = ssh.mode
     await saveSettings()
@@ -433,7 +431,7 @@ function refreshTray() {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: session.file ? basename(session.file, extname(session.file)) : 'No theme open', enabled: false },
     { label: 'Open MK10 Studio', click: showWindow },
-    { label: 'Push to device', enabled: !!session.theme, click: guard(push) },
+    { label: 'Push to device', enabled: !!session.theme && !session.pushing, click: guard(push) },
     { label: 'MCP server', type: 'checkbox', checked: !!mcp, click: guard(() => task(mcp ? 'Stop MCP' : 'Start MCP', () => mcpToggle(!mcp))) },
     { type: 'separator' },
     { label: 'Quit MK10 Studio', click: () => app.quit() },
