@@ -311,7 +311,25 @@ async function init() {
   })
 
   // settings dialog (native <dialog>: Esc and the Done button close it)
-  const openSettings = () => { if (!$('settings-dlg').open) $('settings-dlg').showModal() }
+  // permissions: passive status only, polled every 2 s while the dialog is open
+  let permTimer = null
+  const showPerms = async () => {
+    const p = await window.mk10.permissions().catch(() => null)
+    if (!p) return
+    $('perm-accessibility').textContent = p.accessibility ? 'granted' : 'not granted'
+    $('perm-screen').textContent = p.screen
+  }
+  const openSettings = () => {
+    if ($('settings-dlg').open) return
+    $('settings-dlg').showModal()
+    showPerms()
+    permTimer = setInterval(showPerms, 2000)
+  }
+  $('settings-dlg').addEventListener('close', () => clearInterval(permTimer))
+  $('settings-dlg').addEventListener('click', (e) => {
+    const pane = e.target.closest('[data-pane]')?.dataset.pane
+    if (pane) run(pane === 'accessibility' ? window.mk10.requestAccessibility() : window.mk10.openPrivacyPane(pane))
+  })
   window.mk10.onOpenSettings(openSettings)
   // first-run onboarding: closing it (button or Esc) counts as onboarded; MCP only if ticked
   $('onboard-dlg').addEventListener('close', () => {

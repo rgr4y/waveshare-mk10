@@ -1,5 +1,5 @@
 // Electron main: owns the single Session; all edits (UI, MCP) go through it.
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Tray } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell, systemPreferences, Tray } from 'electron'
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { existsSync, watch } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
@@ -157,6 +157,13 @@ function asset(key) {
   return bytes ? { mime: MIME[extname(k).toLowerCase()] ?? 'application/octet-stream', bytes: new Uint8Array(bytes) } : null
 }
 
+const PRIVACY_PANES = { accessibility: 'Privacy_Accessibility', screen: 'Privacy_ScreenCapture', automation: 'Privacy_Automation' }
+const openPane = (pane) => {
+  if (!Object.hasOwn(PRIVACY_PANES, pane)) throw new Error(`Unknown privacy pane: ${pane}`)
+  return shell.openExternal(`x-apple.systempreferences:com.apple.preference.security?${PRIVACY_PANES[pane]}`)
+}
+let axPrompted = false // the system "grant access" prompt shows at most once per app session
+
 const PREFS = new Set(['reopenLast', 'onboarded']) // boolean prefs the renderer may set
 
 function registerIpc() {
@@ -174,6 +181,12 @@ function registerIpc() {
   h('push', push)
   h('mcpToggle', (on, port) => task(on ? 'Start MCP' : 'Stop MCP', () => mcpToggle(on, port)))
   h('setLoginItem', (on) => { app.setLoginItemSettings({ openAtLogin: !!on }); return app.getLoginItemSettings() })
+  h('permissions', () => ({ accessibility: systemPreferences.isTrustedAccessibilityClient(false), screen: systemPreferences.getMediaAccessStatus('screen') }))
+  h('openPrivacyPane', openPane)
+  h('requestAccessibility', () => {
+    if (!axPrompted) { axPrompted = true; systemPreferences.isTrustedAccessibilityClient(true) }
+    return openPane('accessibility')
+  })
   h('settings', () => ({ ...settings, login: app.getLoginItemSettings(), screenshot: SHOT, settingsFile, version: app.getVersion(), mcpUrl: mcp?.url ?? null, stockDir: existsSync(STOCK_DIR) ? STOCK_DIR : null }))
   h('setPref', async (key, value) => {
     if (!PREFS.has(key) || typeof value !== 'boolean') throw new Error(`unknown setting ${key}`)

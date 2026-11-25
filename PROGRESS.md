@@ -648,3 +648,8 @@ Verification
 ## 2026-11-24 (night): start at login
 - `setLoginItem` IPC + `login` in the settings result (OS is the source of truth); Settings > General checkbox and onboarding row. Window starts hidden with no Dock icon when `wasOpenedAtLogin` or `--hidden`.
 - Verified: npm test, lint, layout grep, `--settings` screenshot. Unverified: real login item registration, logout/login hidden start, `npm start -- --hidden`, unticking (Rob's checklist).
+
+## 2026-11-24 Settings: read-only permissions (bead 3a-pv0.7)
+- Settings has a Permissions section: Accessibility and Screen Recording status (passive, polled every 2 s only while the dialog is open) and Open buttons for the Accessibility, Screen Recording and Automation panes. Accessibility Open calls the system prompt at most once per session, then opens the pane.
+- Verified: npm test (19 pass), lint clean, layout grep empty, `--settings` screenshot renders with statuses filled. `CGPreflightScreenCaptureAccess` symbol is present in the Electron framework binary, but I did not confirm that `getMediaAccessStatus('screen')` calls it.
+- Unverified by hand: pane deep links, grant pickup, and that opening Settings shows no prompt.
