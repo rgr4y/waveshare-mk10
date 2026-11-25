@@ -395,19 +395,70 @@ const rawText = (raw) => `{\n${Object.entries(raw).map(([k, v]) => `  ${JSON.str
   ? `[\n${v.map((f) => `    ${JSON.stringify(f)}`).join(',\n')}\n  ]`
   : JSON.stringify(v, null, 2).replace(/\n/g, '\n  ')}`).join(',\n')}\n}`
 
-async function loadRaw(force = false) {
+async function loadRaw() {
   const ta = $('raw-json')
   const sel = ui.sel
-  const id = `${ui.page}:${sel.row}:${sel.col}`
-  // an unapplied edit survives re-renders of its own key only; another key replaces it
-  const same = ta.dataset.key === id
-  if (!force && same && (ta.dataset.dirty === 'true' || document.activeElement === ta)) return
-  if (!same && ta.dataset.dirty === 'true') setStatus({ msg: 'Unapplied raw JSON edit discarded' })
   const raw = await window.mk10.keyRaw(ui.page, sel.row, sel.col).catch(() => null)
   if (ui.sel !== sel) return // selection moved on while loading
   ta.value = raw ? rawText(raw) : ''
-  ta.dataset.dirty = 'false'
-  ta.dataset.key = id
+}
+
+// Monaco (AMD build, node_modules/monaco-editor/min) loads on first use: ~17 MB, the app starts without it.
+// ponytail: AMD is deprecated upstream; move to the ESM build if a bundler ever joins the project.
+let monacoP = null
+const loadMonaco = () => (monacoP ??= new Promise((resolve, reject) => {
+  window.require.config({ paths: { vs: '../node_modules/monaco-editor/min/vs' } })
+  window.require(['vs/editor/editor.main'], () => resolve(window.monaco), (e) => { monacoP = null; reject(e) })
+}))
+
+let rawEd = null
+async function openRawEditor() {
+  const sel = ui.sel
+  if (sel?.kind !== 'key' || $('raw-dlg').open) return
+  const page = ui.page
+  const raw = await window.mk10.keyRaw(page, sel.row, sel.col).catch(() => null)
+  if (!raw) return
+  const monaco = await loadMonaco()
+  const dlg = $('raw-dlg')
+  $('raw-dlg-key').textContent = `r${sel.row} c${sel.col} · ${pageName(curPage())}`
+  $('raw-dlg-err').hidden = true
+  dlg.dataset.page = page
+  dlg.dataset.row = sel.row
+  dlg.dataset.col = sel.col
+  dlg.showModal()
+  if (!rawEd) {
+    rawEd = monaco.editor.create($('raw-editor'), {
+      language: 'json', theme: 'vs-dark', automaticLayout: true, minimap: { enabled: false },
+      fontSize: 12, tabSize: 2, scrollBeyondLastLine: false, wordWrap: 'off', fixedOverflowWidgets: true,
+    })
+    rawEd.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, applyRawEditor)
+    rawEd.onDidChangeModelContent(() => { $('raw-dlg-err').hidden = true })
+  }
+  rawEd.setValue(rawText(raw))
+  rawEd.setScrollPosition({ scrollTop: 0 })
+  rawEd.focus()
+}
+
+async function applyRawEditor() {
+  const dlg = $('raw-dlg')
+  const err = $('raw-dlg-err')
+  let raw
+  try {
+    raw = JSON.parse(rawEd.getValue())
+  } catch (e) {
+    err.textContent = e.message
+    err.hidden = false
+    return
+  }
+  try {
+    await window.mk10.setKeyRaw(Number(dlg.dataset.page), Number(dlg.dataset.row), Number(dlg.dataset.col), raw)
+  } catch (e) {
+    err.textContent = e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
+    err.hidden = false // the text stays for fixing
+    return
+  }
+  dlg.close()
+  loadRaw()
 }
 
 function renderInspector() {
@@ -597,23 +648,10 @@ async function init() {
       setStatus({ msg: `${label} ${n}` })
     })))
   }
-  $('raw-json').addEventListener('input', (e) => { e.target.dataset.dirty = 'true' })
-  $('btn-raw-revert').addEventListener('click', () => loadRaw(true))
-  $('btn-raw-apply').addEventListener('click', async () => {
-    let raw
-    try {
-      raw = JSON.parse($('raw-json').value)
-    } catch (e) {
-      return setStatus({ error: true, msg: `Raw JSON: ${e.message}` })
-    }
-    const { row, col } = ui.sel
-    try {
-      await window.mk10.setKeyRaw(ui.page, row, col, raw)
-      loadRaw(true)
-    } catch (e) {
-      run(Promise.reject(e)) // status line; the edited text stays for fixing
-    }
-  })
+  $('raw-json').addEventListener('click', () => run(openRawEditor()))
+  $('btn-raw-edit').addEventListener('click', () => run(openRawEditor()))
+  $('raw-dlg-apply').addEventListener('click', () => run(applyRawEditor()))
+  $('raw-dlg-cancel').addEventListener('click', () => $('raw-dlg').close())
   $('btn-fonts').addEventListener('click', () => run(window.mk10.syncFonts()))
   window.mk10.onFonts(registerFonts)
   registerFonts(await window.mk10.fonts())

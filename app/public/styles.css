@@ -216,6 +216,14 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 .inline { display: inline-flex; align-items: center; gap: var(--sp-1); cursor: pointer; }
 .log { flex: 1; margin: 0; padding: var(--sp-2); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; font: 11px/1.4 ui-monospace, Menlo, monospace; color: var(--muted); overflow: auto; white-space: pre-wrap; word-break: break-all; user-select: text; min-height: 80px; }
 
+/* raw JSON editor (Monaco) */
+.raw-json[readonly] { cursor: pointer; }
+.raw-dlg { width: min(900px, calc(100vw - 32px)); }
+.raw-dlg[open] { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-4); }
+.raw-editor { height: min(70vh, 640px); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.raw-err { color: var(--err); margin: 0; white-space: pre-wrap; }
+.raw-dlg .dlg-actions { margin-top: 0; gap: var(--sp-2); }
+
 /* settings dialog */
 .settings { width: 440px; max-width: calc(100vw - 32px); padding: 0; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 20px 60px rgba(0, 0, 0, .6); }
 .settings::backdrop { background: rgba(0, 0, 0, .45); }
