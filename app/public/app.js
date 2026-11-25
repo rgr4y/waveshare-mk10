@@ -349,7 +349,7 @@ async function onChange(e) {
 async function init() {
   const cfg = await window.mk10.settings()
   $('ssh-host').value = cfg.ssh.host
-  if (cfg.build) { $('brand').textContent = cfg.build.label; $('brand').title = cfg.build.title }
+  if (cfg.build) { $('brand').textContent = cfg.build.label; $('brand').title = cfg.build.title; $('brand').dataset.dev = 'true' }
   $('ssh-remote').value = cfg.ssh.remote
   $('push-mode').value = cfg.pushMode ?? 'auto'
   $('device-mode').textContent = $('push-mode').value

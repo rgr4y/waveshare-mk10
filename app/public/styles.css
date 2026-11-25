@@ -43,6 +43,7 @@ h3 { margin: var(--sp-4) 0 var(--sp-2); font-size: 12px; color: var(--text); fon
   flex: none;
 }
 .brand { font-weight: 700; letter-spacing: .02em; }
+.brand[data-dev=true] { font-size: 11px; font-weight: 400; letter-spacing: 0; color: var(--muted); font-variant-numeric: tabular-nums; }
 .file { display: flex; align-items: center; gap: var(--sp-2); min-width: 120px; font-weight: 600; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); display: inline-block; }
 .dot[hidden] { display: none; }
