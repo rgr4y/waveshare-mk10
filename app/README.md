@@ -102,8 +102,8 @@ appended to `/tmp/mk10.log`. **Save log…** writes the same lines to a file you
   `saveToFile` base64 chunks, are shortened. While the window is open, Studio holds the port (it
   retries every 2 s after an unplug or while busy), so the device's unsolicited messages stream too.
   Serial pushes and the sliders reuse the held port. Holding it locks the vendor app out of the port.
-  ssh pushes don't appear. Closing the window unticks the setting. A ticked setting reopens the window
-  at launch.
+  ssh pushes don't appear. Close it to release the port. Left open at quit, it reopens at
+  launch.
 
 ### Push to device
 "Push to device" encodes the in-memory theme and makes it the active layout. Mode is picked in the

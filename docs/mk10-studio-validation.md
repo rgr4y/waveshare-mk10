@@ -177,4 +177,4 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 
 ### Still to check
 - [ ] `reboot` with `mk10-reboot-wdt` installed (shutdown runlevel): the device is back within ~40 s. `poweroff` also ends in a reset (expected).
-- [ ] Settings > Developer > JSON RPC window: move the Volume slider. A `setVolume` → and its ack ← appear. A serial push shows `saveToFile` with shortened `data`. Closing the window unticks the setting.
+- [ ] Settings > Developer > JSON RPC window: move the Volume slider. A `setVolume` → and its ack ← appear. A serial push shows `saveToFile` with shortened `data`. Closing the window releases the port.

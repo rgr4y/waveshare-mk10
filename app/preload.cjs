@@ -54,5 +54,4 @@ contextBridge.exposeInMainWorld('mk10', {
   onCapture: on('capture'),
   clearRpc: call('clearRpc'),
   onRpc: on('rpc'),
-  onRpcWindow: on('rpcWindow'),
 })

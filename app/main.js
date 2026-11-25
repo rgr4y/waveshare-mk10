@@ -337,9 +337,8 @@ function setRpcWindow(on) {
     clearInterval(rpcHold)
     session.holdDevice(false).catch(() => {})
     if (app.isQuitting || !settings.jsonRpcWindow) return
-    settings.jsonRpcWindow = false // closed by hand: same as Disable
+    settings.jsonRpcWindow = false // closed by hand; left open at quit, it reopens at launch
     saveSettings().catch(() => {})
-    send('rpcWindow', false)
   })
   w.loadFile(join(import.meta.dirname, 'public', 'rpc.html'))
 }
