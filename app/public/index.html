@@ -14,10 +14,11 @@
       <button id="btn-open" type="button">Open…</button>
       <button id="btn-save" type="button" disabled>Save</button>
       <button id="btn-push" type="button" class="primary" disabled>Push to device</button>
+      <button id="btn-pull" type="button" title="Download the theme the device loads (LilAlpine, ssh) and open it">Pull</button>
     </div>
     <button id="mcp-badge" type="button" class="badge" hidden title="MCP server running (Settings)">MCP</button>
     <div id="status" class="status" data-state="idle">Ready</div>
-    <button id="btn-pull" type="button" title="Download the theme the device loads (LilAlpine, ssh) and open it">Pull from device</button>
+    <label class="brightness" title="Device brightness (USB serial). Starts at the last value set here; the device can't report its own."><span>Brightness</span><input id="brightness" type="range" min="0" max="100" step="1"></label>
     <button id="btn-settings" type="button" title="Settings (Cmd+,)">Settings</button>
     <button id="btn-device" type="button" popovertarget="device-pop" title="Device connection settings">Device: <span id="device-mode"></span></button>
     <div id="device-pop" class="device-pop" popover>

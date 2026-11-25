@@ -356,6 +356,7 @@ function registerIpc() {
   h('setBackgroundVideo', setBackgroundVideo)
   h('push', push)
   h('pull', pull)
+  h('setBacklight', (level) => session.setBacklight(level))
   h('fonts', () => fonts)
   h('syncFonts', syncFonts)
   h('keyOp', keyOp)

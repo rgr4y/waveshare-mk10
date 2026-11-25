@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('mk10', {
   setBackgroundVideo: call('setBackgroundVideo'),
   push: call('push'),
   pull: call('pull'),
+  setBacklight: call('setBacklight'),
   keyRaw: call('keyRaw'),
   setKeyRaw: call('setKeyRaw'),
   frames: call('frames'),

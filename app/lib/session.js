@@ -366,6 +366,24 @@ export class Session extends EventEmitter {
     return target
   }
 
+  // Panel brightness 0-100 over the USB serial JSON API ({"method":"setBacklight","parameters":{"level":N}},
+  // vendor demo mainwindow.cpp:755). Both firmwares run the vendor app, so serial works on either.
+  async setBacklight(level) {
+    if (this.pushing) throw new Error('push in progress: brightness waits until it finishes')
+    const n = Math.round(Number(level))
+    if (!(n >= 0 && n <= 100)) throw new Error(`brightness must be 0-100, got ${level}`)
+    const path = (await Device.list())[0]?.path
+    if (!path) throw new Error('MK10 serial port not found (is it plugged in? is ScreenKey running?)')
+    const dev = new Device()
+    await dev.open(path)
+    try {
+      await dev.call('setBacklight', { level: n })
+    } finally {
+      await dev.close()
+    }
+    return n
+  }
+
   // Verified recipe (docs/theme-format.md, Device verification): copy theme, point
   // config.json defaultTheme at it, restart KeyboardDevice. LilAlpine only (needs ssh).
   async pushSsh({ host, remote } = DEFAULT_SSH, log = () => {}) {

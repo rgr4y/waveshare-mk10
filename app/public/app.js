@@ -133,6 +133,7 @@ function renderTop() {
   $('btn-save').disabled = !has
   $('btn-push').disabled = !has || !!s.pushing
   $('btn-pull').disabled = !!s.pushing
+  $('brightness').disabled = !!s.pushing
   // device settings stay as they were for the push in flight
   for (const id of ['push-mode', 'ssh-host', 'ssh-remote']) $(id).disabled = !!s.pushing
   $('empty').hidden = has
@@ -590,6 +591,14 @@ async function init() {
   $('btn-settings').addEventListener('click', openSettings)
   $('btn-capture').addEventListener('click', () => run(window.mk10.openCapture()))
   $('btn-pull').addEventListener('click', () => run(window.mk10.pull()))
+  // the device has no brightness getter, so the slider starts where it was last set from here
+  let bl = 50
+  try { bl = Number(localStorage.getItem('brightness') ?? 50) } catch { /* storage unavailable */ }
+  $('brightness').value = bl
+  $('brightness').addEventListener('change', (e) => run(window.mk10.setBacklight(Number(e.target.value)).then((n) => {
+    try { localStorage.setItem('brightness', String(n)) } catch { /* not persisted */ }
+    setStatus({ msg: `Brightness ${n}` })
+  })))
   $('raw-json').addEventListener('input', (e) => { e.target.dataset.dirty = 'true' })
   $('btn-raw-revert').addEventListener('click', () => loadRaw(true))
   $('btn-raw-apply').addEventListener('click', async () => {
