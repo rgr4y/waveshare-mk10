@@ -46,9 +46,9 @@ IOHIDManagerRegisterInputValueCallback(manager, { _, _, _, value in
   if usage == 0 || usage == 0xFFFF_FFFF { return }
   // generic desktop on a keyboard device is mostly pointer noise; keep only System Control (0x80-0x9F)
   if page == kHIDPage_GenericDesktop && !(0x80...0x9F).contains(usage) { return }
-  // Karabiner's virtual keyboard shows up as two HID devices with the same name, and both report every
-  // value (VirtualHIDKeyboard 1.8.0, same element cookie, 2026-11-24). Raw HID has no auto-repeat, so a
-  // key can't go down (or up) twice in a row: drop a value equal to the last one seen for the same
+  // A device that matches two of the matching dictionaries (keyboard and consumer control) is added
+  // twice, same registry ID (seen 2026-11-24), so every value arrives twice. Raw HID has no auto-repeat,
+  // so a key can't go down (or up) twice in a row: drop a value equal to the last one seen for the same
   // device name, element cookie and usage.
   let device = IOHIDElementGetDevice(el)
   let key = "\(product(device)) \(IOHIDElementGetCookie(el)) \(page) \(usage)"
