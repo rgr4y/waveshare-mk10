@@ -762,3 +762,46 @@ Verification
   - Gauges (types 101/109) render nothing like the device; needs its own pass.
   - Text clock size not re-measured after the last trim.
   - Open decisions from 2026-11-24 still stand (Phase 3b serial key events, Auto mode fallback, volume keycode mapping, Karabiner error label, info panel image setter), plus repo remote and the backup bundle.
+
+## 2026-11-25 — Studio: audio, soundboard, Monaco raw JSON, toasts
+
+- Outcome
+  - Studio (waveshare-mk10):
+    - `bcde881`: top bar shows Pull right of Push, with a Brightness slider (`setBacklight` 0–100) where Pull was.
+    - `933b461`: Volume slider (`setVolume` 0–7). Brightness and Volume share one serial setter and are disabled while pushing.
+    - `887ba89`: Sound row in the key Inspector (Choose…, Play, Clear). Choose… converts any audio to 48 kHz stereo 16-bit WAV with ffmpeg and stores it as `/sound/<name>.wav`. A clash with different content gets a `-2` suffix. `setKeySound` has a unit test.
+    - `55d9b35`, `ea4f7ca`: Raw JSON editor shows on every key and follows the selected key (an unapplied draft is discarded on switch, with a status note).
+    - `0f8896b`, `15830f4`: clicking the raw JSON (or Edit…) opens a Monaco modal (monaco-editor pinned at 0.57.0, 50vw wide, Cmd+Enter applies). The older AMD loader is deprecated upstream.
+    - `be5f8bf`: `tools/build-soundboard.mjs` and `tools/soundboard-icons.py` build a soundboard into an empty top-level Page 5: 36 sounds from `~/workspace/lolf.art/public/sounds`, 8 per page, 4 folders under Page 5, Next/First/Home keys, three drawn icons. Sound keys use keyboard keycode 0. Output: `~/Documents/mk10studio-soundboard.Theme`; the original was left untouched.
+    - `f84560c`, `e9ade4f`: status shown as toasts stacked at the canvas's top right (max 4; busy toasts update in place; 3.5 s, errors 8 s). The top bar no longer wraps.
+    - `72dc808`: Settings > Developer > JSON RPC window. A separate window shows every JSON-RPC message Studio's serial `Device` sends or receives (`wire` emitter in `lib/device.js`), as formatted JSON in a read-only Monaco view. It replays the last 500 messages and shortens long strings.
+    - Docs: sound/speaker/mixer notes in `docs/theme-format.md` (`ea3c6a0`, `f27cf4f`, `1f271e8`); sound plan in Phase 3b of `docs/screenkey-rewrite-scope.md` (`effe1df`).
+  - LilAlpine (`~/workspace/luckfox/LilAlpine`, not pushed):
+    - `mk10-mixer` OpenRC boot service applies the stock firmware's mixer values (`6a1add7`).
+    - The stock `tiny*` binaries live in `/usr/libexec/mk10` (first on `KeyboardDevice`'s PATH) with `/usr/local/bin` symlinks (`a16e0ee`).
+    - `tinyplay` is now a wrapper that runs `aplay` through dmix (`/etc/asound.conf`), so key sounds overlap (`eb26205`); it finds the file wherever it sits in the argument list (`830abc2`).
+    - `alsa-utils` was added to the base package list (`eb26205`). The next image build needs `REBUILD_BASE=y`.
+    - Alpine `tinyalsa` was added then reverted (`a4e068a`, `3fe174e`).
+    - `8bc8b24`: `mk10-reboot-wdt` in the shutdown runlevel arms `/dev/watchdog` for 10 s after all services stop, and leaves it unfed (busybox `watchdog`, then SIGKILL so there is no magic close). A hung PSCI reset still ends in a watchdog reset. Busybox init runs `openrc shutdown` for reboot and poweroff alike, so poweroff also resets. Installed live with `rc-update add mk10-reboot-wdt shutdown`.
+- Root cause
+  - Silent key sounds: Alpine's `tinyalsa` 2.0.0 `tinyplay` never starts the stream on this kernel's sunxi codec (PCM stays in SETUP, `hw_ptr` 0, exit 0). The stock glibc `tinyplay` plays the same file.
+  - Sounds broke after the dmix wrapper: the vendor app calls `tinyplay -D 0 -d 0 <file>` (options first), and the wrapper took `$1` as the file.
+  - Raw JSON "not in this theme" for an scp'd sound: sounds must be embedded in the theme.
+- Findings
+  - Stock `/etc/rc.local` mixer values (LINEOUT on, mic boost and gain) were not applied on LilAlpine.
+  - Stock `tinymix` exits 0 even when a set fails; `mk10-mixer` treats any output as failure.
+  - `setVolume` N sets the mixer's `Headphone volume` to N, verified at 2 and 7. `setBacklight` appears to save `deviceBl` (a `config.json` rewrite was observed); not confirmed.
+  - Theme paths `/image`, `/static` and `/sound` resolve under `/data`; the push writes embedded files into `/data/...`.
+  - The vendor demo's `keyStateChanged` handling (`mainwindow.cpp:567`) reads only `col`, `row` and `pressed`. Extra fields are not echoed. Whether V1 cmd 13 `keyState` frames carry the key's action is untested.
+- Verification
+  - Lint clean and 25 tests pass at the code commits. Screenshots checked for the Monaco modal, the Sound row, the soundboard pages, and the toasts at 980 and 1300 px.
+  - On the device (Rob): sound keys play and overlap and type nothing; soundboard Next, First and Home work; Brightness and Volume sliders change the device; Choose… then push gives a key a sound; Apply in the JSON modal works.
+  - Not verified: a LilAlpine reboot with the new services (the mixer service did survive an earlier reboot), an image build.
+  - Watchdog-only reset (Rob): `watchdog -T 5 -t 600 /dev/watchdog`, never fed. Down after 5 s, ping back after 26 s, fresh boot.
+  - JSON RPC window: driven over CDP. Settings toggle opens it, replayed and appended entries render in Monaco, untick closes it. `Device.call` emits `tx` before writing. Not checked against live device traffic.
+  - Not verified: `reboot` with `mk10-reboot-wdt` installed.
+- Follow-up
+  - Reboot: `mk10-reboot-wdt` covers a hang without proving one exists (the guess is that PSCI `SYSTEM_RESET` at priority 129 hangs before `sunxi_wdt_restart` at 128). Test `reboot` once. A kernel priority change on chonk is the cleaner fix if the hang is real.
+  - Phase 3b page tracking: unique per-page keycodes versus a V1 cmd 13 listen with `mkv1.py`. The 3b/3c bead list still needs Rob's verdicts.
+  - Device leftovers in `/data/theme/MK10`: `mk10test.Theme`, `mk10ctl.Theme`, `mk10studio-1795571497354.Theme`, plus test WAVs in `/tmp` (deletion not yet approved).
+  - Small items: drop an audio file onto a key, MCP `set_key_sound`, folder names in the sidebar, slider icons, Monaco 0.58 later, gauges, clock size, repo remote (secrets check first).

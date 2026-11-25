@@ -166,3 +166,15 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 - [x] Quit with unpushed edits: Push to Device…, Discard and Cancel each work.
 - [x] Device fonts: deleting the cache and pulling copies them back; the Settings button re-copies.
 - [x] Capture keys (Settings): the QMK column fills for normal keys and F-keys.
+
+### Checked on the device (LilAlpine, ssh), 2026-11-25, sound and levels
+- [x] Sound keys play, overlap each other (dmix), and type nothing.
+- [x] Soundboard: Next, First (last page) and Home keys.
+- [x] Brightness and Volume sliders change the device.
+- [x] Inspector Sound > Choose…, then push: the key plays the new sound.
+- [x] Monaco raw JSON modal: Apply changes the key.
+- [x] Watchdog-only reset: `watchdog -T 5 -t 600 /dev/watchdog` (never fed). Down after 5 s, ping back after 26 s, fresh boot (`uptime` 0 min).
+
+### Still to check
+- [ ] `reboot` with `mk10-reboot-wdt` installed (shutdown runlevel): the device is back within ~40 s. `poweroff` also ends in a reset (expected).
+- [ ] Settings > Developer > JSON RPC window: move the Volume slider. A `setVolume` → and its ack ← appear. A serial push shows `saveToFile` with shortened `data`. Closing the window unticks the setting.
