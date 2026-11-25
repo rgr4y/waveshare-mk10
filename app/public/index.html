@@ -37,6 +37,7 @@
     </aside>
 
     <section class="stage" id="stage">
+      <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
       <div id="empty" class="empty" hidden>
         <p>Open a ScreenKey <code>.Theme</code> to start.</p>
         <button id="btn-open-stock" type="button" class="primary" hidden>Open stock defaultTheme</button>
@@ -214,7 +215,7 @@
   <template id="tpl-kv"><div class="kv-row"><dt></dt><dd></dd></div></template>
   <template id="tpl-kv-select"><div class="kv-row"><dt></dt><dd><select></select></dd></div></template>
   <template id="tpl-option"><option></option></template>
+  <template id="tpl-toast"><div class="toast" title="Click to dismiss"></div></template>
   <template id="tpl-kv-edit"><div class="kv-row"><dt></dt><dd><input type="text" spellcheck="false"></dd></div></template>
-  <div id="status" class="toast" data-state="idle" role="status" aria-live="polite" title="Click to dismiss" hidden></div>
 </body>
 </html>

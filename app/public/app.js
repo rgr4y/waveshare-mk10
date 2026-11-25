@@ -17,15 +17,25 @@ const ANY_MEDIA_RE = new RegExp(`${IMAGE_RE.source}|${VIDEO_RE.source}`, 'i')
 const base = (p) => String(p).split('/').pop()
 
 // ---- status / log
-// Status toast (bottom right): busy stays until the next status, others fade out; click dismisses.
-let toastTimer
+// Status toasts, stacked top right inside the canvas. A busy toast (push, transcode) is reused by the
+// next status, so "Pushing…" turns into its result; others go after 3.5 s (errors 8 s); click dismisses.
+const TOAST_MAX = 4
+let busyToast = null
 function setStatus({ msg, busy, error }) {
-  const el = $('status')
+  if (!msg) return
+  const box = $('toasts')
+  let el = busyToast?.isConnected ? busyToast : null
+  if (!el) {
+    el = $('tpl-toast').content.firstElementChild.cloneNode(true)
+    el.addEventListener('click', () => el.remove())
+    box.append(el)
+    while (box.children.length > TOAST_MAX) box.firstElementChild.remove()
+  }
   el.textContent = msg
   el.dataset.state = error ? 'error' : busy ? 'busy' : 'idle'
-  el.hidden = !msg
-  clearTimeout(toastTimer)
-  if (!busy) toastTimer = setTimeout(() => { el.hidden = true }, error ? 8000 : 3500)
+  clearTimeout(el.timer)
+  busyToast = busy ? el : null
+  if (!busy) el.timer = setTimeout(() => el.remove(), error ? 8000 : 3500)
 }
 
 function addLog(line) {
@@ -687,7 +697,6 @@ async function init() {
   $('btn-open-stock').hidden = !cfg.stockDir
 
   window.mk10.onStatus(setStatus)
-  $('status').addEventListener('click', (e) => { e.currentTarget.hidden = true })
   window.mk10.onLog(addLog)
   // a select sent right after an open must land after that open's page reset, not before it
   let changing = Promise.resolve()

@@ -58,9 +58,10 @@ h3 { margin: var(--sp-4) 0 var(--sp-2); font-size: 12px; color: var(--text); fon
 @media (max-width: 1100px) { .level span { display: none; } }
 @media (max-width: 900px) { .level input { width: 60px; } .topbar { gap: var(--sp-2); } }
 
-/* status toast */
-.toast { position: fixed; right: var(--sp-4); bottom: var(--sp-4); z-index: 100; max-width: min(480px, calc(100vw - 32px)); padding: var(--sp-2) var(--sp-3); background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-left: 3px solid var(--muted); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .45); font-size: 12px; overflow-wrap: anywhere; cursor: pointer; }
-.toast[hidden] { display: none; }
+/* status toasts: a column at the canvas's top right */
+.stage { position: relative; }
+.toasts { position: absolute; top: var(--sp-3); right: var(--sp-3); z-index: 100; display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-2); max-width: min(420px, calc(100% - 2 * var(--sp-3))); pointer-events: none; }
+.toast { pointer-events: auto; padding: var(--sp-2) var(--sp-3); background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-left: 3px solid var(--muted); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .45); font-size: 12px; overflow-wrap: anywhere; cursor: pointer; }
 .toast[data-state=busy] { border-left-color: var(--warn); }
 .toast[data-state=error] { border-left-color: var(--err); color: var(--err); }
 
