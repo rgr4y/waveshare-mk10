@@ -1,7 +1,7 @@
 // Electron main: owns the single Session; all edits (UI, MCP) go through it.
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, shell, systemPreferences, Tray } from 'electron'
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
-import { existsSync, mkdirSync, watch } from 'node:fs'
+import { existsSync, mkdirSync, statSync, watch } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
 import { execFileSync, spawn } from 'node:child_process'
 import { createInterface } from 'node:readline'
@@ -174,7 +174,7 @@ const HIDTAP = join(import.meta.dirname, 'native', 'build', 'hidtap')
 let capWin = null
 
 function startHidtap(sendCap) {
-  if (!existsSync(HIDTAP)) {
+  if (!existsSync(HIDTAP) || statSync(HIDTAP).mtimeMs < statSync(HIDTAP_SRC).mtimeMs) {
     // ponytail: compiled on first use with swiftc; packaging builds it ahead (Phase 5)
     sendCap({ t: 'log', msg: 'building native/build/hidtap with swiftc…' })
     try {

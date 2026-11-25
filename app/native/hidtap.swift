@@ -26,6 +26,7 @@ if IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) != kIOHIDAccessTypeGranted {
 }
 emit(["t": "access", "status": names[IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)] ?? "unknown"])
 
+var lastValue: [String: Int] = [:]
 let manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
 // keyboards, consumer control (media/volume/brightness), system control (power/sleep)
 let matching: [[String: Int]] = [
@@ -45,7 +46,14 @@ IOHIDManagerRegisterInputValueCallback(manager, { _, _, _, value in
   if usage == 0 || usage == 0xFFFF_FFFF { return }
   // generic desktop on a keyboard device is mostly pointer noise; keep only System Control (0x80-0x9F)
   if page == kHIDPage_GenericDesktop && !(0x80...0x9F).contains(usage) { return }
-  emit(["t": "hid", "page": page, "usage": usage, "value": v, "device": product(IOHIDElementGetDevice(el))])
+  // Karabiner's virtual keyboard delivers each value twice, back to back (VirtualHIDKeyboard 1.8.0,
+  // 2026-11-24). Raw HID has no auto-repeat, so a key can't go down (or up) twice in a row: drop a value
+  // equal to the last one seen for the same device and usage.
+  let device = IOHIDElementGetDevice(el)
+  let key = "\(Unmanaged.passUnretained(device).toOpaque()) \(page) \(usage)"
+  if lastValue[key] == v { return }
+  lastValue[key] = v
+  emit(["t": "hid", "page": page, "usage": usage, "value": v, "device": product(device), "cookie": Int(IOHIDElementGetCookie(el))])
 }, nil)
 
 IOHIDManagerScheduleWithRunLoop(manager, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
