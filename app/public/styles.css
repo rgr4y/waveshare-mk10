@@ -202,7 +202,8 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 .kv-row { display: grid; grid-template-columns: 96px 1fr; gap: var(--sp-2); }
 .kv dt { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
 .kv dd { margin: 0; word-break: break-all; user-select: text; }
-.kv dd input { padding: var(--sp-1) var(--sp-1-5); }
+.kv dd input, .kv dd select { padding: var(--sp-1) var(--sp-1-5); }
+.kv dd select { width: 100%; min-width: 0; }
 .perms .kv-row { grid-template-columns: 128px 1fr; align-items: center; }
 .perms dd { display: flex; align-items: center; gap: var(--sp-2); word-break: normal; }
 .perm { color: var(--muted); }

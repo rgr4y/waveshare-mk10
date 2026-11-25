@@ -332,14 +332,34 @@ function fieldLabel(type, k) {
   return (words[0].toUpperCase() + words.slice(1)).replace(/\burl\b/gi, 'URL')
 }
 
-function fillKv(dl, rows, onEdit) {
+// openPage.pageName is a page's UUID: pick it from the page list instead (labels as in the sidebar)
+function pageOptions(current) {
+  const pages = ui.summary.pages ?? []
+  // sidebar order: each top-level page, then its folders (depth-first)
+  const tree = (p, trail) => [[p.name, `${trail}${pageName(p)} (${pageSummary(p)})`],
+    ...pages.filter((c) => c.parentIndex === p.index).flatMap((c) => tree(c, `${trail}${pageName(p)} › `))]
+  const opts = topPages().flatMap((p) => tree(p, ''))
+  if (current && !opts.some(([v]) => v === current)) opts.unshift([current, `missing page ${current}`])
+  return opts
+}
+
+function fillKv(dl, rows, onEdit, choices = {}) {
   // keep a field the user is typing in: don't rebuild under an active input
-  if (dl.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') return
+  if (dl.contains(document.activeElement) && ['INPUT', 'SELECT'].includes(document.activeElement.tagName)) return
   dl.replaceChildren(...rows.map(([k, v, editable, label]) => {
-    const r = tpl(editable && onEdit ? 'tpl-kv-edit' : 'tpl-kv')
+    const pick = editable && onEdit && choices[k]
+    const r = tpl(pick ? 'tpl-kv-select' : editable && onEdit ? 'tpl-kv-edit' : 'tpl-kv')
     r.querySelector('dt').textContent = label ?? k
     if (label) r.querySelector('dt').title = k
-    const input = r.querySelector('input')
+    const input = r.querySelector('input, select')
+    if (pick) {
+      input.replaceChildren(...choices[k](v).map(([val, text]) => {
+        const o = tpl('tpl-option')
+        o.value = val
+        o.textContent = text
+        return o
+      }))
+    }
     if (input) {
       input.value = v
       input.dataset.field = k
@@ -423,7 +443,8 @@ function renderInspector() {
     $('insp-raw').hidden = !needsRaw(key)
     if (needsRaw(key)) loadRaw()
     fillKv($('key-action'), actionRows(key.action), (field, value) =>
-      run(window.mk10.setKeyActionField(ui.page, sel.row, sel.col, field, value)))
+      run(window.mk10.setKeyActionField(ui.page, sel.row, sel.col, field, value)),
+    key.action?.type === 'openPage' ? { pageName: pageOptions } : {})
   }
   if (vid) fillKv($('video-info'), [['asset', base(vid.path ?? '(none)')], ['size', '640 × 256']])
 }
