@@ -232,7 +232,11 @@ config.json restored byte-identical to backup (sha 99def778...) via stop / scp /
 ### Key sound effects and speaker volume (2026-11-24)
 - From strings in `KeyboardDevice`, not yet tested: a key's `soundFile` is played by an `AudioPlayer` class that runs `tinyplay <file> -D <card> -d <device>`. Volume comes from `config.json` `deviceVolume` (JSON `setVolume {level}`; the vendor demo slider is 0-7), applied with `tinymix set "Headphone volume" <n>`. The mapping from 0-7 to the mixer value is unknown.
 - The only sound card is `audiocodec` (`/proc/asound/cards`).
-- Stock Tina ships tinyalsa in `/usr/bin`; LilAlpine did not, so sound effects and volume silently did nothing. Rob installed `tinyalsa` on the device by hand (2026-11-24). The LilAlpine base image has it from commit `a4e068a` on.
+- Stock Tina ships tinyalsa in `/usr/bin`; LilAlpine did not, so sound effects and volume silently did nothing.
+- Alpine's `tinyalsa` 2.0.0 does not work here: its `tinyplay` never starts the stream (pcm stays in `SETUP`, `hw_ptr` 0, exits 0 after 0.35 s), so only the amp click is heard. Its `tinymix` works.
+- LilAlpine therefore ships the four stock tools (`tinycap tinymix tinypcminfo tinyplay`, glibc, tinyalsa built in) in `/usr/libexec/mk10`, which is first on `KeyboardDevice`'s PATH. `/usr/local/bin` has symlinks for the shell. Verified 2026-11-24: playback works (`tinyplay <wav> -D 0 -d 0`).
+- The stock `tinymix` exits 0 even when a set fails ("Invalid mixer control"). A set that works prints nothing.
+- The stock `/etc/rc.local` sets the codec at boot: LINEOUT on, `DAC_DIFFER`, volume 25; mic boost on; mic gain 19/19/0. LilAlpine's `mk10-mixer` OpenRC boot service applies the same values.
 
 ### Live data push (verified on MK10, 2026-11-24)
 - Old-style (V1) frame, **cmd 1** (`SEND_SYSTEM_DATA_TO_DEVICE`). The payload is a map: u32 BE count, then for each pair a u32 BE byte length plus a UTF-16BE key, and a u32 BE byte length plus a UTF-16BE value. Same as Terminus-MK20 §5.1/§5.3.
