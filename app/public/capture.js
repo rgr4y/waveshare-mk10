@@ -59,7 +59,7 @@ window.mk10.onCapture((o) => {
     return
   }
   if (o.t === 'open') {
-    $('cap-devices').textContent = o.result === 0 ? `${o.devices.length} devices: ${o.devices.join(', ')}` : `IOHIDManagerOpen returned ${hex(o.result >>> 0, 8)}`
+    $('cap-devices').textContent = o.result === 0 ? `${o.devices.length} devices: ${o.devices.join(', ')}` : `IOHIDManagerOpen returned ${hex(o.result >>> 0, 8)}; ${o.devices.length} devices: ${o.devices.join(', ')}`
     return
   }
   addRow(o.t === 'error' ? 'Error' : 'Log', '', '', o.msg, '')

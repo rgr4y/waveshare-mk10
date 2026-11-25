@@ -46,11 +46,12 @@ IOHIDManagerRegisterInputValueCallback(manager, { _, _, _, value in
   if usage == 0 || usage == 0xFFFF_FFFF { return }
   // generic desktop on a keyboard device is mostly pointer noise; keep only System Control (0x80-0x9F)
   if page == kHIDPage_GenericDesktop && !(0x80...0x9F).contains(usage) { return }
-  // Karabiner's virtual keyboard delivers each value twice, back to back (VirtualHIDKeyboard 1.8.0,
-  // 2026-11-24). Raw HID has no auto-repeat, so a key can't go down (or up) twice in a row: drop a value
-  // equal to the last one seen for the same device and usage.
+  // Karabiner's virtual keyboard shows up as two HID devices with the same name, and both report every
+  // value (VirtualHIDKeyboard 1.8.0, same element cookie, 2026-11-24). Raw HID has no auto-repeat, so a
+  // key can't go down (or up) twice in a row: drop a value equal to the last one seen for the same
+  // device name, element cookie and usage.
   let device = IOHIDElementGetDevice(el)
-  let key = "\(Unmanaged.passUnretained(device).toOpaque()) \(page) \(usage)"
+  let key = "\(product(device)) \(IOHIDElementGetCookie(el)) \(page) \(usage)"
   if lastValue[key] == v { return }
   lastValue[key] = v
   emit(["t": "hid", "page": page, "usage": usage, "value": v, "device": product(device), "cookie": Int(IOHIDElementGetCookie(el))])
@@ -59,7 +60,13 @@ IOHIDManagerRegisterInputValueCallback(manager, { _, _, _, value in
 IOHIDManagerScheduleWithRunLoop(manager, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
 let result = IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone))
 let devices = (IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice>) ?? []
-emit(["t": "open", "result": Int(result), "devices": Array(Set(devices.map(product))).sorted()])
+func registryID(_ d: IOHIDDevice) -> UInt64 {
+  var id: UInt64 = 0
+  IORegistryEntryGetRegistryEntryID(IOHIDDeviceGetService(d), &id)
+  return id
+}
+// every matched device (names can repeat: one physical device may expose several HID services)
+emit(["t": "open", "result": Int(result), "devices": devices.map { "\(product($0)) [\(registryID($0))]" }.sorted()])
 
 Thread {
   while readLine() != nil {}
