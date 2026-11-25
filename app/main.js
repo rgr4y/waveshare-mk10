@@ -281,6 +281,8 @@ async function keyMenu(page, row, col, hasKey) {
     { label: 'Paste', enabled: canPaste, click: go('paste') },
     { type: 'separator' },
     { label: 'Delete Key', enabled: hasKey, click: go('delete') },
+    { type: 'separator' },
+    { label: 'Press Key', enabled: hasKey, click: () => send('press', { page, row, col }) },
   ]).popup({ window: win })
 }
 

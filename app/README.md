@@ -38,6 +38,12 @@ Cmd+X / Cmd+C / Cmd+V act on the selected key or slot, Backspace/Delete clears i
 last cut, paste or delete (up to 20; any other edit clears the undo list). The clipboard holds the key
 as plain-text JSON with its images embedded, so it pastes into another theme or another running copy.
 Paste replaces the key in the target slot or fills an empty one. MCP: `copy_key` and `paste_key`.
+A cell covered by a key-area widget (clock digits, GIF, gauge) is not empty: the editor draws it and
+Paste refuses it.
+
+Right-click > Press Key follows a navigation key in the editor: openPage opens its folder, oneLevelUp
+goes to the parent, pageSwitch (pageSwitchMode 0) goes to top-level page `jumpToPage`. Other actions run
+on the device or host, so the status line only names them.
 
 ### Key capture (proof of concept)
 The red **Capture keys** button opens a window that logs every key press from two sources: what the app

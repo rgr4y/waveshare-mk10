@@ -68,6 +68,8 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 ## 5b. Key clipboard
 
 - [ ] Right-click a key: Cut, Copy, Paste, Delete Key. On an empty slot only Paste is enabled, and only after a key was copied.
+- [ ] Clock page / GIF folder: cells with widgets but no key show the widget; the Inspector names it; Paste there fails with "holds a widget".
+- [ ] Right-click > Press Key on a folder key opens the folder, on oneLevelUp returns to the parent, on a pageSwitch key goes to the page the device goes to (checks the jumpToPage numbering guess).
 - [ ] Copy a key, click an empty slot, Cmd+V: the key appears there with its image and title. The status says "Paste key r… c…: done".
 - [ ] Cut a GIF key, paste it on another page: it still animates (frames come along).
 - [ ] Delete or Backspace on a selected key empties the slot. Cmd+Z brings it back. Cmd+Z after a title edit says "nothing to undo".

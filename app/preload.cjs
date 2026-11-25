@@ -38,6 +38,7 @@ contextBridge.exposeInMainWorld('mk10', {
   onStatus: on('status'),
   onLog: on('log'),
   onSelect: on('select'),
+  onPress: on('press'),
   onMcp: on('mcp'),
   onOpenSettings: on('openSettings'),
   onEdit: on('edit'),

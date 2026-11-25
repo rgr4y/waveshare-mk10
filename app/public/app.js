@@ -60,6 +60,23 @@ const topPages = () => (ui.summary.pages ?? []).filter((p) => p.parentIndex === 
 const opener = (p) => keyItems(ui.summary.pages?.[p.parentIndex])
   .find((k) => k.action?.type === 'openPage' && k.action.pageName === p.name)
 
+// "Press Key" in the editor: follow page-navigation actions (openPage, oneLevelUp, pageSwitch with
+// pageSwitchMode 0). Anything else runs on the device or host, so the editor only says so.
+function pressKey(page, row, col) {
+  const pages = ui.summary.pages ?? []
+  const a = keyAt(pages[page], row, col)?.action
+  if (!a) return
+  let to
+  if (a.type === 'openPage') to = pages.findIndex((p) => p.name === a.pageName)
+  else if (a.type === 'oneLevelUp') to = pages[page].parentIndex ?? -1
+  else if (a.type === 'pageSwitch' && Number(a.pageSwitchMode) === 0) to = topPages()[Number(a.jumpToPage)]?.index ?? -1
+  else return setStatus({ msg: `Press: ${a.type}${a.type === 'pageSwitch' ? ` (pageSwitchMode ${a.pageSwitchMode})` : ''} has no editor preview` })
+  if (to < 0) return setStatus({ error: true, msg: `Press: ${a.type} target not found in this theme` })
+  ui.page = to
+  ui.sel = { kind: 'page' }
+  render()
+}
+
 function pageName(p) {
   if (p.parentIndex === undefined) return `Page ${topPages().indexOf(p)}`
   return (opener(p)?.title ?? '').trim() || 'Folder'
@@ -456,6 +473,7 @@ async function init() {
   // a select sent right after an open must land after that open's page reset, not before it
   let changing = Promise.resolve()
   window.mk10.onChange((e) => { changing = onChange(e) })
+  window.mk10.onPress(({ page, row, col }) => pressKey(page, row, col))
   window.mk10.onSelect(async ({ page, row, col }) => {
     await changing.catch(() => {})
     ui.page = page
