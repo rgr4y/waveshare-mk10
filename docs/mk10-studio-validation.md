@@ -5,51 +5,51 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 
 ## 0. Setup
 
-- [ ] Quit ScreenKeyMacOS. It holds the serial port.
-- [ ] `cd app && npm install && npm start`. The window opens and the log panel shows no errors.
-- [ ] `ffmpeg -version` works. It is needed for image and video replacement.
-- [ ] MK10 is plugged in over USB. `ls /dev/cu.usbmodemMK10*` lists the port.
-- [ ] Baseline: the device shows the stock layout, and the video is playing.
+- [x] Quit ScreenKeyMacOS. It holds the serial port.
+- [x] `cd app && npm install && npm start`. The window opens and the log panel shows no errors.
+- [x] `ffmpeg -version` works. It is needed for image and video replacement.
+- [x] MK10 is plugged in over USB. `ls /dev/cu.usbmodemMK10*` lists the port.
+- [x] Baseline: the device shows the stock layout, and the video is playing.
 - [ ] Optional backup before pushing: `scp root@10.0.1.48:/mnt/SDCARD/config.json /tmp/config.json.bak`
 
 ## 1. Open
 
 - [ ] First run, with no last file: the empty state shows **Open stock defaultTheme**. Clicking it opens the stock theme.
-- [ ] **Open…** starts in the stock ScreenKey theme dir. Pick `defaultTheme.Theme`.
-- [ ] The page list shows every page. Child pages are nested under their parent, and the current page has a marker.
-- [ ] The preview shows the background video, key icons and titles, and the secondary panel widgets, roughly as the device does.
-- [ ] Click through every page. Nothing errors, and pages without a video show the "no video" placeholder.
-- [ ] Quit and relaunch. The last file reopens automatically.
+- [x] **Open…** starts in the stock ScreenKey theme dir. Pick `defaultTheme.Theme`.
+- [x] The page list shows every page. Child pages are nested under their parent, and the current page has a marker.
+- [x] The preview shows the background video, key icons and titles, and the secondary panel widgets, roughly as the device does.
+- [x] Click through every page. Nothing errors, and pages without a video show the "no video" placeholder.
+- [x] Quit and relaunch. The last file reopens automatically.
 - [ ] Open a non-theme file, for example a `.png` renamed to `.Theme`. A clear error appears in the status line or log, and the app keeps working.
 
 ## 2. Inspect
 
-- [ ] Click a key. The key gets a blue ring and tint, and the inspector shows position (page/row/col), thumbnail, title and action.
+- [x] Click a key. The key gets a blue ring and tint, and the inspector shows position (page/row/col), thumbnail, title and action.
 - [ ] **Show gaps between keys** (Settings) is on by default and draws a dark bezel between keys, empty slots included. Toggle it off, then relaunch: it stays off.
-- [ ] Check the action read-out on several keys: hotkey, page switch, URL/app. It looks sane, with no `undecodable`.
-- [ ] Click the video area. The inspector shows video info.
+- [x] Check the action read-out on several keys: hotkey, page switch, URL/app. It looks sane, with no `undecodable`.
+- [x] Click the video area. The inspector shows video info.
 - [ ] `Esc` (outside a text box) clears the selection.
 
 ## 2b. Edit: action values
 
-- [ ] An openWeb key (page 12, row 0 col 1) shows `Url` and `description` as text boxes. `type` stays plain text.
-- [ ] Change the Url and press Enter. The dirty dot appears. Reselecting the key shows the new value.
+- [x] An openWeb key (page 12, row 0 col 1) shows `Url` and `description` as text boxes. `type` stays plain text.
+- [x] Change the Url and press Enter. The dirty dot appears. Reselecting the key shows the new value.
 - [ ] Hotkey keys: `keyString` is not editable (it is paired with the int `keycode`).
 - [ ] openPage `pageName` set to a name that doesn't exist: you get the error "no page named …", and the theme is unchanged.
 - [ ] MCP `set_key_action_field` makes the same edits. `get_page` lists the editable fields under `action.editable`.
-- [ ] Device: change an openPage key's `pageName` to another child page, then push. Pressing the key opens that page.
+- [x] Device: change an openPage key's `pageName` to another child page, then push. Pressing the key opens that page.
 - [ ] Device and ScreenKey host: an edited openWeb Url opens the new URL. This needs a host app that runs actions, either vendor ScreenKey after the push or our Phase 3.
 
 ## 3. Edit: title
 
-- [ ] Change a key title in the inspector and press Enter or tab out. The preview updates, and the dirty dot appears.
+- [x] Change a key title in the inspector and press Enter or tab out. The preview updates, and the dirty dot appears.
 - [ ] Multi-line title, if supported by the key's titleParam: layout looks right.
 - [ ] Empty title: allowed, and the key shows no text.
 - [ ] Unicode and emoji title: preview renders. Check on the device after pushing (section 6).
 
 ## 4. Edit: key image
 
-- [ ] **Replace image…** with a PNG. The key and thumbnail update.
+- [x] **Replace image…** with a PNG. The key and thumbnail update.
 - [ ] JPEG, non-square, and large (4000px) images: cover-cropped to 128x128 with no distortion.
 - [ ] Drag-drop an image onto a key. The key shows a dashed outline on hover, and the image is replaced on drop.
 - [ ] Replace the **GIF key** (animated). It becomes the static first frame. Expected for now.
@@ -67,10 +67,10 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 
 ## 5b. Key clipboard
 
-- [ ] Right-click a key: Cut, Copy, Paste, Delete Key. On an empty slot only Paste is enabled, and only after a key was copied.
-- [ ] Clock page / GIF folder: cells with widgets but no key show the widget; the Inspector names it; Paste there fails with "holds a widget".
-- [ ] Right-click > Press Key on a folder key opens the folder, on oneLevelUp returns to the parent, on a pageSwitch key goes to the page the device goes to (jumpToPage numbering confirmed on the device 2026-11-25).
-- [ ] Copy a key, click an empty slot, Cmd+V: the key appears there with its image and title. The status says "Paste key r… c…: done".
+- [x] Right-click a key: Cut, Copy, Paste, Delete Key. On an empty slot only Paste is enabled, and only after a key was copied.
+- [x] Clock page / GIF folder: cells with widgets but no key show the widget; the Inspector names it; Paste there fails with "holds a widget".
+- [x] Right-click > Press Key on a folder key opens the folder, on oneLevelUp returns to the parent, on a pageSwitch key goes to the page the device goes to (jumpToPage numbering confirmed on the device 2026-11-25).
+- [x] Copy a key, click an empty slot, Cmd+V: the key appears there with its image and title. The status says "Paste key r… c…: done".
 - [ ] Cut a GIF key, paste it on another page: it still animates (frames come along).
 - [ ] Delete or Backspace on a selected key empties the slot. Cmd+Z brings it back. Cmd+Z after a title edit says "nothing to undo".
 - [ ] Cmd+C / Cmd+V inside the key title box and the MCP command box copy text, not keys.
@@ -85,7 +85,7 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 - [ ] Reopen `test.Theme`. All edits from sections 3–5 survived.
 - [ ] Unedited round trip: open `img/stock/defaultTheme.Theme`, Save As, then `shasum -a 256`. The output equals `88785d8b…` (SHA256SUMS.txt). The unit test covers this; spot-check it.
 - Note: the bundle `defaultTheme.Theme` was overwritten by an accidental ScreenKey save on 2026-11-24 (69 keys, sha `b5b75da0…`). The pristine copy is `img/stock/defaultTheme.Theme` (read-only, untracked, sha in SHA256SUMS.txt).
-- [ ] Quit (Cmd+Q) with unsaved edits. You get the "Unsaved changes" prompt. Cancel keeps the app; Discard quits. (Closing the window only hides it, see 7b.)
+- [x] Quit (Cmd+Q) with unsaved edits. You get the "Unsaved changes" prompt. Cancel keeps the app; Discard quits. (Closing the window only hides it, see 7b.)
 - [ ] Cmd+O, Cmd+S and Cmd+Shift+S work.
 
 ## 7. Push (USB serial)
@@ -99,7 +99,7 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 - [ ] Push with ScreenKeyMacOS running, so the port is busy. You get a clear error, not a hang.
 - [ ] Push with no device plugged in. The error is "MK10 serial port not found".
 - [ ] Unicode and emoji titles from section 3 render on the device.
-- [ ] Device reboot after a push. The pushed theme is still the active one.
+- [x] Device reboot after a push. The pushed theme is still the active one.
 
 ## 7b. Resident app
 
@@ -116,23 +116,23 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 
 ## 8. Push (ssh mode, LilAlpine only)
 
-- [ ] **Device: …** (top right) opens the device popover; click outside or press Esc to close. The button shows the push mode.
-- [ ] Switch the push mode to ssh. Host and remote fields persist across restart.
-- [ ] Push mode Auto: on LilAlpine the Activity log says `auto: LilAlpine detected` and the push goes over ssh; on stock firmware it says `stock firmware detected` and uses USB serial; with the device unplugged and off the network, the push fails with `no MK10 found`.
-- [ ] Push. The device restarts keyboard-device with about 10 s blank, then shows the edits, background video included. If the video player did not start, the log shows a warning (seen once, not reproduced).
+- [x] **Device: …** (top right) opens the device popover; click outside or press Esc to close. The button shows the push mode.
+- [x] Switch the push mode to ssh. Host and remote fields persist across restart.
+- [x] Push mode Auto: on LilAlpine the Activity log says `auto: LilAlpine detected` and the push goes over ssh; on stock firmware it says `stock firmware detected` and uses USB serial; with the device unplugged and off the network, the push fails with `no MK10 found`.
+- [x] Push. The device restarts keyboard-device with about 10 s blank, then shows the edits, background video included. If the video player did not start, the log shows a warning (seen once, not reproduced).
 - [ ] Wrong host gives a clean error within about 5 s (ConnectTimeout).
 
 ## 9. MCP
 
-- [ ] **Settings** button and Cmd+, both open Settings. Esc and **Done** close it.
+- [x] **Settings** button and Cmd+, both open Settings. Esc and **Done** close it.
 - [ ] Toggle MCP on in Settings. The `claude mcp add …` command appears and **Copy command** copies it. The green **MCP** badge shows in the top bar, and clicking it opens Settings. The setting persists across restart.
 - [ ] Turn off **Reopen last theme on launch** and relaunch: the app starts empty. Turn it back on.
-- [ ] `claude mcp add --transport http mk10 http://127.0.0.1:47110/mcp`, then in Claude: "show the theme pages". `get_theme` and `get_page` return sane data.
-- [ ] "Set key row 0 col 1 title to Hello". The UI updates live and the dirty dot appears. **[done 2026-11-24]**
-- [ ] "Set that key's image to <path>" and "use this video as background". The UI updates live. **[done 2026-11-24]**
+- [x] `claude mcp add --transport http mk10 http://127.0.0.1:47110/mcp`, then in Claude: "show the theme pages". `get_theme` and `get_page` return sane data.
+- [x] "Set key row 0 col 1 title to Hello". The UI updates live and the dirty dot appears. **[done 2026-11-24]**
+- [x] "Set that key's image to <path>" and "use this video as background". The UI updates live. **[done 2026-11-24]**
 - [ ] `get_asset` returns a key image that Claude can see.
 - [ ] `save_theme` on the stock bundle theme without a path returns an error, and the file is untouched.
-- [ ] `push_to_device` pushes using the push mode from the UI. **[done 2026-11-24]**
+- [x] `push_to_device` pushes using the push mode from the UI. **[done 2026-11-24]**
 - [ ] Change the port to something else and toggle off then on. It listens on the new port.
 - [ ] Port in use (`nc -l 47110` first): you get a clean error, and the toggle does not get stuck on.
 - [ ] Host header guard: `curl -H 'Host: evil.com' http://127.0.0.1:47110/mcp` is rejected.
@@ -141,9 +141,9 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 ## 10. Restore the device
 
 - [ ] Open the stock `defaultTheme.Theme` and push it. Or restore `config.json` from the backup and run `rc-service keyboard-device restart`.
-- [ ] Remove the test pushes:
+- [x] Remove the test pushes:
       `ssh root@10.0.1.48 'rm -f /data/theme/MK10/mk10studio-*.Theme'`
-- [ ] Known leak: each push extracts its new images and videos under `/data/image/MK10/cache/` and `/data/theme/MK10/MainScreen/`, and these are not cleaned up. List them and delete the ones the stock theme doesn't use. The stock videos are `2e37fe8c-….mp4` and `40624559-….mp4`.
+- [x] Known leak: each push extracts its new images and videos under `/data/image/MK10/cache/` and `/data/theme/MK10/MainScreen/`, and these are not cleaned up. List them and delete the ones the stock theme doesn't use. The stock videos are `2e37fe8c-….mp4` and `40624559-….mp4`.
 
 ## Not in scope yet (don't fail these)
 
