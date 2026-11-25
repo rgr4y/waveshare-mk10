@@ -28,8 +28,26 @@ Dev flags: `--open <file>`, `--select <page>,<row>,<col>` (or `<page>,video`), `
 Needs `ffmpeg` on PATH (`FFMPEG` env overrides).
 
 ### MCP
-Toggle "MCP" in the top bar (port default 47110, bound to 127.0.0.1). The URL is shown when on; point an
-MCP client at it. Edits made via MCP appear live in the UI.
+Off by default (the first-run dialog asks). Enable it in Settings (Cmd+,) or from the tray menu; port
+default 47110, bound to 127.0.0.1. The URL and the `claude mcp add` command show when on. Edits made via
+MCP appear live in the UI.
+
+### Resident app
+- **Tray**: a text-only "MK10" item in the menu bar. Menu: current theme name, Open MK10 Studio, Push to
+  device (disabled with no theme open), MCP server (checkbox, starts and stops it), Quit MK10 Studio.
+- **Close to tray**: the window's close button hides it; the theme, unsaved edits and MCP keep running.
+  The Dock icon shows only while the window is visible. Clicking the Dock icon or "Open MK10 Studio"
+  brings the window back.
+- **Quit**: Cmd+Q or the tray's Quit really quits. With unsaved edits it shows the window and asks
+  "Quit without saving?" (Cancel / Discard changes).
+- **Single instance**: launching a second copy focuses the running window instead.
+- **Start at login**: checkbox in Settings > General and in the first-run dialog. A login launch, or
+  `--hidden`, starts in the menu bar only (no window, no Dock icon). The OS login item is the source of
+  truth for the checkbox.
+- **Permissions**: Settings > Permissions is read-only. It shows Accessibility and Screen Recording
+  status (polled every 2 s while Settings is open) and Open buttons for the Accessibility, Screen
+  Recording and Automation panes in System Settings. Nothing is requested at startup. The Accessibility
+  button triggers the system prompt at most once per session, then opens the pane.
 
 ### Push to device
 "Push to device" encodes the in-memory theme and makes it the active layout. Mode is picked in the

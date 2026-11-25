@@ -653,3 +653,7 @@ Verification
 - Settings has a Permissions section: Accessibility and Screen Recording status (passive, polled every 2 s only while the dialog is open) and Open buttons for the Accessibility, Screen Recording and Automation panes. Accessibility Open calls the system prompt at most once per session, then opens the pane.
 - Verified: npm test (19 pass), lint clean, layout grep empty, `--settings` screenshot renders with statuses filled. `CGPreflightScreenCaptureAccess` symbol is present in the Electron framework binary, but I did not confirm that `getMediaAccessStatus('screen')` calls it.
 - Unverified by hand: pane deep links, grant pickup, and that opening Settings shows no prompt.
+
+## 2026-11-24 Docs: resident app (bead 3a-pv0.8)
+- `app/README.md` gets a Resident app section (tray, close-to-tray, Cmd+Q dirty prompt, single instance, start at login/`--hidden`, read-only Permissions) and the MCP text now says off by default. Validation gets §7b; §6's close-window check became a Cmd+Q check. Scope row 3a marked built, hand checks pending.
+- Verified: `grep 7b`, lint. Unverified: all §7b checks (Rob's).

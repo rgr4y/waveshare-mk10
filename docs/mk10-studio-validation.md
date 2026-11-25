@@ -72,7 +72,7 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 - [ ] Reopen `test.Theme`. All edits from sections 3–5 survived.
 - [ ] Unedited round trip: open `img/stock/defaultTheme.Theme`, Save As, then `shasum -a 256`. The output equals `88785d8b…` (SHA256SUMS.txt). The unit test covers this; spot-check it.
 - Note: the bundle `defaultTheme.Theme` was overwritten by an accidental ScreenKey save on 2026-11-24 (69 keys, sha `b5b75da0…`). The pristine copy is `img/stock/defaultTheme.Theme` (read-only, untracked, sha in SHA256SUMS.txt).
-- [ ] Close the window with unsaved edits. You get the "Unsaved changes" prompt. Cancel keeps the window; Discard closes it.
+- [ ] Quit (Cmd+Q) with unsaved edits. You get the "Unsaved changes" prompt. Cancel keeps the app; Discard quits. (Closing the window only hides it, see 7b.)
 - [ ] Cmd+O, Cmd+S and Cmd+Shift+S work.
 
 ## 7. Push (USB serial)
@@ -87,6 +87,19 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 - [ ] Push with no device plugged in. The error is "MK10 serial port not found".
 - [ ] Unicode and emoji titles from section 3 render on the device.
 - [ ] Device reboot after a push. The pushed theme is still the active one.
+
+## 7b. Resident app
+
+- [ ] Fresh settings (remove `settings.json` from the userData dir, or delete `onboarded`): the welcome dialog shows once, MCP unticked. Tick MCP and Start at login, press Get started. MCP is listening; the login item exists.
+- [ ] Close the window (red button) with MCP on. The window hides, the Dock icon goes, the "MK10" tray item stays. `curl -s http://127.0.0.1:47110/mcp` still answers (or Claude's `get_theme` still works).
+- [ ] Tray > Open MK10 Studio brings the window and Dock icon back with the theme and unsaved edits intact.
+- [ ] Launch a second copy (`open -n` or `npm start` again). No new window or tray item appears; the running window focuses.
+- [ ] Edit something, then Cmd+Q. The window shows with "Unsaved changes". Cancel keeps the app running; Discard changes quits. Same from tray > Quit MK10 Studio. With no edits, quit is immediate.
+- [ ] Tray > Push to device is greyed out with no theme open. With a theme open it pushes (same result as the button), with the window hidden.
+- [ ] Tray > MCP server checkbox starts and stops MCP; it matches the Settings toggle.
+- [ ] Settings > General > Start at login: tick it and check System Settings > General > Login Items lists MK10 Studio. Untick it and the entry goes.
+- [ ] With Start at login on, log out and in (or reboot). The app comes up menu-bar only: tray item, no window, no Dock icon. `npm start -- --hidden` does the same.
+- [ ] Settings > Permissions: Accessibility and Screen Recording show their status. Opening Settings shows no system prompt. Each Open button lands on the right System Settings pane (Accessibility, Screen Recording, Automation). Granting one in System Settings shows up in the status within a couple of seconds, while the dialog is open.
 
 ## 8. Push (ssh mode, LilAlpine only)
 
