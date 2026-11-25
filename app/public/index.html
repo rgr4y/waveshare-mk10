@@ -29,7 +29,7 @@
 
   <main class="layout">
     <aside class="pages">
-      <h2>Pages</h2>
+      <h2>Pages <span id="page-count" class="muted" title="Top-level pages; the MK10 allows 6. Folders do not count."></span></h2>
       <ul id="page-list" class="page-list"></ul>
     </aside>
 
@@ -146,7 +146,7 @@
   </dialog>
 
   <template id="tpl-page">
-    <li class="page-item"><button type="button" class="page-btn"><span class="cur" title="Current page on device">●</span><span class="page-label"></span></button></li>
+    <li class="page-item"><button type="button" class="page-btn"><span class="cur" title="Current page on device">●</span><svg class="icon page-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 4.5a1 1 0 0 1 1-1h3.5l1.5 1.5h6a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z"/></svg><span class="page-label"></span><span class="page-sub muted"></span></button><ul class="page-children"></ul></li>
   </template>
 
   <template id="tpl-key">

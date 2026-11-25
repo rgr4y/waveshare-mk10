@@ -52,9 +52,23 @@ const keyItems = (p) => (p?.items ?? []).filter((i) => i.type === '115')
 const keyAt = (p, row, col) => keyItems(p).find((i) => i.row === row && i.col === col)
 const videoItem = (p) => (p?.items ?? []).find((i) => i.type === '100' && i.backgroundType === 'main')
 
-function pageLabel(p) {
+// Top-level pages are numbered 0..5 in theme order: pageSwitch.jumpToPage values in the stock theme
+// (1, 2, 3, 4 from page 0) fit that numbering, not the raw theme index (guess, not checked on the device).
+// Folders are pages with a parent; a parent key's openPage action names the folder.
+const topPages = () => (ui.summary.pages ?? []).filter((p) => p.parentIndex === undefined)
+const opener = (p) => keyItems(ui.summary.pages?.[p.parentIndex])
+  .find((k) => k.action?.type === 'openPage' && k.action.pageName === p.name)
+
+function pageName(p) {
+  if (p.parentIndex === undefined) return `Page ${topPages().indexOf(p)}`
+  return (opener(p)?.title ?? '').trim() || 'Folder'
+}
+
+function pageSummary(p) {
   const titles = keyItems(p).sort((a, b) => a.row - b.row || a.col - b.col).map((k) => (k.title ?? '').trim()).filter(Boolean)
-  return `Page ${p.index}${titles.length ? ` — ${titles.slice(0, 3).join(', ')}${titles.length > 3 ? '…' : ''}` : ` — ${keyItems(p).length ? `${keyItems(p).length} keys` : 'no keys'}`}`
+  if (titles.length) return `${titles.slice(0, 3).join(', ')}${titles.length > 3 ? '…' : ''}`
+  const n = keyItems(p).length
+  return n ? `${n} key${n === 1 ? '' : 's'}` : 'no keys'
 }
 
 // ---- rendering
@@ -71,21 +85,21 @@ function renderTop() {
 }
 
 function renderPages() {
-  const list = $('page-list')
   const pages = ui.summary.pages ?? []
-  const depth = (p) => (p.parentIndex >= 0 && p.parentIndex !== undefined ? 1 + depth(pages[p.parentIndex]) : 0)
-  const order = []
-  const walk = (parent) => pages.filter((p) => (p.parentIndex ?? -1) === parent).forEach((p) => { order.push(p); walk(p.index) })
-  walk(-1)
-  list.replaceChildren(...order.map((p) => {
+  const item = (p) => {
     const li = tpl('tpl-page')
     li.dataset.selected = String(p.index === ui.page)
     li.dataset.current = String(p.name === ui.summary.currentPage)
-    li.style.paddingLeft = `${depth(p) * 16}px`
-    li.querySelector('.page-label').textContent = pageLabel(p)
-    li.querySelector('.page-btn').addEventListener('click', () => { ui.page = p.index; ui.sel = null; render() })
+    li.dataset.folder = String(p.parentIndex !== undefined)
+    li.querySelector('.page-label').textContent = pageName(p)
+    li.querySelector('.page-sub').textContent = pageSummary(p)
+    li.querySelector('.page-btn').title = `Theme page index ${p.index}${p.parentIndex !== undefined && !opener(p) ? '; no key opens this folder' : ''}`
+    li.querySelector('.page-btn').addEventListener('click', () => { ui.page = p.index; ui.sel = { kind: 'page' }; render() })
+    li.querySelector('.page-children').replaceChildren(...pages.filter((c) => c.parentIndex === p.index).map(item))
     return li
-  }))
+  }
+  $('page-list').replaceChildren(...topPages().map(item))
+  $('page-count').textContent = `${topPages().length} / 6`
 }
 
 function renderKeys() {

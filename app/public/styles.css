@@ -109,9 +109,14 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 }
 .page-btn:hover:not(:disabled) { background: var(--panel-2); border-color: transparent; }
 .page-item[data-selected=true] > .page-btn { background: var(--panel-2); border-color: var(--accent); }
-.page-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.page-label { white-space: nowrap; flex: none; }
+.page-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.page-children { list-style: none; margin: 0 0 var(--sp-1) var(--sp-3); padding: 0 0 0 var(--sp-2); border-left: 1px solid var(--line); }
+.page-children:empty { display: none; }
+.page-icon { align-self: center; color: var(--muted); flex: none; }
+.page-item[data-folder=false] > .page-btn .page-icon { display: none; }
 .cur { color: var(--ok); width: 10px; visibility: hidden; font-size: 9px; }
-.page-item[data-current=true] .cur { visibility: visible; }
+.page-item[data-current=true] > .page-btn .cur { visibility: visible; }
 
 /* stage */
 .stage { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-4); min-width: 0; padding: var(--sp-5); overflow: hidden; }
