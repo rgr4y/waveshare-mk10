@@ -166,6 +166,28 @@ function asset(key) {
   return bytes ? { mime: MIME[extname(k).toLowerCase()] ?? 'application/octet-stream', bytes: new Uint8Array(bytes) } : null
 }
 
+// Dev runs (not packaged): label the build from git so it's clear which code is running.
+// { label: "2026-11-25 02:21*", title: "main @ 17760a1, ..." }; null when packaged or git fails.
+function devBuild() {
+  if (app.isPackaged) return null
+  try {
+    const git = (...a) => execFileSync('git', ['-C', import.meta.dirname, ...a], { timeout: 5000 }).toString().trim()
+    const [iso, sha] = git('log', '-1', '--format=%cI%x09%h').split('\t')
+    const branch = git('rev-parse', '--abbrev-ref', 'HEAD')
+    const dirty = !!git('status', '--porcelain', '--', '.')
+    const d = new Date(iso)
+    const p2 = (n) => String(n).padStart(2, '0')
+    const stamp = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`
+    return {
+      label: `${stamp}${dirty ? '*' : ''}${branch === 'main' ? '' : ` ${branch}`}`,
+      title: `Dev build: ${branch} @ ${sha}, committed ${d.toLocaleString()}${dirty ? '; * = uncommitted changes in app/' : ''}`,
+    }
+  } catch {
+    return null
+  }
+}
+const BUILD = devBuild()
+
 // ---- key capture window (proof of concept for keybinding). Two sources:
 // 'input': Electron before-input-event, what the app sees (menu shortcuts are blocked while it is focused);
 // 'hid': native/hidtap (IOHIDManager), raw HID usages incl. consumer keys that macOS handles itself.
@@ -300,7 +322,7 @@ function registerIpc() {
     if (!axPrompted) { axPrompted = true; systemPreferences.isTrustedAccessibilityClient(true) }
     return openPane('accessibility')
   })
-  h('settings', () => ({ ...settings, login: app.getLoginItemSettings(), loginSupported: LOGIN_OK, screenshot: SHOT, onboardPreview: SHOT && argv.includes('--onboard'), settingsPreview: SHOT && argv.includes('--settings'), settingsFile, version: app.getVersion(), mcpUrl: mcp?.url ?? null, stockDir: existsSync(STOCK_DIR) ? STOCK_DIR : null }))
+  h('settings', () => ({ ...settings, login: app.getLoginItemSettings(), loginSupported: LOGIN_OK, screenshot: SHOT, onboardPreview: SHOT && argv.includes('--onboard'), settingsPreview: SHOT && argv.includes('--settings'), build: BUILD, settingsFile, version: app.getVersion(), mcpUrl: mcp?.url ?? null, stockDir: existsSync(STOCK_DIR) ? STOCK_DIR : null }))
   h('setPref', async (key, value) => {
     if (!PREFS.has(key) || typeof value !== 'boolean') throw new Error(`unknown setting ${key}`)
     settings[key] = value
