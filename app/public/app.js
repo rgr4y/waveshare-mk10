@@ -217,8 +217,17 @@ const widgetLabel = (i) => [WIDGET_NAMES[i.type] ?? `type ${i.type}`, i.systemDa
 const cellWidgets = (p, row, col) => widgetItems(p).filter((i) => onKeyArea(i) &&
   i.x < col * 128 + 128 && i.x + (i.w || 1) > col * 128 && i.y < row * 128 + 128 && i.y + (i.h || 1) > row * 128)
 
+// glyph clocks swap a digit image only when that digit changes; text clocks just set their text
+function tickClock(el) {
+  const v = CLOCK[el.dataset.clock]?.() ?? '--'
+  if (!el.dataset.glyphs) return void (el.textContent = v)
+  ;[...el.children].forEach((img, i) => {
+    const ch = v[v.length - el.children.length + i] ?? '-'
+    if (img.dataset.ch !== ch) { img.dataset.ch = ch; fillImg(img, `${el.dataset.glyphs}/${ch}.png`) }
+  })
+}
 // clock widgets tick like the device's
-setInterval(() => document.querySelectorAll('[data-clock]').forEach((el) => { el.textContent = CLOCK[el.dataset.clock]() }), 1000)
+setInterval(() => document.querySelectorAll('[data-clock]').forEach(tickClock), 1000)
 
 function renderWidgets() {
   const all = widgetItems(curPage())
@@ -233,14 +242,27 @@ function draw(box, items, dx) {
   box.replaceChildren(...items.map((it) => {
     let el
     if (it.type === '111') {
-      // digital clock: system_data_name hour/minute, drawn by the device in its own digit font
-      el = tpl('tpl-sec-text')
-      el.classList.add('sec-digits')
-      el.textContent = CLOCK[it.systemData]?.() ?? '--'
-      if (CLOCK[it.systemData]) el.dataset.clock = it.systemData
+      // digital clock (system_data_name hour/minute/second). With paths set (displayType 1), one glyph
+      // image per digit, aspect kept in a w/displayNum slot: matches the device framebuffer (2026-11-24).
+      // Empty paths (displayType 0) is drawn as text: not yet checked on the device.
+      el = tpl('tpl-sec-digits')
+      el.dataset.clock = it.systemData ?? ''
       el.style.width = `${it.w ?? 128}px`
       el.style.height = `${it.h ?? 128}px`
-      el.style.fontSize = `${Math.round((it.h ?? 128) * 0.6)}px`
+      const n = it.digits || 2
+      if (it.paths) {
+        el.dataset.glyphs = it.paths
+        el.replaceChildren(...Array.from({ length: n }, () => {
+          const d = tpl('tpl-digit')
+          d.style.width = `${(it.w ?? 128) / n}px`
+          d.style.height = `${it.h ?? 128}px`
+          return d
+        }))
+      } else {
+        el.classList.add('sec-text')
+        el.style.fontSize = `${Math.round((it.h ?? 128) * 0.6)}px`
+      }
+      tickClock(el)
     } else if (it.type === '114') {
       el = tpl('tpl-sec-image')
       fillImg(el, it.path || it.paths)

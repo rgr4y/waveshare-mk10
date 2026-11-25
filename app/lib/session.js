@@ -129,6 +129,7 @@ export class Session extends EventEmitter {
           paths: it.paths || undefined,
           text: it.text_str,
           systemData: it.system_data_name,
+          digits: num(it.displayNum),
           action: actionOf(it),
           states: statesOf(it),
         })),
