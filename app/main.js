@@ -1,7 +1,7 @@
 // Electron main: owns the single Session; all edits (UI, MCP) go through it.
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, shell, systemPreferences, Tray } from 'electron'
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
-import { existsSync, watch } from 'node:fs'
+import { existsSync, mkdirSync, watch } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
 import { execFileSync, spawn } from 'node:child_process'
 import { createInterface } from 'node:readline'
@@ -177,6 +177,7 @@ function startHidtap(sendCap) {
     // ponytail: compiled on first use with swiftc; packaging builds it ahead (Phase 5)
     sendCap({ t: 'log', msg: 'building native/build/hidtap with swiftc…' })
     try {
+      mkdirSync(dirname(HIDTAP), { recursive: true }) // swiftc does not create the output dir
       execFileSync('swiftc', ['-O', HIDTAP_SRC, '-o', HIDTAP], { timeout: 60_000 })
     } catch (e) {
       sendCap({ t: 'error', msg: `swiftc failed: ${e.stderr?.toString().trim() || e.message}` })
