@@ -218,6 +218,9 @@ const cellWidgets = (p, row, col) => widgetItems(p).filter((i) => onKeyArea(i) &
   i.x < col * 128 + 128 && i.x + (i.w || 1) > col * 128 && i.y < row * 128 + 128 && i.y + (i.h || 1) > row * 128)
 
 // glyph clocks swap a digit image only when that digit changes; text clocks just set their text
+// Qt 5 QFont weight (0-99, 50 normal, 75 bold) to CSS
+const qtWeight = (w) => { const n = Number(w) || 50; return n <= 25 ? '300' : n <= 57 ? '400' : n <= 68 ? '600' : '700' }
+
 function tickClock(el) {
   const v = CLOCK[el.dataset.clock]?.() ?? '--'
   if (!el.dataset.glyphs) return void (el.textContent = v)
@@ -244,7 +247,8 @@ function draw(box, items, dx) {
     if (it.type === '111') {
       // digital clock (system_data_name hour/minute/second). With paths set (displayType 1), one glyph
       // image per digit, aspect kept in a w/displayNum slot: matches the device framebuffer (2026-11-24).
-      // Empty paths (displayType 0) is drawn as text: not yet checked on the device.
+      // Empty paths (displayType 0): text in text_font's family, white, digits ~0.58 h tall and centred
+      // (device framebuffer, 2026-11-24: Microsoft YaHei regular, from /usr/share/fonts/msyh.ttc).
       el = tpl('tpl-sec-digits')
       el.dataset.clock = it.systemData ?? ''
       el.style.width = `${it.w ?? 128}px`
@@ -259,8 +263,11 @@ function draw(box, items, dx) {
           return d
         }))
       } else {
-        el.classList.add('sec-text')
-        el.style.fontSize = `${Math.round((it.h ?? 128) * 0.6)}px`
+        el.classList.add('sec-clock-text')
+        const [family, , , , weight] = (it.font ?? '').split(',')
+        el.style.fontFamily = `"${family || 'Microsoft YaHei'}", "PingFang SC", "Helvetica Neue", sans-serif`
+        el.style.fontWeight = qtWeight(weight)
+        el.style.fontSize = `${Math.round((it.h ?? 128) * 0.75)}px`
       }
       tickClock(el)
     } else if (it.type === '114') {

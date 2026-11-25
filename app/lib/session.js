@@ -130,6 +130,7 @@ export class Session extends EventEmitter {
           text: it.text_str,
           systemData: it.system_data_name,
           digits: num(it.displayNum),
+          font: it.text_font || undefined,
           action: actionOf(it),
           states: statesOf(it),
         })),
