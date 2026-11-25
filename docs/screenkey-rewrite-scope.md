@@ -149,11 +149,27 @@ v2 option: a replacement renderer on Alpine (fb0 + fbtft panels directly, own JS
 | 1 | Core spike | Node codec + framing + device client + CLI; edited theme renders on device; bg video swap | **done 2026-11-24** |
 | 2 | MVP editor | Electron shell: open `.Theme` (stock included), page list, panel preview, key image/title, bg video replace, save, push. MCP server toggle | **done 2026-11-24**: in-app MCP → live UI update → push verified on the device. The renderer buttons (title box, Replace…, drag-drop) are not yet clicked by hand. |
 | 3a | Resident app | Menu-bar tray, close-to-tray, Dock icon only while the editor is open, single instance; first-run onboarding (MCP off by default); start at login (`--hidden`); read-only permissions status (see "macOS permissions"). The long-lived serial owner and key events on connect were dropped 2026-11-24: the device is reached over ssh/scp. **built 2026-11-24**, hand checks pending (validation §7b) | 0.5–1 day |
-| 3b | Actions | Key event listener → run the key's action from the open theme: URL, app, file/dir, shell cmd, password paste; action-value editing **done 2026-11-24** | 2–3 days |
+| 3b | Actions | Key event listener → run the key's action from the open theme: URL, app, file/dir, shell cmd, password paste; action-value editing **done 2026-11-24**. Key sound: assign, play and clear a key's press sound (see "Key sound" below) | 2–3 days + 0.5 day |
 | 3c | Action palette | Drag an action type from a grouped, searchable list onto a key (vendor UX). Templates come from real vendor examples, because field order differs per type and the firmware ignores bad fields. All 17 types are in `app/lib/action-templates.json` (from the vendor allThemeTest) | 1–2 days |
 | 3d | Key clipboard | Cut, copy and paste keys (Cmd+X/C/V and the context menu), within a theme and across themes. See "Key clipboard" below. **built 2026-11-24**, hand checks pending (validation §5b). Not built: the copy flash, and greying Edit > Paste (it stays enabled for text fields; the right-click Paste does grey out) | 0.5–1 day |
 | 4 | Parity | Info-panel widgets editing; sensor feed (V1 cmd 1, format known; answer `deviceRequestSystemData`); weather; boot logo export | 1–2 weeks |
 | 5 | Polish | Profiles, theme import/merge, packaging + Developer ID signing + notarization | 3–5 days |
+
+## Key sound (Phase 3b)
+
+The device plays a sound file when a key is pressed. Facts below were checked on 2026-11-24 against a theme Rob pushed from the vendor app (`mk10studio.Theme`, page 9, key 0,0):
+- The type 115 item has `soundFile: "/sound/<name>.wav"`. Like `/image/...`, the path is relative to the device's `/data`.
+- The WAV is embedded in the `.Theme` asset map under the same key (`/sound/fart0.wav`). On load the device has it at `/data/sound/fart0.wav`. Studio pushes the whole `.Theme`, so no separate upload is needed. That the device extracts the file from the theme is assumed (the vendor app may also copy it); check with a Studio push of a new sound.
+- Studio already keeps the asset: `isReferenced`, `copyKey`/`pasteKey` and orphan cleanup treat any item string field that names an asset as a reference, so `soundFile` is covered. Studio has no `soundFile` UI yet.
+- Playback: `KeyboardDevice` runs `tinyplay <file> -D <card> -d <device>`. On LilAlpine that is the stock `tinyplay` in `/usr/libexec/mk10` (Alpine's tinyalsa 2.0.0 tinyplay never starts the stream). The volume is `setVolume` 0-7, which equals tinymix "Headphone volume" (verified). Studio has a slider for it.
+- Format: the codec takes S16_LE/S24_LE, 1-2 channels. A 44.1 kHz stereo 16-bit file played; the stock tinyplay reported 48000 Hz for it, so 44.1 kHz files may play about 9% fast. Unconfirmed; listen once, and if so, convert to 48 kHz on import.
+
+To build:
+1. Inspector: a "Sound" row on a key with Choose…, Play (in the app), and Clear. Dropping a `.wav` on the key sets it too.
+2. Import: accept `.wav`. Other formats (mp3, m4a, aiff) are converted with `afconvert` to WAV, 16-bit, keeping the source rate unless 48 kHz turns out to be required. Store as `/sound/<sanitized name>.wav`; on a name clash with different bytes, add a suffix.
+3. Clearing or replacing removes the old WAV when nothing else references it (the existing orphan cleanup).
+4. Undo covers it like any other key edit; MCP gets `set_key_sound`.
+5. Hand checks: push, press the key, hear the sound; replace and clear also work; the asset is gone from the saved file after clear.
 
 ## Key clipboard (Phase 3d)
 
