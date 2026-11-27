@@ -11,6 +11,7 @@ import { hidToQmk, isModifier } from './lib/qmk.js'
 import { fontManifest, syncDeviceFonts } from './lib/fonts.js'
 import { wire } from './lib/device.js'
 import { planKeyAction, OPEN_GRACE_MS } from './lib/keyactions.js'
+import { collectStats, readContract, sampleHost, ALL_STATS } from './lib/stats.js'
 
 // device fonts, copied from the MK10 over ssh, served to the renderer as mk10font://f/<file>
 protocol.registerSchemesAsPrivileged([{ scheme: 'mk10font', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }])
@@ -28,13 +29,14 @@ const flag = (name) => { const i = argv.indexOf(name); return i < 0 ? undefined 
 const DEV = argv.includes('--dev')
 const SHOT = !!flag('--screenshot')
 // a dev run is the generic, unsigned "Electron" binary: never register that as a login item
+const MAC = process.platform === 'darwin'
 const LOGIN_OK = app.isPackaged
 
 const session = new Session()
 let win = null
 let mcp = null
 let tray = null
-let settings = { lastFile: null, reopenLast: true, onboarded: false, keyActions: true, mcp: { enabled: false, port: 47110 }, ssh: { ...DEFAULT_SSH } }
+let settings = { lastFile: null, reopenLast: true, onboarded: false, keyActions: true, liveStats: true, mcp: { enabled: false, port: 47110 }, ssh: { ...DEFAULT_SSH } }
 let settingsFile
 
 // ---- settings
@@ -302,16 +304,31 @@ function openCapture() {
   w.loadFile(join(import.meta.dirname, 'public', 'capture.html'))
 }
 
-// ---- serial port hold. Studio keeps the port open while key actions are on or the JSON RPC
+// ---- serial port hold. Studio keeps the port open while key actions or live stats are on or the JSON RPC
 // window is open, so the device's own messages arrive (retried every 2 s: unplugged, or busy).
 // Pushes and levels reuse the held port. Holding it locks the vendor app out of the port.
-const wantPort = () => (settings.keyActions && !SHOT) || !!(rpcWin && !rpcWin.isDestroyed())
+const wantPort = () => ((settings.keyActions || settings.liveStats) && !SHOT) || !!(rpcWin && !rpcWin.isDestroyed())
 let portWanted = false
 function syncPort() {
   const want = wantPort()
   if (want) session.holdDevice(true).catch(() => {}) // busy or gone: the next tick retries
   else if (portWanted) session.holdDevice(false).catch(() => {})
   portWanted = want
+}
+
+// ---- live stats (Phase 4): once a second, the Mac's CPU/GPU/RAM/disk go to the info widgets the
+// current page asked for (V1 cmd 15 contract; until one arrives, every key Studio can fill).
+let statsContract = null
+function onContract(m) {
+  const c = m.v1 === 15 && readContract(m.payload)
+  if (c) statsContract = c
+}
+function pushStats() {
+  sampleHost() // async; feeds the next tick
+  const dev = session.held
+  if (!settings.liveStats || !dev?.isOpen || session.pushing) return
+  const vals = collectStats(statsContract?.keys ?? ALL_STATS, { showUnit: statsContract?.showUnit ?? true })
+  if (Object.keys(vals).length) dev.sendSystemData(vals).catch(() => {}) // port gone: syncPort reopens it
 }
 
 // ---- key actions (Phase 3b): the device reports each press with the key's action (V1 cmd 13);
@@ -418,7 +435,7 @@ const openPane = (pane) => {
 }
 let axPrompted = false // the system "grant access" prompt shows at most once per app session
 
-const PREFS = new Set(['reopenLast', 'onboarded', 'jsonRpcWindow', 'keyActions']) // boolean prefs the renderer may set
+const PREFS = new Set(['reopenLast', 'onboarded', 'jsonRpcWindow', 'keyActions', 'liveStats']) // boolean prefs the renderer may set
 
 function registerIpc() {
   const h = (name, fn) => ipcMain.handle(`mk10:${name}`, (_e, ...a) => fn(...a))
@@ -461,7 +478,8 @@ function registerIpc() {
     app.setLoginItemSettings({ openAtLogin: !!on })
     return app.getLoginItemSettings()
   })
-  h('permissions', () => ({ accessibility: systemPreferences.isTrustedAccessibilityClient(false), screen: systemPreferences.getMediaAccessStatus('screen') }))
+  // macOS privacy gates; Linux has none to ask for
+  h('permissions', () => !MAC ? { accessibility: true, screen: 'granted' } : ({ accessibility: systemPreferences.isTrustedAccessibilityClient(false), screen: systemPreferences.getMediaAccessStatus('screen') }))
   h('openPrivacyPane', openPane)
   h('requestAccessibility', () => {
     if (!axPrompted) { axPrompted = true; systemPreferences.isTrustedAccessibilityClient(true) }
@@ -473,7 +491,7 @@ function registerIpc() {
     settings[key] = value
     await saveSettings()
     if (key === 'jsonRpcWindow') setRpcWindow(value)
-    if (key === 'keyActions') syncPort()
+    if (key === 'keyActions' || key === 'liveStats') syncPort()
   })
   h('clearRpc', () => { rpcLog.length = 0 })
   h('setSsh', async (ssh) => {
@@ -547,18 +565,18 @@ function createWindow() {
     },
   })
   win.on('close', (e) => {
-    if (app.isQuitting || win.forceClose) return
+    if (app.isQuitting || win.forceClose || !MAC) return // Linux (test runs on lenny): no tray, close quits
     e.preventDefault() // resident app: hide to tray; theme and MCP stay alive
     win.hide()
-    app.dock.hide()
+    app.dock?.hide()
   })
-  if (hidden && !SHOT) app.dock.hide()
+  if (hidden && !SHOT) app.dock?.hide()
   win.loadFile(join(import.meta.dirname, 'public', 'index.html'))
   return win
 }
 
 function showWindow() {
-  app.dock.show()
+  app.dock?.show()
   win.show()
   win.focus()
 }
@@ -623,9 +641,11 @@ app.whenReady().then(async () => {
   registerIpc()
   buildMenu()
   createWindow()
-  if (!SHOT) createTray()
+  if (!SHOT && MAC) createTray()
   if (settings.jsonRpcWindow && !SHOT) setRpcWindow(true)
   session.on('v1', onKeyEvent)
+  session.on('v1', onContract)
+  setInterval(pushStats, 1000)
   syncPort()
   setInterval(syncPort, 2000)
   if (DEV) watchPublic()

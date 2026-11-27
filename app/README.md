@@ -105,6 +105,14 @@ appended to `/tmp/mk10.log`. **Save log…** writes the same lines to a file you
   sound devices, screenshots and music show "not supported yet". Each run or refusal goes to
   Activity, and refusals also show a toast. While this is on, Studio holds the USB serial port
   (retrying every 2 s), which locks the vendor app out. The rules are in `lib/keyactions.js`.
+- **Live stats** (Settings > Key actions and stats, on by default): once a second Studio sends the
+  computer's CPU, GPU and RAM usage, CPU model, disk space and network speed/totals (macOS: en* interfaces, `netstat -ib`; Linux: /proc/net/dev) to the device's info widgets (V1 cmd 1),
+  limited to the keys the current page asked for (V1 cmd 15 contract). GPU usage comes from
+  `ioreg` and used RAM from `vm_stat` (Activity Monitor's "Memory Used"). Temperatures are not
+  sent (Apple Silicon sensors need root). Uses the same held port as key actions. `npm run cli -- stats` does the same
+  headless. Code: `lib/stats.js`.
+- **Linux** (test runs on lenny): `npm ci && npx electron .` works. There is no tray or dock,
+  and closing the window quits. Without a display, add `--ozone-platform=headless`.
 - **JSON RPC window**: Settings > Developer. A separate window lists the old-style V1 frames the device sends (key events with the key's action, page contracts), decoded, and every JSON-RPC message Studio
   sends to KeyboardDevice over USB serial, and every reply, as formatted JSON in a read-only Monaco
   view (Follow, Wrap, Clear). It replays the last 500 messages when it opens. Long strings, such as

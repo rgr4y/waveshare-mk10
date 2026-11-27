@@ -835,3 +835,21 @@ Verification
 - Verification: Rob's captured press frames match the computed checksum. Injected row 1 col 4 (pageSwitch): the screen woke and the page changed. lenny (`/dev/ttyACM0`) received V1 cmd 15 plus V1 cmd 13 press and release, the same as a real press.
 - MK10 is now on lenny (`/dev/ttyACM0`; lenny `ttyUSB1` is the UPS, never touch it). lenny's panel backlight set to 0 (was 7041/21333; resets on reboot).
 - Follow-up: run Studio's key-action glue against injected presses; find out what the daemon's cmd `0x05` sweep after a page change does.
+
+## 2026-11-25 — Loop runs 1–3: key path end to end, live stats, Studio on Linux
+
+- Outcome:
+  - `cli.js keys` prints what each key press would do. On lenny, injected presses gave the right plans, and the replay guard dropped a queued burst (`a2b0704`).
+  - GD32 link carries key state only. Cmd `0x05` is probably `request_upload_key(row, col)`, from the symbol names (`4dc6703`).
+  - Live stats: Studio sends CPU, GPU (`ioreg`), RAM (`vm_stat`, matches Activity Monitor), disk and network to the info widgets once a second. There is a setting for it, and `cli.js stats` does the same headless (`1fa6b17`, `76e2414`). Rob confirmed it on the Mac (`6850626`).
+  - Studio runs on Linux: no dock or tray, and closing the window quits (this commit). It is installed on lenny at `~/workspace/waveshare-mk10/app`. With `--ozone-platform=headless` and an injected press on the Reddit key, it logged `key: openWeb https://www.reddit.com/` and xdg-open ran (lynx, no display).
+  - LilAlpine `611342a`: relay takes tty and dir arguments and reopens the real tty on hangup.
+- Root cause (no key log on the first lenny run): the device had rebooted when it was moved, so the relay was gone and injection failed silently. The relay is opt-in and has to be restarted after a reboot.
+- Findings:
+  - The type 109 rings' arc stays static for `0`, `0.5`, `50`, `50%` and `95`; only the text changes. `KeyboardDevice` has `system_data_key`, `system_data_value`, `system_data_min/max_value` and `update_system_data_local` strings, so the arc probably reads something else. Not found yet.
+  - Relaying `/dev/ttyGS0` (to capture the vendor app's traffic) made KeyboardDevice resend one 800-byte V1 wifiState burst in a tight loop and pegged the CPU. That service was removed; the attempt is noted in the relay script.
+- Verification: `npm test` 33/33, eslint clean, framebuffer grabs for the stats, Studio headless on lenny for the key path.
+- Follow-up:
+  - Ring arcs: capture what the vendor app sends (needs a working host-link capture) or disassemble the gauge code.
+  - Untick check for live stats.
+  - Mac browser opening for key actions.

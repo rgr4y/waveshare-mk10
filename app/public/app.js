@@ -676,6 +676,8 @@ async function init() {
   $('reopen-last').checked = cfg.reopenLast !== false
   $('key-actions').checked = cfg.keyActions !== false
   $('key-actions').addEventListener('change', (e) => run(window.mk10.setPref('keyActions', e.target.checked)))
+  $('live-stats').checked = cfg.liveStats !== false
+  $('live-stats').addEventListener('change', (e) => run(window.mk10.setPref('liveStats', e.target.checked)))
   $('reopen-last').addEventListener('change', (e) => run(window.mk10.setPref('reopenLast', e.target.checked)))
   const showLogin = (l) => {
     $('login-item').checked = !!l.openAtLogin

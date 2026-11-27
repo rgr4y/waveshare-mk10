@@ -248,6 +248,7 @@ config.json restored byte-identical to backup (sha 99def778...) via stop / scp /
 - `hour`, `minute` and `date` were not pushed, yet the clock was correct, so the device fills those itself.
 - After a V1 reload the device sends unsolicited V1 frames. Two are cmd 15 (SEND_JSON) `{"wifiState":N}`. One is cmd 15 with the contract: `deviceRequestSystemData` lists the keys the current page wants, here `date, hour, CPU Usage, GPU Usage, RAM Usage, minute`, plus `deviceRequestSystemDataShowUnit: true` and `themePageSwitch: true`. A V1 cmd 13 (`DEVICE_ProactiveEscalationCMD`) also appeared, as a Tagged-Value Map with `type: keyState, row, col, pressed`, followed by the key's action (`pageSwitch`). That suggests the MK20-style key events exist on MK10 too. Unclear whether a physical press caused it.
 - Tool: `tools/mkv1.py`.
+- Studio (2026-11-25): `lib/stats.js` sends the vendor key names (`CPU Usage`, `GPU Usage`, `RAM Usage`, `CPU Model`, `RAM … Memory`, `Disk …`; full list from the strings in ScreenKeyMacOS, whose stats come from a bundled btop). Verified from lenny with `cli.js stats`: the main page's CPU and RAM rings showed the pushed `8%`/`31%` within a second, framebuffer grab fb0/fb11. Text widgets with no value pushed show their placeholder (`Text`).
 
 ## Action catalogue (controlData types), 2026-11-24
 

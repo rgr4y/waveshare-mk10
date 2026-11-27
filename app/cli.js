@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto'
 import { decodeTheme, encodeTheme, pages, listKeys } from './lib/theme.js'
 import { Device } from './lib/device.js'
 import { planKeyAction } from './lib/keyactions.js'
+import { collectStats, readContract, sampleHost, ALL_STATS } from './lib/stats.js'
 
 const log = (...a) => console.error('[mk10]', ...a)
 const sha = (b) => createHash('sha256').update(b).digest('hex')
@@ -14,6 +15,7 @@ const usage = `usage: node cli.js <command>
   ports                   list MK10 serial ports (read-only)
   call <method> [json]    call a device method (auto-detects port; MK10_PORT overrides)
   push <local> <remote>   push a file to the device
+  stats [seconds]         push this host's CPU/RAM/disk to the device's info widgets every second (default 30, max 55)
   keys [seconds]          print each key event and what Studio's key actions would do (opens nothing; default 30, max 55)`
 
 async function openDevice() {
@@ -83,6 +85,26 @@ const cmds = {
     })
     log(`listening ${ms / 1000} s`)
     await new Promise((r) => setTimeout(r, ms))
+    await dev.close()
+  },
+
+  async stats(seconds = '30') {
+    const ms = Math.min(Number(seconds) || 30, 55) * 1000
+    const dev = await openDevice()
+    let contract = null
+    dev.on('v1', (m) => {
+      const c = m.v1 === 15 && readContract(m.payload)
+      if (c) { contract = c; log('page wants', c.keys.join(', '), c.showUnit ? '(with units)' : '(no units)') }
+    })
+    const tick = () => {
+      sampleHost()
+      const vals = collectStats(contract?.keys ?? ALL_STATS, { showUnit: contract?.showUnit ?? true })
+      if (Object.keys(vals).length) { console.log(JSON.stringify(vals)); dev.sendSystemData(vals).catch((e) => log('send failed', e.message)) }
+    }
+    tick()
+    const t = setInterval(tick, 1000)
+    await new Promise((r) => setTimeout(r, ms))
+    clearInterval(t)
     await dev.close()
   },
 

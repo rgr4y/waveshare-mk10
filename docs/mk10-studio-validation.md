@@ -178,12 +178,14 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 - [x] With the window open, Studio holds the port and device events stream: JSON `keyStateChanged` plus decoded V1 cmd 13 key events (with the key's action) and cmd 15 page contracts (Rob's presses on the soundboard and stock keys).
 
 ### Still to check
+
+- [x] Live stats (Settings > Key actions and stats > Send this computer's stats, on by default): the main page's CPU, GPU and RAM rings follow Activity Monitor within a couple of seconds. Untick it (with key actions also off): the rings stop updating and the port is released. Rings confirmed by Rob on the Mac, 2026-11-25; untick not checked.
 - [ ] Key actions (Settings > Key actions on, Studio restarted): press an Open website key (stock Page 0 > Websites folder). The browser opens the URL once (press only, not release), and Activity shows `key: openWeb https://…`.
 - [ ] An Open folder key with an absolute path opens it in Finder. An Open file key on a `.pdf` opens it; on a `.command` or `.sh` it is refused with a red toast.
 - [ ] A Type text key shows "text: not supported in Studio yet". Keyboard and soundboard keys do nothing on the Mac beyond their device behaviour.
 - [ ] Untick Key actions with the JSON RPC window closed: the port is released and ScreenKeyMacOS can connect. Tick it again: the port is held within about 2 s.
 - [ ] Unplug and replug USB with Key actions on: keys work again within a few seconds.
 - [ ] Quit Studio, press an Open website key a few times, start Studio: no browser tabs open, and Activity says `key: ignored N press(es) queued while the port was closed` (or nothing, if the device didn't queue them).
-  - Headless check 2026-11-25 (docs/gd32-uart.md): planner and replay guard behave as expected on injected presses; the Mac-side opening is still unchecked.
+  - Headless check 2026-11-25 (docs/gd32-uart.md): planner and replay guard behave as expected on injected presses. Studio itself on lenny (Linux, `--ozone-platform=headless`): an injected press on the Websites folder's Reddit key logged `key: openWeb https://www.reddit.com/` and `shell.openExternal` ran xdg-open. Opening in a macOS browser is still unchecked.
 - [x] `reboot` with `mk10-reboot-wdt` (block-and-reset version, `4e75d20`): back up, trace `23:52:13 arming /dev/watchdog 5s`, no ext4 journal recovery in dmesg, keyboard-device started (Rob, 2026-11-25). The previous version armed but the kernel disarmed it on reboot, and the reboot hung.
 - [ ] Settings > Developer > JSON RPC window: move the Volume slider. A `setVolume` → and its ack ← appear. A serial push shows `saveToFile` with shortened `data`. Closing the window releases the port.

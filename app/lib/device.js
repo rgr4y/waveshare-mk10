@@ -4,6 +4,7 @@
 // in the same stream are decoded too and emitted as 'v1' {v1: cmd, name, type, payload}.
 import { EventEmitter } from 'node:events'
 import { SerialPort } from 'serialport'
+import { packSystemData, V1_SYSTEM_DATA } from './stats.js'
 import { pack, packV1, V1_RELOAD, V1_NAMES, FrameParser, V1Parser, decodeV1, crc32, CMD_JSON, CMD_SHOW_JPG } from './proto.js'
 
 export const VID = '1d6b'
@@ -172,6 +173,12 @@ export class Device extends EventEmitter {
       wire.emit('msg', { dir: 'tx', path: this.port?.path, msg: { v1: V1_RELOAD, name: V1_NAMES[V1_RELOAD], type: 0, payload: path } })
       this.#write(packV1(V1_RELOAD, want)).catch(done)
     })
+  }
+
+  // Live values for the info widgets (V1 cmd 1); the device acks with an empty V1 cmd 1 frame
+  sendSystemData(map) {
+    wire.emit('msg', { dir: 'tx', path: this.port?.path, msg: { v1: V1_SYSTEM_DATA, name: V1_NAMES[V1_SYSTEM_DATA], type: 0, payload: map } })
+    return this.#write(packSystemData(map))
   }
 
   showJpeg(buf) {

@@ -141,9 +141,11 @@
       </section>
 
       <section>
-        <h3>Key actions</h3>
-        <label class="inline"><input id="key-actions" type="checkbox"> Run key actions on this Mac</label>
-        <p class="hint">When a key is pressed, the device reports its action and Studio runs the ones the Mac handles: <b>Open website</b> (http and https only), <b>Open folder</b> and <b>Open file</b> (scripts and apps are refused). Keyboard, macro and page keys run on the device either way. Typing text, passwords, sound devices, screenshots and music are not supported yet. While this is on, Studio keeps the MK10's USB serial port open, so the vendor ScreenKey app can't use it.</p>
+        <h3>Key actions and stats</h3>
+        <label class="inline"><input id="key-actions" type="checkbox"> Run key actions on this computer</label>
+        <p class="hint">When a key is pressed, the device reports its action and Studio runs the ones the Mac handles: <b>Open website</b> (http and https only), <b>Open folder</b> and <b>Open file</b> (scripts and apps are refused). Keyboard, macro and page keys run on the device either way. Typing text, passwords, sound devices, screenshots and music are not supported yet. While either is on, Studio keeps the MK10's USB serial port open, so the vendor ScreenKey app can't use it.</p>
+        <label class="inline"><input id="live-stats" type="checkbox"> Send this computer's stats to the info panel</label>
+        <p class="hint">Once a second: CPU, GPU and RAM usage, CPU model, disk space, and network speed and totals, for the widgets the current page shows (CPU Usage, GPU Usage, RAM Usage and the other names the vendor app uses). Temperatures are not sent (Apple Silicon sensors need root). The device keeps its own clock and date.</p>
       </section>
 
       <section>
