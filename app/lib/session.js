@@ -16,6 +16,7 @@ import { Device } from './device.js'
 import { BG_ASSET_RE } from './keyactions.js'
 import { packV1, V1_RELOAD } from './proto.js'
 import { DEVICE_FONT_DIR } from './fonts.js'
+import { isPanelItem, movePanelItem, deletePanelItem, setPanelZ, alignPos } from './panel.js'
 import { readMacro, setKeyMacro } from './macro.js'
 
 const run = promisify(execFile)
@@ -49,7 +50,7 @@ export const DEFAULT_SSH = { host: 'root@10.0.1.48', remote: DEFAULT_REMOTE }
 export const DEFAULT_PUSH = { mode: 'auto', port: null, ...DEFAULT_SSH }
 const CONFIG = '/mnt/SDCARD/config.json'
 
-const KEY_OPS = new Set(['keyCut', 'keyPaste', 'keyDelete', 'keyRaw', 'pageRaw', 'keyNew', 'keyMove', 'folderDelete', 'undo'])
+const KEY_OPS = new Set(['keyCut', 'keyPaste', 'keyDelete', 'keyRaw', 'pageRaw', 'keyNew', 'keyMove', 'folderDelete', 'undo', 'panelMove', 'panelDelete', 'panelZ', 'panelAlign'])
 const num = (v) => (v === undefined || v === '' ? undefined : Number(v))
 
 // Multi-state keys (e.g. keyboard_switch, a toggle): item jsonData holds the per-state image, title and
@@ -164,6 +165,9 @@ export class Session extends EventEmitter {
           type: String(it.type),
           backgroundType: it.backgroundType || undefined,
           x: num(it.x), y: num(it.y),
+          z: num(it.z), scale: num(it.scale), radius: num(it.radius),
+          flag: it.system_data_flag, color: it.front_color,
+          crop: it.mk10studioCrop ? JSON.parse(it.mk10studioCrop) : undefined,
           w: num(it.w ?? it.scaledWidthTo), h: num(it.h ?? it.scaledHeightTo),
           row: num(it.row), col: num(it.col),
           title: it.title,
@@ -453,6 +457,48 @@ kill -USR2 $P`}`
     this.need()
     setBackgroundVideoRect(this.theme, page, rect)
     this.touch('videoRect')
+  }
+
+  // Panel ops: the renderer calls panelBegin once per drag / nudge burst, then panelMove with snapshot:false
+  panelBegin() {
+    this.need()
+    this.snapshot()
+  }
+
+  // runs op under one snapshot (or none when already taken); a throw leaves no undo entry
+  panelOp(kind, snap, op) {
+    this.need()
+    if (snap) this.snapshot()
+    let r
+    try {
+      r = op()
+    } catch (e) {
+      if (snap) this.undoStack.pop()
+      throw e
+    }
+    this.touch(kind)
+    return r
+  }
+
+  panelMove(page, index, x, y, { snapshot = true } = {}) {
+    this.panelOp('panelMove', snapshot, () => movePanelItem(this.theme, page, index, x, y))
+  }
+
+  panelDelete(page, index) {
+    this.panelOp('panelDelete', true, () => deletePanelItem(this.theme, page, index))
+  }
+
+  panelZ(page, index, dir) {
+    return this.panelOp('panelZ', true, () => setPanelZ(this.theme, page, index, dir))
+  }
+
+  panelAlign(page, index, how, size) {
+    this.panelOp('panelAlign', true, () => {
+      const it = this.theme.json.pages[page]?.items?.[index]
+      if (!isPanelItem(it)) throw new Error(`no panel item ${index} on page ${page}`)
+      const p = alignPos({ x: Number(it?.x), y: Number(it?.y), w: size?.w, h: size?.h }, how)
+      movePanelItem(this.theme, page, index, p.x, p.y)
+    })
   }
 
   // LilAlpine answers ssh and has /etc/alpine-release, so ssh wins when it answers. Stock Tina has no

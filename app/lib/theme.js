@@ -110,7 +110,7 @@ export function encodeControlData(cd) {
 // ---- editor helpers (mutate in place; unknown fields/items untouched)
 export const pages = (theme) => theme.json.pages
 
-function page(theme, i) {
+export function page(theme, i) {
   const p = theme.json.pages[i]
   if (!p) throw new Error(`no page ${i}`)
   return p
@@ -271,7 +271,7 @@ function isReferenced(theme, key) {
   return false
 }
 
-function dropIfOrphan(theme, ref, isDir) {
+export function dropIfOrphan(theme, ref, isDir) {
   if (typeof ref !== 'string' || !ref.startsWith('/')) return
   for (const k of [...theme.assets.keys()]) {
     if ((k === ref || (isDir && k.startsWith(ref + '/'))) && !isReferenced(theme, k)) theme.assets.delete(k)
