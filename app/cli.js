@@ -5,6 +5,8 @@ import { createHash } from 'node:crypto'
 import { decodeTheme, encodeTheme, pages, listKeys } from './lib/theme.js'
 import { Device } from './lib/device.js'
 import { planKeyAction } from './lib/keyactions.js'
+import { execFileSync } from 'node:child_process'
+import { displaySnap, DEFAULT_SSH } from './lib/session.js'
 import { collectStats, readContract, sampleHost, ALL_STATS } from './lib/stats.js'
 
 const log = (...a) => console.error('[mk10]', ...a)
@@ -16,7 +18,8 @@ const usage = `usage: node cli.js <command>
   call <method> [json]    call a device method (auto-detects port; MK10_PORT overrides)
   push <local> <remote>   push a file to the device
   stats [seconds]         push this host's CPU/RAM/disk to the device's info widgets every second (default 30, max 55)
-  keys [seconds]          print each key event and what Studio's key actions would do (opens nothing; default 30, max 55)`
+  keys [seconds]          print each key event and what Studio's key actions would do (opens nothing; default 30, max 55)
+  snap [label]            record the display state on the device (ssh; MK10_HOST overrides) and print the log`
 
 async function openDevice() {
   const dev = new Device()
@@ -34,6 +37,13 @@ async function openDevice() {
 }
 
 const cmds = {
+  // run when the panel is black: same snapshot Studio records 6 s after each serial reload
+  async snap(...label) {
+    const host = process.env.MK10_HOST ?? DEFAULT_SSH.host
+    execFileSync('ssh', ['-o', 'ConnectTimeout=5', host, displaySnap(label.join(' ') || 'manual')], { timeout: 30000 })
+    console.log(execFileSync('ssh', ['-o', 'ConnectTimeout=5', host, 'tail -n 60 /var/log/mk10-display.log'], { encoding: 'utf8', timeout: 30000 }))
+  },
+
   async info(file) {
     log('reading', file)
     const t = decodeTheme(await readFile(file))

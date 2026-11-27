@@ -482,6 +482,32 @@ function dropItemOrphans(theme, it) {
   for (const v of [...Object.values(it), ...stateRefs(it)]) if (assetRef(v)) dropIfOrphan(theme, v, !theme.assets.has(v))
 }
 
+// a key-area widget (clock digits, GIF, gauge: backgroundType "child") in an empty cell is not free space
+function needKeySlot(p, row, col) {
+  const n = (v) => Number(v) || 0
+  const under = (p.items ?? []).filter((i) => String(i.type) !== '115' && i.backgroundType === 'child' && n(i.x) < 656 &&
+    n(i.x) < col * 128 + 128 && n(i.x) + (n(i.w) || 1) > col * 128 && n(i.y) < row * 128 + 128 && n(i.y) + (n(i.h) || 1) > row * 128)
+  if (under.length) throw new Error(`r${row} c${col} holds a widget (type ${under.map((i) => i.type).join(', ')}), not a key slot`)
+}
+
+// Move keys within a page in one step: moves = [[fromRow, fromCol, toRow, toCol], ...]. Every target
+// must be a key slot that is empty or vacated by another move, so a swap or a shifted run works.
+export function moveKeys(theme, pageIndex, moves) {
+  const p = page(theme, pageIndex)
+  const items = moves.map(([r, c]) => needItem(theme, pageIndex, r, c))
+  if (new Set(items).size !== items.length) throw new Error('a key is moved twice')
+  const seen = new Set()
+  for (const [, , r, c] of moves) {
+    if (![0, 1].includes(r) || ![0, 1, 2, 3, 4].includes(c)) throw new Error(`r${r} c${c} is not a key slot`)
+    if (seen.has(`${r},${c}`)) throw new Error(`two keys moved to r${r} c${c}`)
+    seen.add(`${r},${c}`)
+    const there = getItem(theme, pageIndex, r, c)
+    if (there && !items.includes(there)) throw new Error(`r${r} c${c} already holds a key`)
+    if (!there) needKeySlot(p, r, c)
+  }
+  moves.forEach(([, , r, c], i) => Object.assign(items[i], { row: String(r), col: String(c), x: String(c * 128), y: String(r * 128) }))
+}
+
 export function removeKey(theme, pageIndex, row, col) {
   const items = page(theme, pageIndex).items ?? []
   const it = needItem(theme, pageIndex, row, col)
@@ -520,11 +546,7 @@ export function pasteKey(theme, pageIndex, row, col, clip) {
     if (target && !theme.json.pages.some((q) => q.pageName === target)) warnings.push(`openPage target ${target} is not in this theme`)
   }
   const old = getItem(theme, pageIndex, row, col)
-  // a key-area widget (clock digits, GIF, gauge: backgroundType "child") in an empty cell is not free space
-  const n = (v) => Number(v) || 0
-  const under = !old && (p.items ?? []).filter((i) => String(i.type) !== '115' && i.backgroundType === 'child' && n(i.x) < 656 &&
-    n(i.x) < col * 128 + 128 && n(i.x) + (n(i.w) || 1) > col * 128 && n(i.y) < row * 128 + 128 && n(i.y) + (n(i.h) || 1) > row * 128)
-  if (under?.length) throw new Error(`r${row} c${col} holds a widget (type ${under.map((i) => i.type).join(', ')}), not a key slot`)
+  if (!old) needKeySlot(p, row, col)
   const ids = theme.json.pages.flatMap((q) => (q.items ?? []).map((i) => Number(i.id))).filter(Number.isFinite)
   const id = String(Math.max(0, ...ids) + 1)
   Object.assign(item, { row: String(row), col: String(col), x: String(col * 128), y: String(row * 128), id, itemName: `control${id}` })
@@ -552,13 +574,30 @@ export function newKeyTypes(theme, pageIndex) {
 
 // A plain type 115 key of action `type` in an empty slot; the title is the action's label.
 // Fields match a stock key; slot fields and the widget check come from pasteKey.
-export function createKey(theme, pageIndex, row, col, type) {
+// TITLE_PARAM with the user's defaults for new keys (Settings > New key title) laid over it.
+// Only font, size and style; invalid values are refused by setTitleDefaults before they get here.
+export const TITLE_DEFAULT_KEYS = ['FontFamily', 'FontSize', 'FontStyle']
+export function checkTitleDefaults(d) {
+  const out = {}
+  for (const k of TITLE_DEFAULT_KEYS) {
+    if (d?.[k] === undefined || d[k] === null) continue
+    if (!TITLE_CHECKS[k](d[k])) throw new Error(`bad ${k}: ${JSON.stringify(d[k])}`)
+    out[k] = d[k]
+  }
+  return out
+}
+const titleParamFor = (defaults) => {
+  const tp = { ...JSON.parse(TITLE_PARAM), ...checkTitleDefaults(defaults) }
+  return JSON.stringify(Object.fromEntries(Object.entries(tp).sort(([a], [b]) => (a < b ? -1 : 1))))
+}
+
+export function createKey(theme, pageIndex, row, col, type, titleDefaults = {}) {
   if (!newKeyTypes(theme, pageIndex).some((t) => t.type === type)) throw new Error(`can't create a ${type} key on this page`)
   if (getItem(theme, pageIndex, row, col)) throw new Error(`r${row} c${col} already holds a key`)
   const t = ACTION_TEMPLATES[type]
   const fields = t.fields.map(([name, qtype, value]) => [name, { type: qtype, null: 0, value: name === 'pageName' && type === 'oneLevelUp' ? 'parentPage' : value }])
   const item = {
-    type: '115', controlData: encodeControlData({ fields }), title: t.label, titleParam: TITLE_PARAM,
+    type: '115', controlData: encodeControlData({ fields }), title: t.label, titleParam: titleParamFor(titleDefaults),
     path: '', paths: '', soundFile: '', lock: '1', opacity: '100', rotate: '0', scale: '1', z: '1',
     maxWidth: '896', maxHeight: '304', scaledWidthTo: '128', scaledHeightTo: '128',
   }
@@ -575,7 +614,9 @@ export function createKey(theme, pageIndex, row, col, type) {
 // ---- premade key icons: app/icons/<name>.svg (white line art, 128x128) rendered to <name>.png
 // (`npm run icons`); the PNG is what goes into the theme
 const ICON_DIR = new URL('../icons/', import.meta.url)
-export const listIcons = () => readdirSync(ICON_DIR).filter((f) => f.endsWith('.png')).map((f) => f.slice(0, -4)).sort()
+// plus icons/PictureFont/ (the vendor app's dot-matrix glyphs), named PictureFont/<name>
+const pngs = (dir) => readdirSync(dir).filter((f) => f.endsWith('.png')).map((f) => f.slice(0, -4)).sort()
+export const listIcons = () => [...pngs(ICON_DIR), ...pngs(new URL('PictureFont/', ICON_DIR)).map((n) => `PictureFont/${n}`)]
 export function iconPng(name) {
   if (!listIcons().includes(name)) throw new Error(`no icon named ${name}`)
   return readFileSync(new URL(`${name}.png`, ICON_DIR))

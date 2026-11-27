@@ -9,6 +9,7 @@ const ui = {
   sel: null, // {kind:'key', row, col} | {kind:'video'}
   assets: new Map(), // key -> Promise<{url, mime}|null>
   videoKey: null,
+  dragEndAt: 0, // ms; the click that ends a key drag is ignored
 }
 
 const IMAGE_RE = /\.(png|jpe?g|gif|webp|bmp|tiff?|heic|svg)$/i
@@ -39,9 +40,25 @@ function setStatus({ msg, busy, error }) {
 }
 
 function addLog(line) {
-  const el = $('log')
-  el.textContent += `${line}\n`
-  el.scrollTop = el.scrollHeight
+  for (const el of [$('log'), ...($('busy').hidden ? [] : [$('busy-log')])]) {
+    el.textContent += `${line}\n`
+    el.scrollTop = el.scrollHeight
+  }
+  if ($('busy').hidden) return
+  const pct = /^\s*(\d+)%$/.exec(line) // serial push progress
+  if (pct) $('busy-bar').value = pct[1] / 100
+}
+
+// Push/pull progress over the main area. The panels go inert, so clicks and keys can't reach them.
+function showBusy(kind) {
+  const on = !!kind
+  if (on && $('busy').hidden) {
+    $('busy-title').textContent = kind === 'pull' ? 'Pulling from device…' : 'Pushing to device…'
+    $('busy-log').textContent = ''
+    $('busy-bar').removeAttribute('value') // indeterminate until a serial % line arrives
+  }
+  $('busy').hidden = !on
+  for (const el of document.querySelectorAll('.layout > :not(#busy)')) el.inert = on
 }
 
 // errors are already shown by main's status; just swallow the rejection here
@@ -155,9 +172,10 @@ function renderTop() {
   $('btn-save').disabled = !has
   $('btn-push').disabled = !has || !!s.pushing
   $('btn-pull').disabled = !!s.pushing
+  showBusy(s.deviceOp)
   for (const id of ['brightness', 'volume']) $(id).disabled = !!s.pushing
   // device settings stay as they were for the push in flight
-  for (const id of ['push-mode', 'ssh-host', 'ssh-remote']) $(id).disabled = !!s.pushing
+  for (const id of ['push-mode', 'ssh-host', 'serial-port', 'ssh-remote', 'btn-reboot']) $(id).disabled = !!s.pushing
   $('empty').hidden = has
   $('panel').hidden = !has
 }
@@ -198,7 +216,9 @@ function renderKeys() {
       const el = tpl(it ? 'tpl-key' : 'tpl-empty-key')
       el.style.left = `${col * 128}px`
       el.style.top = `${row * 128}px`
+      el.dataset.slot = String(row * 5 + col)
       if (it) {
+        el.addEventListener('pointerdown', (e) => holdToDrag(e, el))
         const tp = it.titleParam ?? {}
         const t = el.querySelector('.key-title')
         t.textContent = tp.ShowTitle === false ? '' : (it.title ?? '')
@@ -226,6 +246,7 @@ function renderKeys() {
       // empty slots select too, so a paste has a target
       el.dataset.selected = String(ui.sel?.kind === 'key' && ui.sel.row === row && ui.sel.col === col)
       el.addEventListener('click', () => {
+        if (Date.now() - ui.dragEndAt < 400) return // the click that ends a drag
         select({ kind: 'key', row, col })
         if (!it && !cellWidgets(p, row, col).length) openNewKey(row, col)
       })
@@ -238,6 +259,88 @@ function renderKeys() {
     }
   }
   box.replaceChildren(...tiles)
+}
+
+// ---- press and hold a key, then drag it to another slot. Keys in the way shift toward the nearest
+// free slot (iOS home-screen style, the dragged key's own slot counts); on a page with no empty slot
+// the target key swaps with the dragged one. Widget cells (clock digits etc.) are never targets.
+const HOLD_MS = 350
+const slotRC = (i) => [Math.floor(i / 5), i % 5]
+
+function holdToDrag(e, el) {
+  if (e.button !== 0) return
+  const [x0, y0] = [e.clientX, e.clientY]
+  const stop = () => { clearTimeout(timer); removeEventListener('pointermove', moved); removeEventListener('pointerup', stop) }
+  const moved = (m) => { if (Math.hypot(m.clientX - x0, m.clientY - y0) > 6) stop() }
+  const timer = setTimeout(() => { stop(); startDrag(el, x0, y0) }, HOLD_MS)
+  addEventListener('pointermove', moved)
+  addEventListener('pointerup', stop)
+}
+
+// moves [[fromSlot, toSlot], ...] for dropping the key at `from` on slot `to`
+function dragPlan(from, to, occupied, fixed) {
+  if (to === from || fixed.has(to)) return []
+  if (!occupied.has(to)) return [[from, to]]
+  const free = (i) => i >= 0 && i < 10 && i !== to && !fixed.has(i) && (i === from || !occupied.has(i))
+  if (![...Array(10).keys()].some((i) => i !== from && free(i))) return [[from, to], [to, from]]
+  let hole = -1
+  for (let d = 1; hole < 0; d++) hole = free(to + d) ? to + d : free(to - d) ? to - d : -1 // ties go forward
+  const step = hole > to ? 1 : -1
+  const moves = [[from, to]]
+  for (let i = to; i !== hole;) {
+    let j = i + step
+    while (fixed.has(j)) j += step
+    moves.push([i, j])
+    i = j
+  }
+  return moves
+}
+
+function startDrag(el, x0, y0) {
+  const box = $('keys')
+  const p = curPage()
+  const from = Number(el.dataset.slot)
+  const tiles = [...box.querySelectorAll('.key:not(.empty)')]
+  const occupied = new Set(tiles.map((t) => Number(t.dataset.slot)))
+  const fixed = new Set([...Array(10).keys()].filter((i) => cellWidgets(p, ...slotRC(i)).length))
+  let to = from
+  let moves = []
+  box.dataset.dragging = 'true'
+  el.dataset.lifted = 'true'
+  const move = (e) => {
+    const r = box.getBoundingClientRect()
+    const z = r.width / 640
+    el.style.transform = `translate(${(e.clientX - x0) / z}px, ${(e.clientY - y0) / z}px)`
+    const col = Math.floor((e.clientX - r.left) / (128 * z))
+    const row = Math.floor((e.clientY - r.top) / (128 * z))
+    const t = row >= 0 && row < 2 && col >= 0 && col < 5 ? row * 5 + col : from
+    if (t === to) return
+    to = t
+    moves = dragPlan(from, to, occupied, fixed)
+    const dest = new Map(moves)
+    for (const tile of tiles) {
+      if (tile === el) continue
+      const [r2, c2] = slotRC(dest.get(Number(tile.dataset.slot)) ?? Number(tile.dataset.slot))
+      tile.style.left = `${c2 * 128}px`
+      tile.style.top = `${r2 * 128}px`
+    }
+    for (const t2 of box.querySelectorAll('.key.empty')) t2.dataset.drop = String(moves.length > 0 && Number(t2.dataset.slot) === to)
+  }
+  const end = (e) => {
+    removeEventListener('pointermove', move)
+    removeEventListener('pointerup', end)
+    removeEventListener('keydown', end, true)
+    ui.dragEndAt = Date.now()
+    if (e.type === 'keydown') e.preventDefault()
+    const done = e.type === 'pointerup' ? moves : []
+    const [row, col] = slotRC(done.length ? to : from)
+    ui.sel = { kind: 'key', row, col }
+    if (!done.length) return renderKeys()
+    run(window.mk10.moveKeys(ui.page, done.map(([f, t]) => [...slotRC(f), ...slotRC(t)])).catch((err) => { renderKeys(); throw err }))
+  }
+  addEventListener('pointermove', move)
+  addEventListener('pointerup', end)
+  addEventListener('keydown', end, true) // any key cancels (Esc)
 }
 
 function renderBackground() {
@@ -604,11 +707,182 @@ function renderInspector() {
     // every key: even the "complete" forms miss item fields (soundFile, opacity, titleParam, ...)
     $('insp-raw').hidden = false
     loadRaw()
+    renderMacro(key)
     fillKv($('key-action'), actionRows(key.action), (field, value) =>
       run(window.mk10.setKeyActionField(ui.page, sel.row, sel.col, field, value)),
     key.action?.type === 'openPage' ? { pageName: pageOptions } : key.action?.type === 'pageSwitch' ? { jumpToPage: jumpOptions } : {})
   }
   if (vid) fillKv($('video-info'), [['asset', base(vid.path ?? '(none)')], ['size', '640 × 256']])
+  if (!key) stopListening()
+}
+
+// ---- macro editor (keyboard, qmk_string and action-flow keys; lib/macro.js). Every edit writes the
+// whole step list; one tap or one text saves as a plain action, more steps as an action flow.
+// A fresh key's empty template step (keycode 0, no text) counts as no step.
+const macro = { steps: [], key: null, listen: null } // listen: {mode:'rec'|'one', at, ...}
+const realSteps = (m) => (m && !m.error ? m.filter((s) => !(s.type === 'keyboard' && !s.keycode) && !(s.type === 'qmk_string' && !s.text)) : [])
+const saveMacro = (steps) => {
+  const prev = macro.steps
+  macro.steps = steps
+  if (!steps.length) return renderMacroSteps() // nothing to save until there is a step
+  const plain = steps.map((s) => Object.fromEntries(Object.entries(s).filter(([k]) => k !== 'label')))
+  // refused (e.g. a move that splits a repeat): show the saved steps again
+  return run(window.mk10.setKeyMacro(ui.page, ui.sel.row, ui.sel.col, plain).catch((e) => {
+    macro.steps = prev
+    renderMacroSteps()
+    throw e
+  }))
+}
+
+function renderMacro(key) {
+  const on = !!key.macro
+  $('key-macro').hidden = !on
+  $('key-action-h').hidden = $('key-action').hidden = on
+  if (!on) return
+  const id = `${ui.page},${ui.sel.row},${ui.sel.col}`
+  if (macro.key !== id) stopListening()
+  macro.key = id
+  if (key.macro.error) { $('macro-hint').textContent = `Can't read this macro: ${key.macro.error}`; return }
+  if (!macro.listen) macro.steps = realSteps(key.macro)
+  renderMacroSteps()
+}
+
+function renderMacroSteps() {
+  const list = $('macro-steps')
+  if (list.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') return
+  let depth = 0
+  const kinds = macro.steps.length > 1 ? 'action flow' : macro.steps.length ? 'single action' : 'empty: add or record steps'
+  $('macro-kind').textContent = `(${kinds})`
+  list.replaceChildren(...macro.steps.map((s, i) => {
+    if (s.type === 'stopLoop') depth = Math.max(0, depth - 1)
+    const li = tpl('tpl-macro-step')
+    li.style.setProperty('--depth', depth)
+    if (s.type === 'startLoop') depth++
+    li.dataset.i = i
+    li.querySelector('.ms-n').textContent = i + 1
+    const known = ['keyboard', 'qmk_string', 'delay', 'startLoop', 'stopLoop'].includes(s.type)
+    const ed = tpl(known ? `tpl-ms-${s.type}` : 'tpl-ms-other')
+    if (s.type === 'keyboard') {
+      ed.querySelector('.ms-keytype').value = String(s.keyType)
+      const b = ed.querySelector('.ms-key')
+      b.textContent = s.label ?? `keycode ${s.keycode}`
+      b.classList.toggle('listening', macro.listen?.mode === 'one' && macro.listen.index === i)
+    } else if (s.type === 'qmk_string') ed.querySelector('.ms-text').value = s.text
+    else if (s.type === 'delay') ed.querySelector('.ms-ms').value = s.ms
+    else if (s.type === 'startLoop') ed.querySelector('.ms-count').value = s.count
+    else if (!known) ed.textContent = `${s.type} (made in the vendor app; kept as is)`
+    li.querySelector('.ms-edit').append(ed)
+    return li
+  }))
+  $('btn-macro-rec').textContent = macro.listen?.mode === 'rec' ? 'Stop recording' : 'Record keys'
+  $('btn-macro-rec').classList.toggle('recording', macro.listen?.mode === 'rec')
+  if (macro.listen?.mode === 'rec') list.scrollTop = list.scrollHeight
+}
+
+function listen(l) {
+  macro.listen = { ...l, at: performance.now(), from: macro.steps.length }
+  run(window.mk10.macroRecord(true))
+  renderMacroSteps()
+}
+function stopListening() {
+  const l = macro.listen
+  if (!l) return
+  macro.listen = null
+  // release keys still down: after a Cmd/Ctrl combo the Cmd keyUp can be lost (Electron drops the
+  // keyUps of a prevented keyDown), and a macro that ends with a key held leaves it held on the host
+  if (l.mode === 'rec') {
+    const held = new Map()
+    for (const st of macro.steps.slice(l.from)) {
+      if (st.type !== 'keyboard') continue
+      if (st.keyType === 1) held.set(st.keycode, st)
+      else if (st.keyType === 2) held.delete(st.keycode)
+    }
+    if (held.size) saveMacro([...macro.steps, ...[...held.values()].reverse().map((st) => ({ type: 'keyboard', keycode: st.keycode, keyType: 2, label: st.label }))])
+  }
+  run(window.mk10.macroRecord(false))
+  if ($('key-macro').hidden === false) renderMacroSteps()
+}
+
+// a key event from main while listening: {down, code, label, combo} or {unknown}
+function onMacroKey(k) {
+  const l = macro.listen
+  if (!l) return
+  if (k.unknown) return setStatus({ msg: `${k.unknown}: no keycode for this key; add it another way`, error: true })
+  if (l.mode === 'one') {
+    // one tap of the key plus the modifiers held with it; a modifier alone counts on its release
+    if (k.down) {
+      if (!/^[LR] (Ctrl|Shift|Alt|Win)$/.test(k.label)) l.pick = k.combo ?? { code: k.code, label: k.label }
+      else l.mod = { code: k.code, label: k.label }
+      return
+    }
+    const pick = l.pick ?? l.mod
+    if (!pick) return
+    const step = { type: 'keyboard', keycode: pick.code, keyType: 0, label: pick.label }
+    const steps = [...macro.steps]
+    if (l.index === undefined) steps.push(step)
+    else steps[l.index] = { ...steps[l.index], keycode: pick.code, label: pick.label }
+    stopListening()
+    return saveMacro(steps)
+  }
+  // recording: every down and up in order, pauses as delays when "With timing" is on;
+  // a down straight followed by its up (no pause step between) folds into one tap
+  const now = performance.now()
+  const steps = [...macro.steps]
+  const gap = Math.round((now - l.at) / 10) * 10
+  l.at = now
+  if ($('macro-timing').checked && l.started && gap > 0) steps.push({ type: 'delay', ms: gap })
+  l.started = true
+  const last = steps.at(-1)
+  if (!k.down && last?.type === 'keyboard' && last.keyType === 1 && last.keycode === k.code) last.keyType = 0
+  else steps.push({ type: 'keyboard', keycode: k.code, keyType: k.down ? 1 : 2, label: k.label })
+  saveMacro(steps)
+}
+
+function wireMacro() {
+  window.mk10.onMacroKey(onMacroKey)
+  // while recording, keys go only to the recorder (main forwards them); the page never acts on them
+  const swallow = (e) => { if (macro.listen) { e.preventDefault(); e.stopImmediatePropagation() } }
+  window.addEventListener('keydown', swallow, true)
+  window.addEventListener('keyup', swallow, true)
+  $('btn-macro-rec').addEventListener('click', () => (macro.listen?.mode === 'rec' ? stopListening() : listen({ mode: 'rec' })))
+  window.addEventListener('blur', stopListening)
+  $('key-macro').addEventListener('click', (e) => {
+    const add = e.target.closest('[data-add]')?.dataset.add
+    if (add === 'key') return listen({ mode: 'one' })
+    if (add) {
+      stopListening()
+      const more = { text: [{ type: 'qmk_string', text: 'text' }], delay: [{ type: 'delay', ms: 100 }], loop: [{ type: 'startLoop', count: 2 }, { type: 'stopLoop' }] }[add]
+      return saveMacro([...macro.steps, ...more])
+    }
+    const li = e.target.closest('.macro-step')
+    if (!li) return
+    const i = Number(li.dataset.i)
+    if (e.target.closest('.ms-key')) return listen({ mode: 'one', index: i })
+    const steps = [...macro.steps]
+    if (e.target.closest('[data-del]')) {
+      if (steps.length === 1) return setStatus({ msg: 'A macro needs at least one step: change this one instead', error: true })
+      steps.splice(i, 1)
+      return saveMacro(steps)
+    }
+    const mv = Number(e.target.closest('[data-mv]')?.dataset.mv)
+    if (mv && steps[i + mv]) {
+      ;[steps[i], steps[i + mv]] = [steps[i + mv], steps[i]]
+      return saveMacro(steps)
+    }
+  })
+  $('key-macro').addEventListener('change', (e) => {
+    const li = e.target.closest('.macro-step')
+    if (!li) return
+    const i = Number(li.dataset.i)
+    const s = { ...macro.steps[i] }
+    const n = Number(e.target.value)
+    if (e.target.matches('.ms-keytype')) s.keyType = n
+    else if (e.target.matches('.ms-text')) s.text = e.target.value
+    else if (e.target.matches('.ms-ms')) s.ms = Math.round(n)
+    else if (e.target.matches('.ms-count')) s.count = Math.round(n)
+    else return
+    saveMacro(macro.steps.with(i, s))
+  })
 }
 
 function render() {
@@ -694,8 +968,7 @@ async function onChange(e) {
 // Title font picker: device fonts first, then this computer's (copied to the device on an ssh push).
 // Before the device fonts are copied, its two stock title fonts stand in.
 const fontLists = { device: [], system: [] }
-function fillFontSelect(current) {
-  const sel = $('tp-family')
+function fillFontSelect(current, sel = $('tp-family')) {
   const device = fontLists.device.length ? fontLists.device : ['Arial', 'Microsoft YaHei']
   const onDevice = new Set(device)
   const group = (label, names) => {
@@ -725,13 +998,23 @@ function registerFonts(list) {
   $('fonts-info').textContent = n ? `${n} font files from the device` : 'None yet: copied after the first ssh push or pull'
 }
 
+// serial mode needs a port, not an ssh host
+function showPushMode() {
+  const serial = $('push-mode').value === 'serial'
+  $('device-mode').textContent = $('push-mode').value
+  $('ssh-host-field').hidden = serial
+  $('btn-reboot').hidden = serial // ssh only: the vendor app has no reboot over serial
+  $('serial-port-field').hidden = !serial
+}
+
 async function init() {
   const cfg = await window.mk10.settings()
   $('ssh-host').value = cfg.ssh.host
   if (cfg.build) { $('brand').textContent = cfg.build.label; $('brand').title = cfg.build.title; $('brand').dataset.dev = 'true' }
   $('ssh-remote').value = cfg.ssh.remote
   $('push-mode').value = cfg.pushMode ?? 'auto'
-  $('device-mode').textContent = $('push-mode').value
+  $('serial-port').value = cfg.serialPort ?? ''
+  showPushMode()
   let gaps = true
   try { gaps = localStorage.getItem('keyGaps') !== 'false' } catch { /* storage unavailable: default on */ }
   $('key-gaps').checked = gaps
@@ -753,8 +1036,23 @@ async function init() {
     const s = p.screen.replace('-', ' ')
     show('perm-screen', p.screen === 'granted', s[0].toUpperCase() + s.slice(1))
   }
+  // New key title defaults: blank fields mean the built-in default (Microsoft YaHei, 16 px, Regular)
+  const td = (k) => document.querySelector(`[data-td=${k}]`)
+  const showTitleDefaults = () => {
+    const d = cfg.titleDefaults ?? {}
+    fillFontSelect(d.FontFamily ?? 'Microsoft YaHei', td('FontFamily'))
+    td('FontSize').value = d.FontSize ?? 16
+    td('FontStyle').value = d.FontStyle ?? ''
+  }
+  $('title-defaults').addEventListener('change', () => {
+    const n = Number(td('FontSize').value)
+    const d = { FontFamily: td('FontFamily').value || undefined, FontSize: Number.isInteger(n) && n >= 6 && n <= 96 ? n : undefined, FontStyle: td('FontStyle').value }
+    cfg.titleDefaults = d
+    run(window.mk10.setTitleDefaults(d))
+  })
   const openSettings = () => {
     if ($('settings-dlg').open) return
+    showTitleDefaults()
     $('settings-dlg').showModal()
     showPerms()
     permTimer = setInterval(showPerms, 2000)
@@ -776,6 +1074,7 @@ async function init() {
   if (cfg.settingsPreview) openSettings() // --screenshot --settings previews it
   $('btn-settings').addEventListener('click', openSettings)
   $('btn-capture').addEventListener('click', () => run(window.mk10.openCapture()))
+  wireMacro()
   $('btn-pull').addEventListener('click', () => run(window.mk10.pull()))
   // the device has no getter for either level, so each slider starts where it was last set from here
   for (const [id, method, label, start] of [['brightness', 'setBacklight', 'Brightness', 50], ['volume', 'setVolume', 'Volume', 4]]) {
@@ -851,16 +1150,18 @@ async function init() {
     const { row, col } = ui.sel
     const page = ui.page
     const names = await window.mk10.icons().catch(() => [])
-    $('icon-grid').replaceChildren(...names.map((n) => {
+    const item = (n) => {
       const li = tpl('tpl-icon-item')
       li.querySelector('img').src = `../icons/${n}.png`
-      li.querySelector('span').textContent = n
+      li.querySelector('span').textContent = n.replace(/^PictureFont\//, '')
       li.querySelector('button').addEventListener('click', () => {
         $('icon-dlg').close()
         run(window.mk10.setKeyIcon(page, row, col, n))
       })
       return li
-    }))
+    }
+    $('icon-grid').replaceChildren(...names.filter((n) => !n.startsWith('PictureFont/')).map(item))
+    $('icon-grid-pf').replaceChildren(...names.filter((n) => n.startsWith('PictureFont/')).map(item))
     $('icon-dlg').showModal()
   })
   $('icon-dlg').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close() })
@@ -892,10 +1193,18 @@ async function init() {
     if (ui.sel?.kind === 'key') run(window.mk10.setKeyTitle(ui.page, ui.sel.row, ui.sel.col, e.target.value))
   })
   const saveSsh = () => {
-    $('device-mode').textContent = $('push-mode').value
-    return run(window.mk10.setSsh({ host: $('ssh-host').value, remote: $('ssh-remote').value, mode: $('push-mode').value }))
+    showPushMode()
+    return run(window.mk10.setSsh({ host: $('ssh-host').value, remote: $('ssh-remote').value, mode: $('push-mode').value, port: $('serial-port').value.trim() }))
   }
   $('ssh-host').addEventListener('change', saveSsh)
+  $('serial-port').addEventListener('change', saveSsh)
+  $('btn-reboot').addEventListener('click', () => { $('device-pop').hidePopover(); run(window.mk10.rebootDevice()) })
+  // offer the MK10 ports present right now each time the popover opens
+  $('device-pop').addEventListener('toggle', async (e) => {
+    if (e.newState !== 'open') return
+    const ports = await window.mk10.serialPorts().catch(() => [])
+    $('serial-ports').replaceChildren(...ports.map((p) => { const o = tpl('tpl-option'); o.value = p; return o }))
+  })
   $('ssh-remote').addEventListener('change', saveSsh)
   $('push-mode').addEventListener('change', saveSsh)
 

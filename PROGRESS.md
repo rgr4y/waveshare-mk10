@@ -965,3 +965,199 @@ Verification
 - Outcome: the icons had been drawn high to leave room for a bottom title. Titles now default to the top, so each icon's drawn area is centred across and placed with its centre at y = 70 (a little below the middle, clear of a 16 px top title). Done with a `<g transform="translate(dx dy)">` per SVG, using the shift measured from each PNG's bounding box (`magick -format %@`), then re-rendered. Keys that already use an icon keep the old image until the icon is chosen again.
 - Changed: `app/icons/*.svg`, `app/icons/*.png`.
 - Verification: contact sheet of all 14 checked; the lowest edge (file) is at y ≈ 112 of 128.
+
+## 2026-11-25 — Macro editor: single actions and action flows (ControlFlow)
+
+- Outcome: hotkey, keyboard-macro and action-flow keys get a **Macro** timeline in the Inspector, replacing the raw action fields.
+  - Steps: Key with Tap/Down/Up, Text, Delay (ms), and Repeat N … End repeat.
+  - **Record keys** captures every key down and up from the main window, Cmd shortcuts included, through `before-input-event`. "With timing" also records the pauses as delays.
+  - **+ Key…** adds one tap of a key or combo, mods included. ↑/↓ reorders, × removes.
+  - One tap or one text is saved as a plain `keyboard`/`qmk_string` action. Anything else becomes a ControlFlow flow. This merges the single macro with the action flow, as Rob suggested.
+- Root cause of the earlier flow crash: the daemon runs the **item** string field `controlDataList` (base64 `QList<QVariantMap>`); it does not run controlData's copy. Found in `VideoPlayer::keyStateChanged`. A ControlFlow with only the controlData copy crashed KeyboardDevice. Step handlers (`OperatingSystemControl` ctor): keyboard, qmk_mouse, qmk_string, delay, startLoop, stopLoop, devicePlayAudio, deviceStopAudio, deviceVolume, and two xiaozhi ones. A keyboard step is GD32 cmd 0x17 `<keyType> <keycode16>`, with keyType 0 tap, 1 press, 2 release.
+- Changed:
+  - New: `app/lib/macro.js` (`readMacro`, `setKeyMacro`) and `macro.test.js`.
+  - `app/lib/qmk.js`: `CODE_TO_HID` (KeyboardEvent.code to HID usage) and `qmkLabel` ("L Ctrl C").
+  - Wiring: `app/lib/session.js` (key summary `macro`, `setKeyMacro`), `app/main.js` (`setKeyMacro`/`macroRecord` IPC, `recordKey`), `app/preload.cjs`.
+  - UI: `app/public/{app.js,index.html,styles.css}`.
+  - Docs: `app/README.md` (Macros) and `docs/theme-format.md` ("Action flows").
+- Verification:
+  - On the device (lenny HID capture, injected presses) every step type worked: flow tap; press, 1 s, release; delay; loop ×3; Shift held over a tap gave "F"; LSFT(KC_C) as one tap; a 3 s delay; extra step fields ignored; text inside a flow.
+  - Text is typed literally: "a%20B" typed `a%20B`, and `\n`/`\t` became Enter/Tab.
+  - A theme built by `setKeyMacro` itself typed "A", then 0.5 s later "ok". Shift+B worked as a plain key, and the loop ran twice.
+  - `npm test` 45/45 and eslint clean. Screenshot of the timeline checked.
+  - Device restored: defaultTheme is back to `mk10studio.Theme`, `cftest.Theme` removed, gd32 relay stopped.
+  - NOT verified: Record / + Key… in the live app (needs real typing on the Mac). A Studio push of a macro key through the normal Push path.
+- Follow-up: none required. The flow step types not exposed yet: qmk_mouse, device audio and volume. They are kept unchanged when present.
+
+## 2026-11-25 — Macro editor verified end to end; ssh push could leave two KeyboardDevice instances
+
+- Outcome:
+  - The macro Record / + Key… path is verified: `before-input-event` was fired on the real main window from the main process (Node inspector), then the steps the renderer built were read back.
+  - Record captures every key and blocks it from the page and the menus. Cmd+Q was recorded and did not quit the app.
+  - Held modifiers stay Down/Up, and a down directly followed by its up folds to a Tap. With timing, a 400 ms hold gave Down C, Wait, Up C.
+  - + Key… gives a combo tap (`L Ctrl L Shift S`), a modifier alone (`L Win`), and re-binds a step's key. An unmapped key (`IntlRo`) gives an error toast and no step.
+  - Synthetic input over CDP (`Input.dispatchKeyEvent`) does not reach `before-input-event`, so that is not a usable test path.
+- Root cause (push): on the first test push the theme switch silently failed.
+  - `rc-service keyboard-device restart` sent SIGTERM. The app crashed in its own handler (`info SIGSEGV start`) and never exited. supervise-daemon left it running, ppid 1, beside the new instance.
+  - config.json was rewritten back to the old `defaultTheme` seconds after the push had set it. My reading is that the dying instance saved its config; that is inferred from the timing.
+  - Separately: `mk10-gd32-relay` stop did a plain `umount` of the pty, which failed with EBUSY and left KeyboardDevice on a dead pty, so the physical keys were dead after this morning's restore.
+- Changed:
+  - `app/lib/session.js` `pushSsh`: stop keyboard-device, then edit config.json, then start it (it used to edit, then restart).
+  - LilAlpine `8723cda`: relay stop uses `umount -l`.
+  - LilAlpine `3dae2c0`: keyboard-device `stop_post` waits 5 s, then `kill -9`s any KeyboardDevice left. It caught the orphan on the first stop.
+  - Docs: `app/README.md` (ssh push steps), `docs/gd32-uart.md`.
+- Verification:
+  - Push through `Session.pushSsh` to `/data/theme/MK10/cftest.Theme`: defaultTheme held, one KeyboardDevice.
+  - Injected presses typed "go", 0.3 s later Shift+Y, and `z` for a plain one-step key.
+  - Relay start/stop leaves no mount and the real UART (char 246,1) open.
+  - Device restored: mk10studio.Theme, one daemon, relay stopped, cftest removed.
+  - `npm test` 45/45, eslint clean.
+  - NOT checked: a physical key press after the relay stop.
+
+## 2026-11-25 — Push (ssh): reboot fallback when the app does not come back
+
+- Outcome: after `rc-service keyboard-device start`, `pushSsh` polls for 20 s for exactly one KeyboardDevice (plus `videoplayerinterfaceAPP` when page 0 has a video). If that fails, it reboots the device and waits up to 120 s for the same check. Replaces the old warn-only video check.
+- Why: Rob saw a push leave the screens frozen while touch still worked; even writing `/dev/fb0` showed nothing. A restart test then hit the app's SIGSEGV-in-SIGTERM-handler crash again on the third stop.
+- Limit: the frozen-screen state itself has no known remote signature, so it would pass this check. It still needs a manual reboot until we can detect it (candidate: `/sys/class/disp/disp/attr/sys` layer/irq state, captured while it is stuck).
+- Verification: `npm test` 45/45, eslint clean. Not run against the device (healthy path or reboot path).
+
+## 2026-11-25 — Studio: press-and-hold drag to move keys
+
+- Outcome: hold a key 350 ms, then drag it. Keys in the way shift toward the nearest free slot (iOS style, the origin counts as free); on a full page the target key swaps. Widget cells are fixed and never targets. Any key press cancels; Cmd+Z undoes.
+- Changed files: `app/lib/theme.js` (`moveKeys`, widget check moved into `needKeySlot`), `app/lib/session.js` (`moveKeys`, undoable `keyMove`), `app/main.js` + `app/preload.cjs` (IPC), `app/public/app.js` (`holdToDrag`, `dragPlan`, `startDrag`), `app/public/styles.css`, `app/README.md` "Moving keys".
+- Also fixed `c95a9c8`: the `4bc80fc` pushSsh edit had spliced a duplicate `withDevice..pushSsh` block into `session.js`. Its PROGRESS entry claimed eslint was clean; it was not (I read a truncated lint tail).
+- Verification: `npm test` 46/46 (new `moveKeys` test: empty-slot move, swap, rejects an occupied target and a bad slot without changing anything), eslint clean. Rob tested the drag in the app ("drag works"). Not tested: the swap on a full page in the UI, or a page with a widget cell in the middle of a shifted run.
+
+## 2026-11-25 — Studio: PictureFont glyphs in Choose icon…
+
+- Outcome: the vendor app's PictureFont images (dot-matrix digits 0-9 and a colon) are copied into `app/icons/PictureFont/` and listed in Choose icon… under a "PictureFont" heading, below the line-art icons. Previews sit on a light tile because the glyphs are black dots.
+- Source: `/Applications/ScreenKeyMacOS.app/Contents/MacOS/image/MK10/PictureFont/点数字/0-9.png` (128x128, alpha) and `image/128x128/PictureFont/点-.png` (64x128, a colon despite the name; padded to 128x128 as `dot-colon.png`). The SK18/MK20 PictureFont dirs are empty. Nothing else from the vendor app was used.
+- Changed files: `app/lib/theme.js` (`listIcons` adds `PictureFont/<name>`), `app/public/{index.html,app.js,styles.css}`, `app/icons/PictureFont/*`, `app/README.md`.
+- Verification: drove the app over CDP: the dialog lists 14 line-art icons and 11 glyphs, and clicking one applies it. Also checked from Node: `setKeyIcon(..., 'PictureFont/dot-colon')` stores it as a key asset. `npm test` 46/46, eslint clean. Not checked: how the glyphs look on the device.
+
+## 2026-11-25 — Push (ssh): hot reload over USB serial when the MK10 is attached
+
+- Outcome: after the scp, `pushSsh` sends the V1 reload (cmd 2) over USB serial when an MK10 port is present (or Studio already holds it) and no fonts were copied. That loads the theme in about 4 s with no app restart, and the app writes `config.json` `defaultTheme` itself. If there is no port, fonts were copied (the app reads them only at start), or the reload fails, it falls back to stop / edit config / start / reboot.
+- Investigation: the app has no other reload hook. No file watcher, no SIGHUP or SIGUSR, and no control socket; the UDP 5679 socket belongs to `videoplayerinterfaceAPP` on 127.0.0.1. The reload always loads the whole theme (all assets re-extracted). No per-key update command found.
+- Verification: `npm test` 46/46, eslint clean. Not run live: Rob's running Studio holds the serial port, so the reload path needs a Push from his Studio after a restart. Not verified: reloading the same path that is already loaded (earlier tests switched between different files).
+
+## 2026-11-25 — Studio: Serial port field for USB serial push
+
+- Outcome: in the Device popover, choosing USB serial swaps the ssh host field for a Serial port field. Blank means the first MK10 port found; the field suggests the MK10 ports present each time the popover opens. Saved as `settings.serialPort`, used by serial push and by the ssh-mode hot reload (`MK10_PORT` still wins).
+- Changed files: `app/public/{index.html,app.js}` (`showPushMode`), `app/main.js` (`serialPorts` IPC, `setSsh` port, `pushOpts`), `app/preload.cjs`, `app/lib/session.js` (`pushSsh` passes the port to the reload), `app/README.md`.
+- Verification: drove the app over CDP with serial selected (not saved). ssh host hidden, Serial port shown, suggestion `/dev/cu.usbmodemMK10_f82d98f01`. Screenshot checked. `npm test` 46/46, eslint clean. Not run: a push with a typed port.
+
+## 2026-11-25 — Studio: Reboot device… in the Device popover
+
+- Outcome: Reboot device… (hidden in USB serial mode) asks for confirmation, runs `sync; reboot` over ssh, and waits until `pidof KeyboardDevice` answers (`Session.rebootSsh`, 120 s limit). Also updated the ssh push confirmation text for the serial hot reload.
+- Serial: no reboot over the vendor protocol. `KeyboardDevice` strings have no reboot, poweroff or shutdown; the JSON method list has none either.
+- Found: the MK10 USB serial port name changes across a reboot (`usbmodemMK10_f82d98f01`, then `usbmodemMK10_96a48f941`), so a saved Serial port goes stale on LilAlpine. The README says to leave it blank there.
+- Verification: `rebootSsh` run live against 10.0.1.48: back with KeyboardDevice and the video player after 34 s, and the watchdog trace logged the reset. Popover screenshot in ssh mode shows the button. `npm test` 46/46, eslint clean. Not run: the confirmation dialog itself (the button needs Rob's Studio restarted).
+
+## 2026-11-25 — Macro timeline, push robustness, drag-to-move, PictureFont, serial hot reload, reboot, bootprof
+
+- Outcome (waveshare-mk10):
+  - Macro editor: Record / + Key timeline, and every key can be a single event or an action flow (`56a5597`).
+  - ssh Push: stops the app before editing `config.json` (`5684631`).
+  - Fixed the duplicated `withDevice..pushSsh` block that `4bc80fc` spliced into `session.js` (`c95a9c8`).
+  - Hold-to-drag keys with iOS-style shifting (`6096b2e`).
+  - PictureFont glyphs in Choose icon… (`3828500`).
+  - ssh Push hot-reloads over USB serial when the MK10 is attached (`91322d5`).
+  - Serial port field in the Device popover (`3f03352`).
+  - Reboot device… button (`3371381`).
+- Outcome (LilAlpine, none built into an image):
+  - `8723cda`: `mk10-gd32-relay` stop uses `umount -l`.
+  - `3dae2c0`: `keyboard-device` `stop_post()` kills a leftover KeyboardDevice.
+  - `1e3f71a`: new `bootprof` service, first in sysinit.
+- Outcome (kernel, nothing pushed):
+  - `9809d24a1`: `mk10/modtest/{gc9107,gc9307}` drivers.
+  - `9ca9c5b04`: `docs/mk10-framebuffers.md`.
+  - The Mac clone was fast-forwarded and is clean.
+- Root cause (relay): a plain `umount /dev/ttyS1` fails EBUSY while KeyboardDevice holds the pty, which leaves KeyboardDevice on a dead pty with the physical keys dead.
+- Root cause (config revert): a KeyboardDevice orphan left behind by a SIGTERM-handler segfault reverts `defaultTheme` in `config.json`.
+- Root cause (bootprof, first boot): `/` is read-only during sysinit, so `mkdir /var/log/bootprof` at start failed and the report was lost. The mkdir now happens at report time.
+- Frozen screens (display stuck while touch works, `cat /dev/zero > /dev/fb0` does nothing): cause NOT found. Cycling stop/start on the device did not reproduce it. The third stop did crash in the shutdown handler. Push only retries and reboots if the app does not come back.
+- Findings:
+  - KeyboardDevice reloads a theme only via V1 cmd 2 over USB serial. It has no file watcher, signal reload or control socket.
+  - fb0 is the whole 896x304 display. fb1–fb10 are the gc9107 panels.
+  - On the device, flow steps run about 40 ms apart.
+  - There is no reboot command over serial.
+  - The MK10 serial port name changes across a reboot, so leave Serial port blank on LilAlpine.
+- Changed (key paths):
+  - `app/lib/{macro,qmk,session,theme}.js`
+  - `app/main.js`, `app/preload.cjs`
+  - `app/public/{index.html,app.js,styles.css}`
+  - `app/icons/PictureFont/*`
+  - `app/README.md`, `docs/theme-format.md`, `docs/gd32-uart.md`
+  - LilAlpine: `boards/MK10-T113/rootfs/{etc/init.d/{bootprof,keyboard-device,mk10-gd32-relay},usr/libexec/bootprof}`, `config.json`, README
+- bootprof results (second boot, time since kernel start):
+
+  | Point | Time |
+  |---|---|
+  | init starts | 1.1 s |
+  | bootprof starts | 2.6 s |
+  | last OpenRC service done | about 14 s |
+  | wlan0 has an IP | 19.3 s |
+  | app on screen | 22.5 s |
+
+  - Slowest services: `mk10-modeswitch` 3.4 s, `mdev` 1.8 s, `wifi` 1.5 s, `bootlog` 1.4 s.
+  - `keyboard-device` itself takes 0.09 s; the app needs about 12 s before it draws.
+  - Services that start before bootprof (`devfs`, sometimes `sysfs`) are not captured.
+- Verification:
+  - `npm test` 46/46, eslint clean.
+  - Every macro step type was run on the device. Record / + Key were driven through the real main handler on lenny. `setKeyMacro` and `Session.pushSsh` were each checked end to end on the device (typed output as expected).
+  - Drag, the PictureFont dialog and the Device popover were driven over CDP. Rob confirmed "drag works".
+  - `rebootSsh` live: back in 34 s.
+  - bootprof wrote its own report on a real boot.
+  - Device restored after the macro tests: `defaultTheme` mk10studio.Theme, one KeyboardDevice, real `/dev/ttyS1` open, relay stopped.
+- Not verified:
+  - A physical key press after the relay stop.
+  - Serial hot reload live (Rob's Studio holds the port; needs a Studio restart), including reloading a theme that is already loaded.
+  - The Reboot confirmation dialog.
+  - A push with a typed Serial port.
+  - The drag swap on a full page, and a shift across a widget cell.
+  - How the PictureFont glyphs look on the device.
+  - Serial Push in the Reboot-hidden state.
+- Follow-up:
+  - Find a remote signature for the frozen-screen state. Capture `/sys/class/disp/disp/attr/sys` while it is stuck.
+  - Optional: hide the Linux Permissions stub; the git clone on lenny.
+
+## 2026-11-25 — Studio: pencil on key thumbnail replaces "Replace image…"
+- Outcome: the Replace image button is gone; a pencil button sits on the key thumbnail's bottom-right corner (same `btn-key-image` id and handler, still hidden for multi-state keys). "Choose icon…" moved directly under the thumbnail.
+- Changed: `app/public/index.html`, `app/public/styles.css` (`.thumb-box`, `.thumb-edit`, `.thumb-row` column), `app/README.md`, `docs/mk10-studio-validation.md`.
+- Verification: lint clean; Rob checked the pencil in his dev instance. Choose icon placement not yet eyeballed.
+
+## 2026-11-25 — Studio: delta push over ssh (zstd --patch-from)
+- Outcome: `pushSsh` keeps the last pushed theme in `$TMPDIR/mk10studio-basis-<md5 of host:remote>.Theme`. Next push makes a `zstd -1 --long=N --patch-from` patch, scps it, and the device (LilAlpine zstd 1.6.0) checks the old file's md5, rebuilds `<remote>.new`, checks the new md5, then `mv`s it into place. Any failure (exit 3 = device file not the basis, 4 = bad rebuild, no zstd, delta > half the theme, window > 2^27) falls back to the full scp.
+- Numbers: 22 MB theme, one JSON edit: 3–4 KB patch, 3.1 s total (was ~9 s of scp at ~2.4 MB/s). The 4 s serial reload is unchanged.
+- Changed: `app/lib/session.js` (`pushDelta`, wired into `pushSsh`), `app/README.md`.
+- Verification: lint, 46 tests; `pushDelta` run against a scratch file on the device (`/data/theme/MK10/deltatest.Theme`, removed): match case patched with md5 equal to the local build, mismatch case fell back. Not yet run through the real Push button.
+
+## 2026-11-25 — Studio: push/pull progress overlay
+- Outcome: while a push or pull holds the device lock, `#busy` covers `main.layout` (65% black + blur) with a title, a progress bar (indeterminate; serial `NN%` log lines fill it) and that operation's log. The pages, stage and inspector get `inert`, so no clicks or keys reach them. It closes when the lock releases; the result stays in the toast and Activity log.
+- Session: `deviceLock(kind, fn)`; `summary()` adds `deviceOp` ('push' | 'pull' | null) and keeps `pushing` boolean (MCP test relies on it). `summary()` with no theme open now reports `pushing`/`deviceOp` too, so a pull with nothing open also locks the UI.
+- Changed: `app/lib/session.js`, `app/public/{index.html,styles.css,app.js}`, `app/README.md`.
+- Verification: lint, 46 tests; screenshot instance: overlay covers the full layout, `elementFromPoint` hits `#busy`, panels inert, bar 0.4 after a "40%" line, all cleared on hide. Not run through a real push.
+
+## 2026-11-25 — Display snapshots to find the post-reload blackout
+- Context: after a push, the serial hot reload sometimes leaves the panel black until a key is pressed. Conditions unknown; no remote signature yet. Before adding a wake press (TIOCSTI into `/dev/ttyS1` works on the 5.4.61 kernel without the gd32 relay, untested), find what a blackout looks like from ssh.
+- Outcome: `displaySnap(label)` (`app/lib/session.js`) appends to `/var/log/mk10-display.log` on the device: KD and videoplayer pids, fb0 pan, non-zero byte count of fb0 page 0, disp ch0/ch1 enable/z/size/addr, last 5 lines of the app log. `pushSsh` runs it 6 s after every serial reload (outside the push lock). `node cli.js snap [label]` runs it by hand and prints the log tail.
+- Verification: lint, 46 tests; `cli.js snap` on the device (normal state: KD and VP up, ch0 640x256 + ch1 896x304 enabled, ~396k non-zero bytes).
+- Follow-up: when it goes black, run `node cli.js snap black` before pressing a key, then compare with the "after reload" entries.
+
+## 2026-11-25 — Macro recorder: key ups were never recorded
+- Root cause: `recordKey` (main.js) called `preventDefault()` on every keyDown in `before-input-event`. Electron then never delivers that key's keyUp (checked with `webContents.sendInputEvent`: without prevent, keyDown+keyUp; with prevent on keyDown, keyDown only). So every recorded key stayed a Down step and never folded into a tap; "+ Key…" capture, which commits on the up, was affected the same way.
+- Fix: main prevents only Cmd/Ctrl combos on a non-modifier key (they would fire menu items) and sends those as a down plus an immediate up. All other keys reach the page, where a capture-phase keydown/keyup listener swallows them while recording. On stop, any key still down since the recording started gets an Up step (the Cmd keyUp after a prevented Cmd+C is lost).
+- Changed: `app/main.js`, `app/public/app.js`.
+- Verification: lint; screenshot instance driven with `sendInputEvent` through the main-process inspector: A and S tapped became `A tap`, `S tap`; Cmd+C became `L Win down, C tap, … L Win up` (added at stop); Shift+D became `L Shift down, D tap, L Shift up`; zero keydowns reached the page. Not yet checked with a real keyboard.
+
+## 2026-11-25 — Studio: default font, size and style for new keys
+- Outcome: Settings > New key title (font picker with device and computer fonts, size 6-96, style Regular/Bold/Italic/Bold Italic). Saved as `settings.titleDefaults`, applied by `createKey` on top of the built-in titleParam (Microsoft YaHei, 16, Regular, top, white). Existing keys are untouched.
+- Changed: `app/lib/theme.js` (`checkTitleDefaults`, `createKey(..., titleDefaults)`), `app/lib/session.js` (`titleDefaults`), `app/main.js` (`setTitleDefaults` IPC, load on start), `app/preload.cjs`, `app/public/{index.html,app.js}` (`fillFontSelect(current, sel)` shared), `app/lib/theme.test.js`, `app/README.md`.
+- Verification: lint, 46 tests (createKey test extended: defaults land in titleParam, alignment stays top; invalid size refused; non-font keys dropped). Screenshot instance: section shows Microsoft YaHei / 16 / Regular with 716 font options. Not changed from the test instance (it would save settings).
+
+## 2026-11-25 — ssh push reloads through the device's own serial input
+- Finding: KeyboardDevice reads its USB host link from `/dev/ttyGS0` (fd 22; `/dev/ttyS1` is the GD32 keys). On the 5.4.61 kernel root can `TIOCSTI` (0x5412) bytes into that tty's input queue. Injecting a V1 cmd 2 frame for `/data/theme/MK10/tiocsti-test.Theme` (identical copy) switched `config.json` defaultTheme to it; injecting the original switched it back. No Mac USB involved. `config.json` mtime moves ~5 s after the injection even when the path is unchanged.
+- Outcome: `ttyReload(path)` (`app/lib/session.js`) builds the device shell: record config.json mtime, sleep 1, perl TIOCSTI the frame, poll up to 20 s for the mtime to move. `pushSsh` tries it first, then the USB serial reload if the MK10 is on this computer, then the stop/edit/start/healthy/reboot path. Paths outside `^/[\w./-]+$` are refused.
+- Verification: lint, 46 tests; `ttyReload` run on the device: exit 0 in 6.7 s. Not yet run through the Push button. The display snapshot still runs after either reload.
+- Note: the app's reply to the injected frame goes out to the USB host (Studio sees an unsolicited echo if it holds the port). Studio sends nothing on the port during a push, so its own frames can't interleave; another host app writing at the same moment could.

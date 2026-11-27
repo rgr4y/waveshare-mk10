@@ -25,12 +25,21 @@
     <div id="device-pop" class="device-pop" popover>
       <h3>Device</h3>
       <label class="field"><span>Push via</span><select id="push-mode"><option value="auto">Auto (detect firmware)</option><option value="serial">USB serial (stock firmware)</option><option value="ssh">ssh (LilAlpine)</option></select></label>
-      <label class="field"><span>ssh host</span><input id="ssh-host" type="text" autocomplete="off"></label>
+      <label class="field" id="ssh-host-field"><span>ssh host</span><input id="ssh-host" type="text" autocomplete="off"></label>
+      <label class="field" id="serial-port-field" hidden><span>Serial port</span><input id="serial-port" type="text" list="serial-ports" placeholder="first MK10 found" spellcheck="false" autocomplete="off"><datalist id="serial-ports"></datalist></label>
       <label class="field"><span>Remote</span><input id="ssh-remote" type="text" autocomplete="off"></label>
+      <button id="btn-reboot" type="button" title="Reboot the device over ssh (LilAlpine)">Reboot device…</button>
     </div>
   </header>
 
   <main class="layout">
+    <div id="busy" class="busy" hidden>
+      <div class="busy-card" role="alertdialog" aria-labelledby="busy-title">
+        <h2 id="busy-title"></h2>
+        <progress id="busy-bar"></progress>
+        <pre id="busy-log" class="log"></pre>
+      </div>
+    </div>
     <aside class="pages">
       <h2>Pages <span id="page-count" class="muted" title="Top-level pages; the MK10 allows 6. Folders do not count."></span></h2>
       <ul id="page-list" class="page-list"></ul>
@@ -62,7 +71,7 @@
 
       <div id="insp-key" class="insp-section" hidden>
         <h2>Key <span id="key-pos" class="muted"></span></h2>
-        <div class="thumb-row"><img id="key-thumb" class="thumb" alt=""></div>
+        <div class="thumb-row"><div class="thumb-box"><img id="key-thumb" class="thumb" alt=""><button id="btn-key-image" type="button" class="thumb-edit" title="Replace image…" aria-label="Replace image"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 2.5l3 3L5.5 13.5H2.5v-3z"/><path d="M9 4l3 3"/></svg></button></div><button id="btn-key-icon" type="button">Choose icon…</button></div>
         <label class="field"><span>Title</span><input id="key-title" type="text" autocomplete="off"></label>
         <div id="key-title-style" class="title-style">
           <select id="tp-family" data-tp="FontFamily" title="Font. Fonts from this computer are copied to the device on an ssh push" aria-label="Font"></select>
@@ -76,9 +85,23 @@
             <label class="inline"><input data-tp="FontUnderline" type="checkbox"> Underline</label>
           </div>
         </div>
-        <div class="row-buttons"><button id="btn-key-image" type="button">Replace image…</button><button id="btn-key-icon" type="button">Choose icon…</button></div>
         <div class="field"><span>Sound</span><div class="row-buttons"><span id="key-sound" class="muted"></span><button id="btn-key-sound" type="button">Choose…</button><button id="btn-key-sound-play" type="button" title="Play here">Play</button><button id="btn-key-sound-clear" type="button">Clear</button></div></div>
-        <h3>Action <span class="muted">(values editable; type fixed)</span></h3>
+        <div id="key-macro" hidden>
+          <h3>Macro <span id="macro-kind" class="muted"></span></h3>
+          <ol id="macro-steps" class="macro-steps"></ol>
+          <div class="row-buttons">
+            <button id="btn-macro-rec" type="button" title="Every key down and up goes into the macro, Cmd shortcuts included. Click again to stop">Record keys</button>
+            <label class="inline" title="Also record the pauses between keys as delay steps"><input id="macro-timing" type="checkbox"> With timing</label>
+          </div>
+          <div class="row-buttons macro-add">
+            <button type="button" data-add="key" title="Press one key or combo (e.g. Cmd+Shift+S); it becomes one tap">+ Key…</button>
+            <button type="button" data-add="text">+ Text</button>
+            <button type="button" data-add="delay">+ Delay</button>
+            <button type="button" data-add="loop">+ Repeat</button>
+          </div>
+          <p id="macro-hint" class="hint">The device plays the steps in order. Down and Up hold and let go of a key, so several keys can be held together.</p>
+        </div>
+        <h3 id="key-action-h">Action <span class="muted">(values editable; type fixed)</span></h3>
         <dl id="key-action" class="kv"></dl>
         <h3 id="key-states-h" hidden>States <span class="muted">(toggles on each press; right-click &gt; Press Key previews)</span></h3>
         <dl id="key-states" class="kv" hidden></dl>
@@ -154,7 +177,9 @@
 
   <dialog id="icon-dlg" class="palette icon-dlg">
     <ul id="icon-grid" class="icon-grid"></ul>
-    <p class="hint palette-foot">Line-art icons; the key's title still shows over them · Esc closes</p>
+    <h3 class="icon-sec">PictureFont</h3>
+    <ul id="icon-grid-pf" class="icon-grid"></ul>
+    <p class="hint palette-foot">Line-art icons and the vendor app's PictureFont glyphs; the key's title still shows over them · Esc closes</p>
   </dialog>
 
   <dialog id="settings-dlg" class="settings">
@@ -190,6 +215,16 @@
         <h3>Editor</h3>
         <label class="inline"><input id="key-gaps" type="checkbox" checked> Show gaps between keys</label>
         <label class="inline"><input id="reopen-last" type="checkbox" checked> Reopen last theme on launch</label>
+      </section>
+
+      <section>
+        <h3>New key title</h3>
+        <p class="hint">Font, size and style for the title of keys made with + New key. Existing keys keep theirs.</p>
+        <div id="title-defaults" class="title-style">
+          <select data-td="FontFamily" title="Font" aria-label="Font"></select>
+          <input data-td="FontSize" type="number" min="6" max="96" step="1" title="Font size (px)" aria-label="Font size">
+          <select data-td="FontStyle" title="Style" aria-label="Style"><option value="">Regular</option><option>Bold</option><option>Italic</option><option>Bold Italic</option></select>
+        </div>
       </section>
 
       <section>
@@ -260,6 +295,13 @@
   <template id="tpl-palette-item"><li role="option"><span class="pal-label"></span><span class="pal-group"></span></li></template>
   <template id="tpl-icon-item"><li><button type="button" class="icon-btn"><img alt="" draggable="false"><span></span></button></li></template>
   <template id="tpl-toast"><div class="toast" title="Click to dismiss"></div></template>
+  <template id="tpl-macro-step"><li class="macro-step"><span class="ms-n"></span><span class="ms-edit"></span><span class="ms-btns"><button type="button" class="ms-btn" data-mv="-1" title="Move up" aria-label="Move up">↑</button><button type="button" class="ms-btn" data-mv="1" title="Move down" aria-label="Move down">↓</button><button type="button" class="ms-btn" data-del title="Remove" aria-label="Remove">×</button></span></li></template>
+  <template id="tpl-ms-keyboard"><span class="ms-row"><select class="ms-keytype" aria-label="Key action"><option value="0">Tap</option><option value="1">Down</option><option value="2">Up</option></select><button type="button" class="ms-key" title="Click, then press a key or combo to change it"></button></span></template>
+  <template id="tpl-ms-qmk_string"><span class="ms-row">Type <input class="ms-text" type="text" spellcheck="false" aria-label="Text to type"></span></template>
+  <template id="tpl-ms-delay"><span class="ms-row">Wait <input class="ms-ms" type="number" min="0" step="10" aria-label="Delay in ms"> ms</span></template>
+  <template id="tpl-ms-startLoop"><span class="ms-row">Repeat <input class="ms-count" type="number" min="1" step="1" aria-label="Repeat count"> times:</span></template>
+  <template id="tpl-ms-stopLoop"><span class="ms-row muted">End repeat</span></template>
+  <template id="tpl-ms-other"><span class="ms-row muted"></span></template>
   <template id="tpl-kv-edit"><div class="kv-row"><dt></dt><dd><input type="text" spellcheck="false"></dd></div></template>
 </body>
 </html>

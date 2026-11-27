@@ -28,7 +28,7 @@ With the relay running, `mk10-gd32-inject key <row> <col> [tap|press|release]` w
 
 Verified 2026-11-25: injecting row 1 col 4 (a `pageSwitch` key) woke the screen, switched page, and the host (lenny, `/dev/ttyACM0`) got the V1 cmd 15 page contract plus V1 cmd 13 `keyState` press and release frames, the same as a real press. So Studio's key-action path can be driven without touching the device.
 
-Start and stop of the service each restart keyboard-device (screen blank for about 10 s). If the relay dies, keys stop until `rc-service mk10-gd32-relay stop`.
+Start and stop of the service each restart keyboard-device (screen blank for about 10 s). If the relay dies, keys stop until `rc-service mk10-gd32-relay stop`. Stop lazy-unmounts the pty (`umount -l`); a plain umount failed with EBUSY and left KeyboardDevice on the dead pty, so keys stayed dead after a stop (fixed 2026-11-25).
 
 ## Studio key path, checked with injected presses (2026-11-25)
 

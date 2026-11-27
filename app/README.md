@@ -43,16 +43,34 @@ Back (up one level) only on folder pages. Cmd+Z undoes it.
 Under the key's Title: font (the device's fonts, then this computer's), size (6-96), style
 (Regular, Bold, Italic, Bold Italic), position (Top, Middle, Bottom), color, and Title / Image /
 Underline toggles. Stored in the item's `titleParam`. Position values are the ones the device daemon
-knows (`top`, `middle`, `bottom`).
+knows (`top`, `middle`, `bottom`). Settings > New key title sets the font, size and style that new
+keys start with (default Microsoft YaHei, 16, Regular); existing keys keep theirs.
 An ssh push first copies this computer's font files for any family the theme uses (key titles, text
 widgets) that the device lacks into the device's `/usr/share/fonts`; the restart loads them. The stock
 firmware (USB push) can't take fonts: the push log warns and the device draws that text in its default.
 
 ### Icons
-"Choose icon…" (next to Replace image) sets one of the premade line-art icons in `icons/` as the key's
+"Choose icon…" (under the key thumbnail; the pencil on the thumbnail replaces the image) sets one of the premade line-art icons in `icons/` as the key's
 image; new keys from the action picker start with their type's icon (`icon` in
 `lib/action-templates.json`). The SVGs are the source: after editing or adding one, `npm run icons`
 renders the 128×128 PNGs (needs `rsvg-convert`, Homebrew `librsvg`). Same icon on several keys = one asset.
+Below them, PictureFont lists the vendor app's dot-matrix glyphs (`icons/PictureFont/`: digits 0-9 and
+a colon, black dots on transparency, copied from ScreenKeyMacOS; see the README there).
+
+### Macros
+Hotkey, keyboard-macro and action-flow keys show a **Macro** timeline in the Inspector instead of the raw
+action fields. The device plays the steps itself, in order:
+
+- **Key**: Tap, Down (hold) or Up (let go). Click the key name and press a key or combo to change it.
+- **Text**: typed as is (no percent decoding).
+- **Delay**: in ms.
+- **Repeat N times … End repeat**: a loop.
+
+**Record keys** captures every key down and up from this window, Cmd shortcuts included, until you
+click it again. A down followed directly by its up becomes one tap. **With timing** also records
+the pauses as delays. **+ Key…** adds one tap of the next key or combo, mods included. Media keys
+never reach the app on macOS. ↑/↓ reorders, × removes. One tap or one text is saved as a plain action;
+more steps become an action flow (`lib/macro.js`, docs/theme-format.md "Action flows").
 
 ### Key clipboard
 Right-click a key (or an empty slot) for Cut, Copy, Paste and Delete Key. With no text field focused,
@@ -62,6 +80,12 @@ as plain-text JSON with its images embedded, so it pastes into another theme or 
 Paste replaces the key in the target slot or fills an empty one. MCP: `copy_key` and `paste_key`.
 A cell covered by a key-area widget (clock digits, GIF, gauge) is not empty: the editor draws it and
 Paste refuses it.
+
+### Moving keys
+Press and hold a key (350 ms), then drag it to another slot. Keys in the way slide toward the nearest
+free slot, iPhone home-screen style (the dragged key's own slot counts as free). On a page with no
+empty slot, the key you drop on swaps with the dragged one. Widget cells are skipped and are never
+targets. Any key press cancels the drag, and Cmd+Z undoes a move.
 
 Pull (top bar, next to Push, or File > Pull from Device…) downloads the theme the device loads
 (`config.json` `defaultTheme`) over ssh, saves it where you choose and opens it. LilAlpine only: the stock
@@ -152,8 +176,13 @@ appended to `/tmp/mk10.log`. **Save log…** writes the same lines to a file you
   launch.
 
 ### Push to device
-"Push to device" encodes the in-memory theme and makes it the active layout. Mode is picked in the
-inspector (stored in `settings.json` under Electron's userData dir):
+"Push to device" encodes the in-memory theme and makes it the active layout. Mode is picked under the
+Device button (stored in `settings.json` under Electron's userData dir). USB serial shows a Serial port
+field instead of ssh host: blank uses the first MK10 port found, and the field suggests the ports present.
+The ssh hot reload uses that port too. `MK10_PORT` overrides it.
+Leave it blank on LilAlpine: the port name carries a USB serial number that changed across a reboot
+(`usbmodemMK10_f82d98f01`, then `usbmodemMK10_96a48f941`). The Device popover also has Reboot device… (ssh
+modes only; the vendor app has no reboot command over serial), which waits until KeyboardDevice runs again.
 
 - **Auto** (default): before each push, checks the ssh host for `/etc/alpine-release`. LilAlpine pushes over
   ssh; otherwise, if an MK10 USB serial port is present (stock firmware), over USB serial. With neither, the
@@ -163,7 +192,17 @@ inspector (stored in `settings.json` under Electron's userData dir):
   command (cmd 2), which loads it and rewrites `/mnt/SDCARD/config.json`, then deletes older
   `mk10studio-*.Theme` pushes. A failed push leaves the active theme alone. About 10 s for 12 MB.
   Close the vendor ScreenKey app first; it holds the port.
-- **ssh** (LilAlpine): scp, edit `config.json`, `rc-service keyboard-device restart`. Needs key-based ssh.
+- **ssh** (LilAlpine): scp the theme. After the first push, Studio keeps a copy of what it sent (in `$TMPDIR`); when
+  the device still has those bytes, it sends a `zstd --patch-from` delta instead (a few KB for a small edit, about 3 s
+  instead of about 9 s for a 22 MB theme) and the device rebuilds the file and checks its md5. Any mismatch, a
+  missing `zstd` (Homebrew; `ZSTD` overrides the path) or a delta over half the theme falls back to the full copy. Then,
+  if no fonts were copied, hot reload it (V1 cmd 2, about 5 s, no restart; the app updates `config.json` itself):
+  first over ssh, by injecting the reload frame into the device's own USB serial input (`/dev/ttyGS0`, TIOCSTI),
+  done when the app rewrites `config.json`; if that fails and the MK10 is on this computer's USB, over the
+  serial port. Otherwise, or if both fail: `rc-service keyboard-device stop`, edit `config.json`, start, then check for exactly one KeyboardDevice (plus the video player if page 0 has a video) and reboot the device if that fails within 20 s. Stopping first keeps a dying app instance from writing its old `defaultTheme` back. Needs key-based ssh.
+
+While a push or pull runs, a progress panel covers the main area (its log, plus a bar for serial pushes)
+and the pages, canvas and inspector ignore clicks and keys until it finishes.
 
 The app never sends `getInfo`: on the device it blanks the main panel and kills the video player
 until a reload or restart.

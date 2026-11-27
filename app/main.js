@@ -7,10 +7,10 @@ import { execFile, execFileSync, spawn } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 import { createInterface } from 'node:readline'
 import { Session, DEFAULT_SSH } from './lib/session.js'
-import { listIcons } from './lib/theme.js'
-import { hidToQmk, isModifier } from './lib/qmk.js'
+import { listIcons, checkTitleDefaults } from './lib/theme.js'
+import { hidToQmk, isModifier, CODE_TO_HID, qmkLabel } from './lib/qmk.js'
 import { fontManifest, syncDeviceFonts, systemFonts, DEVICE_FONT_DIR } from './lib/fonts.js'
-import { wire } from './lib/device.js'
+import { wire, Device } from './lib/device.js'
 import { planKeyAction, OPEN_GRACE_MS } from './lib/keyactions.js'
 import { collectStats, readContract, sampleHost, ALL_STATS } from './lib/stats.js'
 
@@ -47,6 +47,7 @@ async function loadSettings() {
     const s = JSON.parse(await readFile(settingsFile, 'utf8'))
     settings = { ...settings, ...s, mcp: { ...settings.mcp, ...s.mcp }, ssh: { ...settings.ssh, ...s.ssh } }
   } catch { /* first run */ }
+  try { session.titleDefaults = checkTitleDefaults(settings.titleDefaults) } catch { settings.titleDefaults = {} }
 }
 
 async function saveSettings() {
@@ -192,7 +193,7 @@ async function cacheFonts(files) {
 }
 
 const pushOpts = () => ({
-  mode: settings.pushMode ?? 'auto', port: process.env.MK10_PORT || null, ...settings.ssh,
+  mode: settings.pushMode ?? 'auto', port: process.env.MK10_PORT || settings.serialPort || null, ...settings.ssh,
   fonts: async (log) => {
     const files = await missingFonts(log)
     if (files.length && fonts.length) cacheFonts(files).catch((e) => log(`font cache: ${e.message}`))
@@ -206,7 +207,7 @@ async function push() {
     type: 'question', buttons: ['Push', 'Cancel'], defaultId: 0, cancelId: 1,
     message: o.mode === 'ssh' ? `Push to ${o.host} over ssh?` : 'Push to MK10 over USB?',
     detail: o.mode === 'ssh'
-      ? `Copies the theme to ${o.remote}, points config.json at it and restarts keyboard-device.`
+      ? `Copies the theme to ${o.remote}, then reloads it over USB serial if the MK10 is plugged in here; otherwise points config.json at it and restarts keyboard-device.`
       : `Writes the theme to ${o.remote} as a new timestamped file (~10 s for 12 MB), tells the device to load it, then deletes older mk10studio pushes.`,
   })).response === 0
   let mode
@@ -289,6 +290,31 @@ const BUILD = devBuild()
 const HIDTAP_SRC = join(import.meta.dirname, 'native', 'hidtap.swift')
 const HIDTAP = join(import.meta.dirname, 'native', 'build', 'hidtap')
 let capWin = null
+
+// ---- macro recording: while on, every key the main window gets goes to the renderer's macro editor
+// as {down, usage, code, label, combo} instead of the page or the menus (Cmd+Q, Cmd+C... are recorded).
+// combo: the QMK keycode with the modifiers held at the time (for "one key" capture).
+let macroRec = false
+const recHeld = new Set()
+// A keyDown prevented here never gets its keyUp (checked 2026-11-25 with sendInputEvent), so only
+// Cmd/Ctrl combos are prevented (they would fire menu items); they are sent as a down plus an
+// immediate up. Every other key reaches the page, whose recording listener swallows it.
+function recordKey(e, i) {
+  if (!macroRec || (i.type !== 'keyDown' && i.type !== 'keyUp')) return
+  const usage = CODE_TO_HID[i.code]
+  const mod = usage !== undefined && isModifier(0x07, usage)
+  const menuCombo = !mod && (i.meta || i.control)
+  if (menuCombo && i.type === 'keyDown') e.preventDefault()
+  if (i.isAutoRepeat) return
+  const down = i.type === 'keyDown'
+  const send = (d) => win.webContents.send('mk10:macroKey', usage === undefined ? { down: d, unknown: i.code || i.key } : {
+    down: d, usage, code: usage, label: qmkLabel(usage), combo: combo && { code: combo.code, label: qmkLabel(combo.code) },
+  })
+  if (mod) down ? recHeld.add(usage) : recHeld.delete(usage)
+  const combo = usage === undefined ? null : hidToQmk(0x07, usage, recHeld)
+  send(down)
+  if (menuCombo && down) send(false)
+}
 
 function startHidtap(sendCap) {
   if (!existsSync(HIDTAP) || statSync(HIDTAP).mtimeMs < statSync(HIDTAP_SRC).mtimeMs) {
@@ -514,6 +540,8 @@ function registerIpc() {
   h('setKeyTitle', (p, r, c, t) => session.setKeyTitle(p, r, c, t))
   h('setKeyTitleParam', (p, r, c, patch) => session.setKeyTitleParam(p, r, c, patch))
   h('setKeyActionField', (p, r, c, f, v) => session.setKeyActionField(p, r, c, f, v))
+  h('setKeyMacro', (p, r, c, steps) => session.setKeyMacro(p, r, c, steps))
+  h('macroRecord', (on) => { macroRec = !!on; recHeld.clear() })
   h('setKeyImage', setKeyImage)
   h('icons', () => listIcons())
   h('setKeyIcon', (p, r, c, name) => session.setKeyIcon(p, r, c, name))
@@ -531,6 +559,7 @@ function registerIpc() {
   h('setKeyRaw', (p, r, c, raw) => task(`Edit key ${slot(r, c)} JSON`, async () => session.setKeyRaw(p, r, c, raw)))
   h('pageRaw', (p) => session.pageRaw(p))
   h('newKeyTypes', (p) => session.newKeyTypes(p))
+  h('moveKeys', (p, moves) => task(`Move key ${slot(moves[0][0], moves[0][1])}`, async () => session.moveKeys(p, moves)))
   h('createKey', (p, row, col, type) => task(`New key ${slot(row, col)}`, async () => session.createKey(p, row, col, type)))
   h('setPageRaw', (p, raw) => task('Edit page JSON', async () => session.setPageRaw(p, raw)))
   h('openCapture', openCapture)
@@ -567,11 +596,25 @@ function registerIpc() {
     if (key === 'jsonRpcWindow') setRpcWindow(value)
     if (key === 'keyActions' || key === 'liveStats') syncPort()
   })
+  h('setTitleDefaults', async (d) => {
+    settings.titleDefaults = session.titleDefaults = checkTitleDefaults(d)
+    await saveSettings()
+  })
   h('clearRpc', () => { rpcLog.length = 0 })
+  h('rebootDevice', async () => {
+    const { host } = settings.ssh
+    const ok = (await dialog.showMessageBox(win, {
+      type: 'question', buttons: ['Reboot', 'Cancel'], defaultId: 0, cancelId: 1,
+      message: `Reboot ${host}?`, detail: 'Over ssh (LilAlpine). The device is back in about 35 s; Studio waits for KeyboardDevice.',
+    })).response === 0
+    if (ok) await task('Reboot device', () => session.rebootSsh(host, log))
+  })
+  h('serialPorts', async () => (await Device.list()).map((p) => p.path))
   h('setSsh', async (ssh) => {
     if (session.pushing) throw new Error('push in progress: device settings are locked until it finishes')
     settings.ssh = { host: String(ssh.host), remote: String(ssh.remote) }
     if (['auto', 'serial', 'ssh'].includes(ssh.mode)) settings.pushMode = ssh.mode
+    if (ssh.port !== undefined) settings.serialPort = String(ssh.port) || null // blank: first MK10 found
     await saveSettings()
   })
 }
@@ -638,6 +681,7 @@ function createWindow() {
       contextIsolation: true, nodeIntegration: false, sandbox: true,
     },
   })
+  win.webContents.on('before-input-event', recordKey)
   win.on('close', (e) => {
     if (app.isQuitting || win.forceClose) return
     // Linux (test runs on lenny): no tray, so close means quit. Quit while the window still exists:

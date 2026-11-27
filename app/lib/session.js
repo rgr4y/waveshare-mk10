@@ -2,29 +2,53 @@
 // Every mutation goes through here so all front ends see the same state ('change' event).
 import { EventEmitter } from 'node:events'
 import { basename } from 'node:path'
-import { readFile, stat, writeFile } from 'node:fs/promises'
+import { readFile, stat, writeFile, copyFile, rm } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import {
   decodeTheme, encodeTheme, decodeControlData, editableActionFields,
   setKeyTitle, setKeyTitleParam, setKeyImage, setKeySound, setBackgroundVideo, setKeyActionField,
-  copyKey, pasteKey, removeKey, parseKeyClip, keyRaw, setKeyRaw, pageRaw, setPageRaw, newKeyTypes, createKey, setKeyIcon, englishDescriptions, fontFamilies, deleteFolder,
+  copyKey, pasteKey, removeKey, moveKeys, parseKeyClip, keyRaw, setKeyRaw, pageRaw, setPageRaw, newKeyTypes, createKey, setKeyIcon, englishDescriptions, fontFamilies, deleteFolder,
 } from './theme.js'
 import { toKeyPng, toDeviceMp4, toDeviceWav } from './media.js'
 import { Device } from './device.js'
+import { packV1, V1_RELOAD } from './proto.js'
 import { DEVICE_FONT_DIR } from './fonts.js'
+import { readMacro, setKeyMacro } from './macro.js'
 
 const run = promisify(execFile)
 const TIMEOUT = 60_000
+const ZSTD = process.env.ZSTD ?? 'zstd'
+const md5 = (buf) => createHash('md5').update(buf).digest('hex')
 const mb = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.ceil(n / 1e3)} KB`)
 
 export const DEFAULT_REMOTE = '/data/theme/MK10/mk10studio.Theme'
+// Display state on the device, appended to /var/log/mk10-display.log with a label. Run after every
+// serial reload (and by hand when the panel is black) to find what a blackout looks like remotely:
+// processes, disp layers (ch0 = video, ch1 = UI), fb0 pan and how many page-0 bytes are non-zero,
+// and the app log tail.
+export const displaySnap = (label) => `label='${String(label).replaceAll("'", '')}'; { echo "== $(date '+%F %T') $label"
+echo "KD=[$(pidof KeyboardDevice)] VP=[$(pidof videoplayerinterfaceAPP)] fb0 pan=$(cat /sys/class/graphics/fb0/pan) nonzero=$(head -c 1089536 /dev/fb0 | tr -d '\\000' | wc -c)"
+grep -E 'able ch' /sys/class/disp/disp/attr/sys | sed -E 's/^.*(enable|disable) (ch\\[[0-9]\\]).*z\\[ *([0-9]+)\\].*fb\\[ *([0-9]+), *([0-9]+);.*addr\\[ *([0-9a-f]+),.*/  \\1 \\2 z\\3 \\4x\\5 addr \\6/'
+tail -n 5 /var/log/keyboard-device.log | sed 's/^/  log: /'; } >> /var/log/mk10-display.log 2>&1`
+// Shell for the device: inject a V1 reload frame for `path` into /dev/ttyGS0 with TIOCSTI (0x5412;
+// kernel 5.4 allows it for root), then wait up to 20 s for the app to rewrite config.json.
+// Studio pauses its own serial traffic during a push, so the injected bytes don't interleave.
+export const ttyReload = (path) => {
+  if (!/^\/[\w./-]+$/.test(path)) throw new Error(`refusing odd theme path ${path}`)
+  const hex = packV1(V1_RELOAD, Buffer.from(path, 'utf8')).toString('hex')
+  return `c=/mnt/SDCARD/config.json; t0=$(stat -c %Y $c); sleep 1
+perl -e 'open(my $f, "+<", "/dev/ttyGS0") or die "ttyGS0: $!\n"; ioctl($f, 0x5412, $_) or die "TIOCSTI: $!\n" for split //, pack("H*", "${hex}")' || exit 1
+i=0; while [ $i -lt 40 ]; do [ "$(stat -c %Y $c)" != "$t0" ] && exit 0; sleep 0.5; i=$((i+1)); done
+echo "the app did not rewrite config.json within 20 s" >&2; exit 1`
+}
 export const DEFAULT_SSH = { host: 'root@10.0.1.48', remote: DEFAULT_REMOTE }
 // mode 'auto' (default: detect the firmware), 'serial' (stock firmware) or 'ssh' (LilAlpine)
 export const DEFAULT_PUSH = { mode: 'auto', port: null, ...DEFAULT_SSH }
 const CONFIG = '/mnt/SDCARD/config.json'
 
-const KEY_OPS = new Set(['keyCut', 'keyPaste', 'keyDelete', 'keyRaw', 'pageRaw', 'keyNew', 'folderDelete', 'undo'])
+const KEY_OPS = new Set(['keyCut', 'keyPaste', 'keyDelete', 'keyRaw', 'pageRaw', 'keyNew', 'keyMove', 'folderDelete', 'undo'])
 const num = (v) => (v === undefined || v === '' ? undefined : Number(v))
 
 // Multi-state keys (e.g. keyboard_switch, a toggle): item jsonData holds the per-state image, title and
@@ -53,9 +77,18 @@ function actionOf(it) {
   }
 }
 
+function macroOf(it) {
+  try {
+    return readMacro(it) ?? undefined
+  } catch (e) {
+    return { error: e.message }
+  }
+}
+
 export class Session extends EventEmitter {
   theme = null
   pushing = false
+  titleDefaults = {} // Settings > New key title: {FontFamily, FontSize, FontStyle}
   file = null
   dirty = false
   // edits counts every change; pushedEdits is its value when the last successful push started.
@@ -109,12 +142,13 @@ export class Session extends EventEmitter {
 
   // Plain-data view of the theme for UI and MCP. Item `index` is stable within a page.
   summary() {
-    if (!this.theme) return { file: null }
+    if (!this.theme) return { file: null, pushing: !!this.pushing, deviceOp: this.pushing || null }
     const { json, assets } = this.theme
     return {
       file: this.file,
       dirty: this.dirty,
-      pushing: this.pushing,
+      pushing: !!this.pushing,
+      deviceOp: this.pushing || null, // 'push' | 'pull'
       currentPage: json.main?.currentPage,
       assetCount: assets.size,
       pages: json.pages.map((p, index) => ({
@@ -142,6 +176,7 @@ export class Session extends EventEmitter {
           font: it.text_font || undefined,
           action: actionOf(it),
           states: statesOf(it),
+          macro: macroOf(it),
         })),
       })),
     }
@@ -220,6 +255,18 @@ export class Session extends EventEmitter {
     this.touch(kind)
   }
 
+  moveKeys(page, moves) {
+    this.need()
+    this.snapshot()
+    try {
+      moveKeys(this.theme, page, moves) // validates everything before moving anything
+    } catch (e) {
+      this.undoStack.pop()
+      throw e
+    }
+    this.touch('keyMove')
+  }
+
   pasteKey(page, row, col, text) {
     this.need()
     this.snapshot()
@@ -262,7 +309,7 @@ export class Session extends EventEmitter {
     this.need()
     this.snapshot()
     try {
-      createKey(this.theme, page, row, col, type)
+      createKey(this.theme, page, row, col, type, this.titleDefaults)
     } catch (e) {
       this.undoStack.pop()
       throw e
@@ -298,6 +345,12 @@ export class Session extends EventEmitter {
   setKeyActionField(page, row, col, field, value) {
     this.need()
     setKeyActionField(this.theme, page, row, col, field, value)
+    this.touch('keyAction')
+  }
+
+  setKeyMacro(page, row, col, steps) {
+    this.need()
+    setKeyMacro(this.theme, page, row, col, steps)
     this.touch('keyAction')
   }
 
@@ -358,7 +411,7 @@ export class Session extends EventEmitter {
   // One push at a time, from any caller (UI, menu, quit prompt, MCP). confirm(o) runs after auto
   // detection with the resolved mode; false cancels and push returns null.
   async push(opts = DEFAULT_PUSH, log = () => {}, confirm = null) {
-    return this.deviceLock(async () => {
+    return this.deviceLock('push', async () => {
       const at = this.edits
       const r = await this.pushTo(opts, log, confirm)
       if (r !== null) this.pushedEdits = at
@@ -366,10 +419,10 @@ export class Session extends EventEmitter {
     })
   }
 
-  // push and pull share one lock: one device operation at a time
-  async deviceLock(fn) {
+  // push and pull share one lock: one device operation at a time. pushing = 'push' | 'pull' | false
+  async deviceLock(kind, fn) {
     if (this.pushing) throw new Error('a push or pull is already in progress')
-    this.pushing = true
+    this.pushing = kind
     this.emit('change', { kind: 'push' })
     try {
       return await fn()
@@ -384,7 +437,7 @@ export class Session extends EventEmitter {
   // keyboardInput, playAudio, saveToFile, setBacklight, setFileCRC, setVolume, stopAudio).
   // pickDest(remotePath) returns the local path, or null to cancel. Returns the local path, or null.
   async pull(opts = DEFAULT_PUSH, log = () => {}, pickDest = async () => null) {
-    return this.deviceLock(async () => {
+    return this.deviceLock('pull', async () => {
       const o = { ...DEFAULT_PUSH, ...opts }
       if (o.mode === 'auto') {
         o.mode = await this.detectMode(o, log)
@@ -449,6 +502,23 @@ export class Session extends EventEmitter {
     return target
   }
 
+  // Reboot over ssh (LilAlpine; the vendor app has no reboot command over serial) and wait until
+  // KeyboardDevice runs again. LilAlpine resets through the watchdog, so this takes a boot plus ~5 s.
+  async rebootSsh(host, log = () => {}) {
+    if (this.pushing) throw new Error('push in progress: reboot after it finishes')
+    log(`reboot ${host}`)
+    await run('ssh', ['-o', 'ConnectTimeout=5', host, 'sync; reboot'], { timeout: TIMEOUT }).catch((e) => {
+      if (e.code !== 255) throw e // 255: ssh lost the link as the device went down
+    })
+    const t = Date.now()
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 3000))
+      if (await run('ssh', ['-o', 'ConnectTimeout=3', host, 'pidof KeyboardDevice'], { timeout: 10_000 }).then(() => true, () => false)) break
+      if (Date.now() - t > 120_000) throw new Error(`${host} not back within 120 s`)
+    }
+    log(`${host} back up (${Math.round((Date.now() - t) / 1000)} s)`)
+  }
+
   // Run fn on an open Device. The port is exclusive (serialport locks it), so a held Device is
   // reused; otherwise a fresh one is opened and closed afterwards.
   async withDevice(fn, port = null) {
@@ -504,11 +574,44 @@ export class Session extends EventEmitter {
     return n
   }
 
+  // Delta push for pushSsh: true when the device rebuilt `remote` from a patch and its md5 matches.
+  async pushDelta({ host, remote, tmp, buf, basis }, log) {
+    const old = await readFile(basis).catch(() => null)
+    if (!old) return false
+    // window must cover the whole basis; 2^27 (128 MB) is a sane cap for the device's RAM + zram
+    const wlog = Math.max(20, Math.ceil(Math.log2(Math.max(old.length, buf.length))))
+    if (wlog > 27) return false
+    const patch = `${tmp}.zst`
+    const t = Date.now()
+    try {
+      await run(ZSTD, ['-q', '-f', '-1', `--long=${wlog}`, `--patch-from=${basis}`, tmp, '-o', patch], { timeout: TIMEOUT })
+      const size = (await stat(patch)).size
+      if (size > buf.length / 2) return false // big change: plain copy is about as fast
+      const rp = '/tmp/mk10studio-push.zst'
+      await run('scp', ['-q', '-o', 'ConnectTimeout=5', patch, `${host}:${rp}`], { timeout: TIMEOUT })
+      // exit 3: the device's file isn't the basis (pushed from elsewhere); 4: rebuilt file is wrong
+      const sh = `sum() { md5sum < "$1" | cut -c1-32; }; trap 'rm -f ${rp} ${remote}.new' EXIT
+[ "$(sum ${remote})" = ${md5(old)} ] || exit 3
+zstd -q -d -f --long=${wlog} --patch-from=${remote} ${rp} -o ${remote}.new || exit 4
+[ "$(sum ${remote}.new)" = ${md5(buf)} ] || exit 4
+mv ${remote}.new ${remote} && sync`
+      await run('ssh', ['-o', 'ConnectTimeout=5', host, sh], { timeout: TIMEOUT })
+      log(`patched theme ${basename(remote)} (${mb(size)} delta, ${((Date.now() - t) / 1000).toFixed(1)} s) -> ${host}:${remote}`)
+      return true
+    } catch (e) {
+      const why = { 3: 'device file differs from the last push', 4: 'patched file failed its md5' }[e.code] ?? (e.code === 'ENOENT' ? `${ZSTD} not found` : e.message.split('\n')[0])
+      log(`delta push skipped (${why}); copying the whole theme`)
+      return false
+    } finally {
+      await rm(patch, { force: true })
+    }
+  }
+
   // Verified recipe (docs/theme-format.md, Device verification): copy theme, point
   // config.json defaultTheme at it, restart KeyboardDevice. LilAlpine only (needs ssh).
   // o.fonts (optional, async): local font files the device lacks; copied into its font dir before the
   // restart, since the app reads its fonts at start
-  async pushSsh({ host, remote, fonts } = DEFAULT_SSH, log = () => {}) {
+  async pushSsh({ host, remote, fonts, port } = DEFAULT_SSH, log = () => {}) {
     this.need()
     // one line per file copied, as it lands
     const copy = async (src, dest, what) => {
@@ -520,8 +623,51 @@ export class Session extends EventEmitter {
     if (files.length) log(`fonts: ${files.length} file${files.length > 1 ? 's' : ''} the device lacks`)
     for (const f of files) await copy(f, `${DEVICE_FONT_DIR}/${basename(f)}`, `font ${basename(f)}`)
     const tmp = `${process.env.TMPDIR ?? '/tmp/'}mk10studio-push.Theme`
-    await writeFile(tmp, encodeTheme(this.theme))
-    await copy(tmp, remote, `theme ${basename(remote)}`)
+    const buf = encodeTheme(this.theme)
+    await writeFile(tmp, buf)
+    // Last theme pushed to this host:remote. When the device still has those exact bytes, send a
+    // zstd --patch-from delta instead of the whole file (verified 2026-11-25: 22 MB theme, small edit
+    // = 3 KB patch, 0.6 s to apply on the device). Any mismatch or failure falls back to scp.
+    const basis = `${process.env.TMPDIR ?? '/tmp/'}mk10studio-basis-${md5(`${host}:${remote}`)}.Theme`
+    if (!await this.pushDelta({ host, remote, tmp, buf, basis }, log)) await copy(tmp, remote, `theme ${basename(remote)}`)
+    await copyFile(tmp, basis)
+    // Hot reload (V1 cmd 2, ~5 s): no restart, and the app writes config.json defaultTheme itself.
+    // Fonts are read only at app start, so a push that copied fonts still restarts.
+    // ponytail: blackouts after a reload (2026-11-25) have no known cause or signature yet; record
+    // the display state 6 s later, without holding the push lock
+    const reloaded = () => {
+      log('pushed')
+      setTimeout(() => run('ssh', ['-o', 'ConnectTimeout=5', host, displaySnap(`after reload ${basename(remote)}`)], { timeout: TIMEOUT }).catch(() => {}), 6000)
+      return remote
+    }
+    if (!files.length) {
+      // 1. over ssh: TIOCSTI pushes the reload frame into /dev/ttyGS0's input queue, where the app
+      // reads its USB host link, so the Mac's USB isn't needed. Done when the app rewrites
+      // config.json (its mtime moves ~5 s later, same path or not; verified 2026-11-25).
+      try {
+        log(`reload ${remote} via the device's USB serial input (ssh)`)
+        await run('ssh', ['-o', 'ConnectTimeout=5', host, ttyReload(remote)], { timeout: TIMEOUT })
+        return reloaded()
+      } catch (e) {
+        log(`ssh reload failed (${(e.stderr || e.message).trim().split('\n').pop()})`)
+      }
+      // 2. MK10 on this computer's USB: the same frame over the real serial port
+      if (this.held?.isOpen || port || (await Device.list()).length) {
+        try {
+          log(`reload ${remote} over USB serial`)
+          await this.withDevice((dev) => dev.reloadTheme(remote), port)
+          return reloaded()
+        } catch (e) {
+          log(`serial reload failed (${e.message})`)
+        }
+      }
+      log('restarting the app instead')
+    }
+    // Stop the app before touching config.json: a stopping KeyboardDevice can write its old config
+    // back (seen 2026-11-25: defaultTheme reverted right after a push), and one that hangs in its
+    // SIGTERM handler is killed by the LilAlpine service's stop_post.
+    log('rc-service keyboard-device stop')
+    await run('ssh', [host, 'rc-service keyboard-device stop'], { timeout: TIMEOUT })
     const { stdout } = await run('ssh', ['-o', 'ConnectTimeout=5', host, `cat ${CONFIG}`], { timeout: TIMEOUT })
     const cfg = JSON.parse(stdout)
     if (cfg.defaultTheme !== remote) {
@@ -530,15 +676,28 @@ export class Session extends EventEmitter {
       const q = JSON.stringify(cfg).replaceAll("'", "'\\''")
       await run('ssh', [host, `printf '%s' '${q}' > ${CONFIG}.new && mv ${CONFIG}.new ${CONFIG} && sync`], { timeout: TIMEOUT })
     }
-    log('rc-service keyboard-device restart')
-    await run('ssh', [host, 'rc-service keyboard-device restart'], { timeout: TIMEOUT })
-    // Once (2026-11-24) the restart came up without videoplayerinterfaceAPP (black background);
-    // not reproduced since. Check for it so a silent miss shows in the log.
+    log('rc-service keyboard-device start')
+    await run('ssh', [host, 'rc-service keyboard-device start'], { timeout: TIMEOUT })
+    // Healthy = exactly one KeyboardDevice, plus the background video player when page 0 has a
+    // video (once, 2026-11-24, a restart came up without it). The start also bounces Wi-Fi (the
+    // app relaunches wpa_supplicant), so failed ssh polls just retry.
     const hasVideo = (this.theme.json.pages[0]?.items ?? []).some((x) => String(x.type) === '100' && x.path)
-    const { stdout: ps } = !hasVideo ? { stdout: 'up' } : await run('ssh', [host,
-      'for i in 1 2 3 4 5 6 7 8; do sleep 2; ps -o args | grep -q "[v]ideoplayerinterfaceAPP" && echo up && exit; done; echo down'],
-    { timeout: TIMEOUT })
-    if (ps.trim() !== 'up') log('warning: background video player did not start; push again or press a key on the device')
+    const check = `set -- $(pidof KeyboardDevice); [ $# = 1 ] && ${hasVideo ? 'pidof videoplayerinterfaceAPP >/dev/null' : 'true'}`
+    const healthy = async (secs) => {
+      for (const t = Date.now(); Date.now() - t < secs * 1000;) {
+        await new Promise((r) => setTimeout(r, 3000))
+        if (await run('ssh', ['-o', 'ConnectTimeout=3', host, check], { timeout: 10_000 }).then(() => true, () => false)) return true
+      }
+      return false
+    }
+    if (!await healthy(20)) {
+      // ponytail: frozen screens with touch still working (2026-11-25) pass this check; no remote
+      // signature known yet for that one, so it still needs a manual reboot
+      log('app did not come back cleanly; rebooting the device')
+      await run('ssh', [host, 'sync; reboot'], { timeout: TIMEOUT }).catch(() => {}) // sshd may die first
+      if (!await healthy(120)) throw new Error('device not healthy within 120 s of the reboot')
+      log('back up after reboot')
+    }
     log('pushed')
     return remote
   }

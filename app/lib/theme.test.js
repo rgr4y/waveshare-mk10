@@ -9,8 +9,8 @@ import { QWriter } from './qdatastream.js'
 import {
   decodeTheme, encodeTheme, formatQtJson, decodeControlData, encodeControlData,
   pages, listKeys, getItem, setKeyTitle, setKeyImage, setKeySound, setBackgroundVideo,
-  editableActionFields, setKeyActionField, copyKey, pasteKey, removeKey, parseKeyClip, keyRaw, setKeyRaw,
-  pageRaw, setPageRaw, newKeyTypes, createKey, setKeyTitleParam, englishDescriptions, fontFamilies, deleteFolder, listIcons, setKeyIcon,
+  editableActionFields, setKeyActionField, copyKey, pasteKey, removeKey, moveKeys, parseKeyClip, keyRaw, setKeyRaw,
+  pageRaw, setPageRaw, newKeyTypes, createKey, checkTitleDefaults, setKeyTitleParam, englishDescriptions, fontFamilies, deleteFolder, listIcons, setKeyIcon,
 } from './theme.js'
 
 // Pristine stock theme (ScreenKeyMacOS v1.1 bundle, captured 2026-11-24 before an accidental vendor-app save); sha in SHA256SUMS.txt
@@ -327,6 +327,15 @@ test('real theme: createKey makes a plain key of each offered type in an empty s
     assert.equal(getItem(a, pi, ...free[1]).path, k1.path)
     assert.equal(a.assets.size, n + 1)
   }
+  // Settings > New key title defaults go into titleParam; the rest keeps the built-in look
+  const spare = [0, 1].flatMap((r) => [0, 1, 2, 3, 4].map((c) => [r, c])).find(([r, c]) => !getItem(a, pi, r, c))
+  if (spare) {
+    createKey(a, pi, ...spare, 'openWeb', { FontFamily: 'Arial', FontSize: 22, FontStyle: 'Bold' })
+    const tp = JSON.parse(getItem(a, pi, ...spare).titleParam)
+    assert.deepEqual([tp.FontFamily, tp.FontSize, tp.FontStyle, tp.TitleAlignment], ['Arial', 22, 'Bold', 'top'])
+  }
+  assert.deepEqual(checkTitleDefaults({ FontSize: 20, FontUnderline: true }), { FontSize: 20 })
+  assert.throws(() => checkTitleDefaults({ FontSize: 200 }), /bad FontSize/)
   assert.throws(() => createKey(a, pi, r, c === 4 ? 3 : 4, 'openPage'), /can't create/)
   // the theme still round-trips through the codec
   const b = decodeTheme(encodeTheme(a))
@@ -402,4 +411,26 @@ test('real theme: setKeyIcon sets a premade icon, reusing its asset', { skip }, 
   assert.equal(getItem(a, 0, k2.row, k2.col).path, getItem(a, 0, k1.row, k1.col).path)
   assert.ok(a.assets.size <= n)
   assert.throws(() => setKeyIcon(a, 0, k1.row, k1.col, '../x'), /no icon/)
+})
+
+test('moveKeys: move to an empty slot, shift a run, swap; rejects bad targets untouched', { skip }, () => {
+  const t = decodeTheme(load())
+  const slots = [0, 1].flatMap((r) => [0, 1, 2, 3, 4].map((c) => [r, c]))
+  const pi = t.json.pages.findIndex((_, i) => slots.some(([r, c]) => !getItem(t, i, r, c)) && listKeys(t, i).length >= 2)
+  const [a, b] = listKeys(t, pi)
+  const empty = slots.find(([r, c]) => !getItem(t, pi, r, c))
+  const ia = a.item
+  moveKeys(t, pi, [[a.row, a.col, ...empty]])
+  assert.equal(getItem(t, pi, ...empty), ia)
+  assert.equal(ia.x, String(empty[1] * 128))
+  assert.equal(getItem(t, pi, a.row, a.col), undefined)
+  // swap
+  moveKeys(t, pi, [[...empty, b.row, b.col], [b.row, b.col, ...empty]])
+  assert.equal(getItem(t, pi, b.row, b.col), ia)
+  assert.equal(getItem(t, pi, ...empty), b.item)
+  // onto a key that does not move away
+  const before = JSON.stringify(t.json)
+  assert.throws(() => moveKeys(t, pi, [[b.row, b.col, ...empty]]), /already holds a key/)
+  assert.throws(() => moveKeys(t, pi, [[b.row, b.col, 2, 0]]), /not a key slot/)
+  assert.equal(JSON.stringify(t.json), before)
 })

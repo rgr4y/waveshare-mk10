@@ -49,7 +49,7 @@ Items marked **[done 2026-11-24]** were already exercised during the build, most
 
 ## 4. Edit: key image
 
-- [x] **Replace image…** with a PNG. The key and thumbnail update.
+- [x] **Replace image** (pencil on the key thumbnail) with a PNG. The key and thumbnail update.
 - [ ] JPEG, non-square, and large (4000px) images: cover-cropped to 128x128 with no distortion.
 - [ ] Drag-drop an image onto a key. The key shows a dashed outline on hover, and the image is replaced on drop.
 - [ ] Replace the **GIF key** (animated). It becomes the static first frame. Expected for now.

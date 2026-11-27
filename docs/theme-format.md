@@ -273,7 +273,32 @@ Source: `allThemeTest.Theme`, which Rob built in ScreenKeyMacOS with one key per
 | Page switching | pageSwitch | jumpToPage:int, pageSwitchMode:int | device |
 | | openPage / oneLevelUp | pageName | device |
 
-Not yet captured: openApp, window ops, media keys, Action flow (`ControlFlow`, whose `controlDataList` is a QByteArray list of nested actions), OBS, Home Assistant, weather, and the MK20-only `encoder_*` types.
+Not yet captured: openApp, window ops, media keys, OBS, Home Assistant, weather, and the MK20-only `encoder_*` types. Action flows (`ControlFlow`): see the next section.
+
+### Action flows (`ControlFlow`) and the step handlers [verified on device 2026-11-25]
+
+Found by disassembling `/data/KeyboardDevice` (ARM, symbols present), then checked on 10.0.1.48. Method: keys pressed with `mk10-gd32-inject` (docs/gd32-uart.md), HID read on lenny (evdev grab of `SYK syk_keyboards`), and GD32 frames from the relay log.
+
+**Where the steps live.** `VideoPlayer::keyStateChanged` reads the **item** field `controlDataList`, a QString of base64. That decodes (`deserializationControlDataList`) to a QDataStream `QList<QVariantMap>`, one map per step. If the item has no `controlDataList`, the list is `[controlData]`. So a plain action is a one-step flow. The `keyState` map is prepended, and the list goes to the host (V1 cmd 13) and to `FunctionRunner::startRunCmd`.
+- A `ControlFlow` controlData without the item field crashed KeyboardDevice (SIGSEGV, respawn). The step list was only inside controlData. Probably the type lookup found no handler for `ControlFlow` and called a null pointer; this is a guess.
+- Studio writes both: the item field the device runs, and the vendor's controlData (`type ControlFlow`, `parentDescription`, `iconPath`, `description`, `controlDataList` as QByteArray of the same base64 text, `AISoundControlKeyword`; the order of the MK20 sample).
+
+**Step types.** These are the handlers `OperatingSystemControl` registers, by `type`:
+
+| type | Fields | Verified |
+|---|---|---|
+| keyboard | keycode:int (QMK, mods included), keyType:int (0 tap, 1 press, 2 release; missing = 0) | tap, press/hold/release (Shift held over a tap gave "F"), LSFT(KC_C) as one tap |
+| qmk_string | inputTextPercentEncoding | typed **as is**: "a%20B" typed `a%20B`; space, `\n` (Enter) and `\t` (Tab) work |
+| delay | delayMs:int (run by FunctionRunner on a QTimer) | 1000 ms gave 1.13 s; 3000 ms worked; the key's release does not stop the flow |
+| startLoop / stopLoop | loopCount:int on startLoop | 3 loops of tap + 200 ms ran 3 times |
+| qmk_mouse | qmk_mouse_key, mouse_x, mouse_y, mouse_h, mouse_v, qmk_mouse_event | not tested in a flow |
+| devicePlayAudio, deviceStopAudio, deviceVolume, xiaozhiAIEnableSwitch, xiaozhiAIStateSwitch | - | not tested |
+
+- Steps run about 40 ms apart.
+- Extra fields in a step (keyString, description, ...) are ignored.
+- The GD32 frame for a keyboard step is `aa 55 <sum> 04 fb 17 <keyType> <keycode hi> <keycode lo> f5 5f` (`STM32CommunicationObject::request_upload_key`). Text is cmd `1a` with the bytes and a 0.
+- Step maps are written in descending key order, as Qt 5 writes a QMap; the MK20 sample's empty list was `AAAAAA==`.
+- Studio: `app/lib/macro.js` (`readMacro`, `setKeyMacro`). One tap or one text step is saved as a plain `keyboard` / `qmk_string` action; anything else becomes a flow. A theme built with it ran correctly on the device.
 
 ### `keyboard` keycode encoding (QMK keycodes) [inferred from all bundled themes]
 `keycode` is a **QMK keycode**, and `keyString` is the human label the vendor app shows. The GD32 runs QMK, so these execute with no host.
