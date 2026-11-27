@@ -21,6 +21,9 @@ Editor: Open a `.Theme` (the dialog starts in the stock ScreenKey theme dir when
 `defaultTheme.Theme` opens fine, edits are saved wherever you choose, so use Save As to keep the original).
 Click a key to edit its title or replace its image (or drop an image on the key); click the background
 video area, or drop a video on it, to replace the video (transcoded with ffmpeg to 640x256 h264).
+Select the video (click the background) to set where the device shows it: X, Y, width and height
+on the 896x304 panel. The device scales the 640x256 stream to that box without keeping the aspect, so
+"Keep 5:2" ties width and height; Reset puts it back at 0, 0, 640x256.
 Key actions are shown read-only for now. The last opened file is reopened on start.
 
 Dev flags: `--open <file>`, `--select <page>,<row>,<col>` (or `<page>,video`), `--screenshot <out.png>` (capture after ~3 s and quit).
@@ -45,6 +48,10 @@ Under the key's Title: font (the device's fonts, then this computer's), size (6-
 Underline toggles. Stored in the item's `titleParam`. Position values are the ones the device daemon
 knows (`top`, `middle`, `bottom`). Settings > New key title sets the font, size and style that new
 keys start with (default Microsoft YaHei, 16, Regular); existing keys keep theirs.
+Outline (width 1-8 px and color, 0 = off): the device can't outline titles, so Studio draws the title with its
+outline into the key image and turns the device's own title off for that key. The original image is kept
+(item field `mk10studioBase`) and the drawing is redone whenever the title, its look, the outline or the image
+changes; Title and Image are fixed on while it is on. Still images only (not GIF, frames or multi-state keys).
 An ssh push first copies this computer's font files for any family the theme uses (key titles, text
 widgets) that the device lacks into the device's `/usr/share/fonts`; the restart loads them. The stock
 firmware (USB push) can't take fonts: the push log warns and the device draws that text in its default.
@@ -56,6 +63,13 @@ image; new keys from the action picker start with their type's icon (`icon` in
 renders the 128×128 PNGs (needs `rsvg-convert`, Homebrew `librsvg`). Same icon on several keys = one asset.
 Below them, PictureFont lists the vendor app's dot-matrix glyphs (`icons/PictureFont/`: digits 0-9 and
 a colon, black dots on transparency, copied from ScreenKeyMacOS; see the README there).
+Last, Material Design Icons (`@mdi/svg`, Apache 2.0, the set Home Assistant uses): type to search by
+name, alias or tag. Studio draws the chosen icon into the key PNG and keeps its name, color and
+outline in the item's `mk10studioIcon` field, so the Icon and Outline controls under the thumbnail
+can change them later. Setting any other image on the key drops that field.
+
+Inspector groups (Image, Title, Sound, Action, Raw JSON, …) collapse by clicking their heading;
+Studio remembers which are open. Color pickers apply while you drag.
 
 ### Macros
 Hotkey, keyboard-macro and action-flow keys show a **Macro** timeline in the Inspector instead of the raw
@@ -82,7 +96,7 @@ A cell covered by a key-area widget (clock digits, GIF, gauge) is not empty: the
 Paste refuses it.
 
 ### Moving keys
-Press and hold a key (350 ms), then drag it to another slot. Keys in the way slide toward the nearest
+Press and hold a key (350 ms; a ring fills at the pointer), then drag it to another slot. Keys in the way slide toward the nearest
 free slot, iPhone home-screen style (the dragged key's own slot counts as free). On a page with no
 empty slot, the key you drop on swaps with the dragged one. Widget cells are skipped and are never
 targets. Any key press cancels the drag, and Cmd+Z undoes a move.
@@ -119,7 +133,7 @@ new image paths must exist in the theme. Assets nothing uses any more are droppe
 
 A pageSwitch key's Jump to page is a dropdown of the top-level pages (0-5).
 
-Right-click > Press Key follows a navigation key in the editor: openPage opens its folder, oneLevelUp
+Right-click > Press Key (or double-click the key) follows a navigation key in the editor: openPage opens its folder, oneLevelUp
 goes to the parent, pageSwitch (pageSwitchMode 0) goes to top-level page `jumpToPage`. Other actions run
 on the device or host, so the status line only names them.
 
@@ -158,6 +172,13 @@ appended to `/tmp/mk10.log`. **Save log…** writes the same lines to a file you
   sound devices, screenshots and music show "not supported yet". Each run or refusal goes to
   Activity, and refusals also show a toast. While this is on, Studio holds the USB serial port
   (retrying every 2 s), which locks the vendor app out. The rules are in `lib/keyactions.js`.
+- **Run application / Run script / Run Shortcut** (+ New key, group "Mac (run by Studio)"): Studio's own
+  key types, stored as an `openFile` action with an extra `mk10studioRun` field (`app`, `script`,
+  `shortcut`) that the device passes along with the press. The path is a `.app`, an executable file or
+  an AppleScript (`.scpt`, `.applescript`, run with `osascript`), or a Shortcut's name (`shortcuts run`);
+  "Choose application…" / "Choose script…" and a Shortcut list fill it in. Scripts run without a shell,
+  in their own folder, for up to 10 minutes. Each program asks once before it first runs (a theme can
+  name anything); Settings > Programs keys may run > Forget all resets that.
 - **Live stats** (Settings > Key actions and stats, on by default): once a second Studio sends the
   computer's CPU, GPU and RAM usage, CPU model, disk space and network speed/totals (macOS: en* interfaces, `netstat -ib`; Linux: /proc/net/dev) to the device's info widgets (V1 cmd 1),
   limited to the keys the current page asked for (V1 cmd 15 contract). GPU usage comes from

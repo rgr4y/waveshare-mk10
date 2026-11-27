@@ -1161,3 +1161,102 @@ Verification
 - Outcome: `ttyReload(path)` (`app/lib/session.js`) builds the device shell: record config.json mtime, sleep 1, perl TIOCSTI the frame, poll up to 20 s for the mtime to move. `pushSsh` tries it first, then the USB serial reload if the MK10 is on this computer, then the stop/edit/start/healthy/reboot path. Paths outside `^/[\w./-]+$` are refused.
 - Verification: lint, 46 tests; `ttyReload` run on the device: exit 0 in 6.7 s. Not yet run through the Push button. The display snapshot still runs after either reload.
 - Note: the app's reply to the injected frame goes out to the USB host (Studio sees an unsolicited echo if it holds the port). Studio sends nothing on the port during a push, so its own frames can't interleave; another host app writing at the same moment could.
+
+## 2026-11-25 — Studio: reposition the background video
+- Finding (on the device): KeyboardDevice passes the type-100 item's x/y/w/h straight to `videoplayerinterfaceAPP -x -y -w -h`, and the display engine scales the 640x256 stream into that frame. Test: a copy of the current theme with page 0's video at x 128 y 32 w 480 h 192, hot reloaded via ttyGS0: player cmdline `-x 128 -y 32 -w 480 -h 192`, disp ch0 `frame[128, 32, 480, 192]`. Reloaded the original afterwards and deleted the copy.
+- Outcome: the Background video inspector has X / Y / Width / Height fields, "Keep 5:2" (on by default; a width change sets the height and back) and "Reset to 0, 0, 640×256". The canvas preview moves and stretches the video to the same box. `setBackgroundVideoRect` refuses non-integers and boxes off the 896x304 panel or under 32 px (our floor; the scaler's real limits are untested).
+- Changed: `app/lib/theme.js`, `app/lib/session.js` (`setVideoRect`), `app/main.js`, `app/preload.cjs`, `app/public/{index.html,styles.css,app.js}`, `app/lib/theme.test.js`, `app/README.md`.
+- Verification: lint, 47 tests (new: move, bounds, round trip). Test instance: width 480 gave height 192, x 128 moved the preview, an off-panel box was refused. Not yet pushed from the real app; not checked how it looks on the panel with keys on top.
+
+## 2026-11-25 — Studio: outlined key titles (baked into the key image)
+- Finding: titleParam has only FontFamily, FontSize, FontStyle, FontUnderline, ShowTitle, TitleAlignment, TitleColor, ShowImage (KeyboardDevice strings), and the app has no `QPainterPath::addText`/stroke code, so the device can't outline titles. Rob chose baking.
+- Outcome: key Inspector > Outline (width 0-8, color). `setKeyTitleOutline` stores `mk10studioOutline` (JSON color/width), `mk10studioBase` (the key's own image) and `mk10studioSig`, and sets ShowTitle false / ShowImage true. The renderer (`bakeTitle`) draws base image (contain) + title (stroke then fill, preview layout: 2 px padding, line height 1.15, top/middle/bottom) into a 128x128 PNG and stores it with `setBakedTitle`; it redraws whenever a shown key's signature (title, font, size, style, underline, alignment, color, outline, base) changes. Replacing the image or icon updates the base and forces a redraw. Width 0 restores the original image and the device title. Animated and multi-state keys are refused.
+- Changed: `app/lib/theme.js`, `app/lib/session.js` (summary `outline`), `app/main.js`, `app/preload.cjs`, `app/public/{index.html,styles.css,app.js}`, `app/lib/theme.test.js`, `app/README.md`.
+- Verification: lint, 48 tests (bake, base kept, old drawing dropped, ShowTitle forced off, image replace rebases, off restores). Test instance: "Friends" with a 3 px red outline drawn into the image, matching the other titles' placement. Device: a copy of the current theme with the three `mk10studio*` fields loaded via ttyGS0 reload with KeyboardDevice running normally; original reloaded and the copy deleted. Not yet pushed from the real app.
+- Limits: MCP edits are redrawn only once Studio shows that key's page; the baked title is drawn by Chromium, so it can differ slightly from the device's own text rendering.
+
+## 2026-11-25 — Key actions: Run application, Run script, Run Shortcut
+- Outcome: three new key types in + New key ("Mac (run by Studio)"), stored as an `openFile` action map plus `mk10studioRun` = app / script / shortcut (locked field), so the device forwards them like any openFile press. `planKeyAction` routes them to `planRun`: app = existing `.app` folder; script = existing file that is executable or `.scpt`/`.applescript`; shortcut = non-empty name without control characters. `runProgram` (main.js) asks once per `<kind>:<target>` (Allow / Don't run, stored in `settings.allowedRuns`), then `shell.openPath` for apps, `execFile` without a shell in the script's folder (osascript for AppleScript, 10 min cap), or `/usr/bin/shortcuts run <name>`. Inspector shows them as Run application / Run script / Run Shortcut, with "Choose application…" / "Choose script…" and a Shortcut drop-down from `shortcuts list`. Settings > Programs keys may run > Forget all. New icons `app`, `terminal`, `shortcut`.
+- Changed: `app/lib/action-templates.json` (3 entries added, rest untouched), `app/lib/keyactions.js`, `app/lib/theme.js` (lock field), `app/main.js`, `app/preload.cjs`, `app/public/{index.html,app.js}`, `app/icons/{app,terminal,shortcut}.{svg,png}`, tests, `app/README.md`.
+- Verification: lint, 49 tests (planner cases, createKey runShortcut fields). Test instance: created Run application and Run Shortcut keys; inspector rows Type / Description / Application or Shortcut, picker button shown for the app key, 21 Shortcuts listed. Not checked: that the device includes `mk10studioRun` in the cmd 13 press map (needs a real press), and an actual run with the Allow prompt.
+
+## 2026-11-25 — Progress overlay waits for the confirm dialog
+- Bug (Rob): the push overlay appeared behind the "Push to …?" confirm, before he answered. The lock (and `deviceOp`) was set before auto-detect and the dialog.
+- Fix: `Session.opStarted()` marks the operation shown; `pushTo` calls it after the confirm returns yes, `pull` after the save dialog returns a path. `summary().deviceOp` is null until then (buttons stay disabled through detection and the dialog, as before).
+- Verification: lint, 49 tests; script on `Session`: deviceOp null inside the lock before `opStarted`, 'push' after, null after release. Not clicked through in the real app.
+
+## 2026-11-25 — Device sleep rules (investigation, no code changes)
+- Finding: no sleep, screensaver, idle or wake rule found anywhere on the device.
+  - `/mnt/SDCARD/config.json` has only `defaultTheme`, `deviceBl` (89), `deviceVolume` (7) and `enableXIAOZHIAI`.
+  - `strings` on KeyboardDevice show only a backlight level setter, with no sleep or idle strings.
+  - Kernel `consoleblank=0`, and the only console is a dummy.
+  - LilAlpine services don't touch backlight or blanking.
+  - Vendor Mac app (strings only): a backlight slider, nothing that reacts to the Mac sleeping or locking.
+- Read: the black-until-keypress behaviour is probably the intermittent blackout, not a sleep feature. Unverified. Open questions to Rob: does it black out when idle (how long) or only after reloads, and is the backlight still lit when black?
+- Verification: read-only ssh and `strings` checks; nothing changed on the device or in the repo.
+- Follow-up:
+  - Run `node cli.js snap black` while the panel is black, before pressing a key.
+  - Rob reports the Run Shortcut key shows the Allow prompt but then does not run the shortcut. Not yet investigated. Unchecked: whether the device sends `mk10studioRun` in the press map (an earlier entry noted this was unconfirmed), and whether `shortcuts run` is reached (check the Activity log for a `key:` line).
+
+## 2026-11-25 — Session: Studio push/hot reload, drag, bootprof, UI features
+- Outcome:
+  - **pushSsh:** restart + health check + reboot fallback (`4bc80fc`, fixed in `c95a9c8` after a bad splice duplicated ~100 lines). Serial hot reload for ssh pushes (`91322d5`). Serial port field replaces the ssh host in serial mode (`3f03352`). "Reboot device…" in the device dropdown (`3371381`).
+  - **Drag to move keys** (`6096b2e`): hold 350 ms, iOS-style nudge to the nearest free slot, swap when the page is full. Rob confirmed it works.
+  - **PictureFont glyphs** (`3828500`): 11 PNGs from ScreenKey, listed under the premade icons in Choose icon….
+  - **Delta push** (`63e4f0b`): zstd `--patch-from` against Studio's cached copy of the last pushed theme, md5-checked on the device; falls back to a full copy.
+  - **Progress panel** (`c4f97b7`): covers the main area during push and pull; pull with no theme open now locks too.
+  - **Display snapshot** (`86921ac`): logged 6 s after each serial reload to `/var/log/mk10-display.log`; `node cli.js snap [label]` on demand.
+  - **Macro recorder** (`41d4edc`): key ups are now recorded.
+  - **Default title font** (`7ee24e5`): Settings > New key title.
+  - **ttyGS0 reload** (`60e4dfa`): `TIOCSTI` into `/dev/ttyGS0` gives an ssh-only hot reload, tried before USB serial.
+  - **Other features:** Replace image button replaced by a pencil on the thumbnail (`9a93e65`), video reposition fields (`b0e099d`), outlined key titles (`bfe97cf`), Run application/script/Shortcut keys (`892428a`), progress overlay waits for the confirm dialog (`e5955a1`).
+  - **LilAlpine `1e3f71a`:** `bootprof` early-boot profiler writing `/var/log/bootprof/*.txt` (per-service start/took table, slowest list, milestones), deployed with `rc-update add bootprof sysinit`.
+- Root cause:
+  - **Macro recorder:** `preventDefault()` on keyDown in `before-input-event` makes Electron never deliver that key's keyUp. Now only Cmd/Ctrl combos are blocked (folded to press+release), and keys still held get a release at stop.
+  - **bootprof first run:** `/` was read-only at sysinit, so `mkdir` failed. `mkdir` moved into `report()`.
+- Verification:
+  - Lint and tests passed at each commit (49 at last count).
+  - **Device:**
+    - Live reboot back in about 34 s.
+    - bootprof checked over two reboots. Boot timeline: init 1.1 s, services done about 14 s, wlan0 19.3 s, app-ready 22.5 s. Slowest: mk10-modeswitch 3.38 s, mdev 1.80 s.
+    - Delta patch: md5 matched on a copy of the real theme.
+    - ttyGS0 injection switched `config.json` to a copy and back.
+    - Video box `-x 128 -y 32 -w 480 -h 192` honoured by the player.
+    - A theme with the `mk10studio*` outline fields loaded and KeyboardDevice kept running.
+  - UI checked in separate `--screenshot` test instances only.
+  - **Not verified:**
+    - Any of the new features through the real app's Push button.
+    - The serial hot reload of an already-loaded path.
+    - The Reboot confirm dialog.
+    - The drag swap and widget skip.
+    - An outlined key on the panel.
+    - The bootprof image build.
+- Follow-up:
+  - **Run Shortcut:** Rob reports the Allow prompt appears but the shortcut doesn't run. Not yet investigated. Unchecked: whether the device sends `mk10studioRun` in the press map, and whether `shortcuts run` is reached (look for a `key:` line in the Activity log).
+  - **Intermittent post-reload blackout:** no cause found. Next time, run `cd app && node cli.js snap black` before pressing a key, and `cat /sys/class/disp/disp/attr/sys` if the screen freezes.
+  - **Wake press:** an injected frame on `/dev/ttyS1` is a possible fix, untested; waiting on blackout data.
+  - **Device sleep rules:** none found in `config.json`, the KeyboardDevice strings, the kernel or the LilAlpine services.
+
+## 2026-11-25 — Run Shortcut keys hung
+
+- Root cause: `shortcuts run` reads stdin to EOF as the Shortcut's input (`NSFileHandle.readToEnd()`, seen with `sample`). `execFile` left the stdin pipe open, so the run blocked until the 10-minute timeout. The Allow prompt showed, so the device does forward `mk10studioRun`.
+- Fix: `main.js runProgram` closes the child's stdin right after spawning. This covers scripts that read stdin too.
+- Verified: `node -e` with `/bin/cat`: exits once with stdin closed, SIGTERM at the timeout without. Lint clean, tests pass. The Shortcut itself is not re-run here (it's Rob's).
+
+## 2026-11-25 — Material Design Icons in the icon dialog
+
+- Outcome: the Choose icon dialog has a Material Design Icons section below PictureFont, with a search box and up to 120 results at a time. Icons come from `@mdi/svg` 7.4.47 (Apache 2.0, 7447 icons, the set Home Assistant uses). Search matches the name, aliases and tags.
+- Picking an icon draws its path white into a 128x128 PNG in the renderer (76 px, centred, 6 px low like the line-art icons) and sets it as the key image.
+- Changed: `app/main.js` (`mdiIcons`, `setKeyPng`), `app/preload.cjs`, `app/public/{index.html,app.js,styles.css}`, `app/package.json` and the lock file.
+- Verified: in a `--screenshot` instance, "lightbulb" gives 45 matches with previews, and a click closes the dialog and changes the key image. Lint clean, 49 tests pass. Not checked on the device.
+
+## 2026-11-25 — Vector icon colors, collapsible inspector, live colors, double-click press
+
+- Outcome:
+  - Material Design icons keep `mk10studioIcon` (name, color, outline color, outline width 0–8). Icon and Outline controls under the thumbnail redraw the icon; any other image drops the field (`setKeyVectorIcon` in `lib/theme.js`).
+  - Inspector groups are `<details data-grp>`; open state kept in localStorage.
+  - Color pickers (title, title outline, icon) apply on `input` too, one IPC in flight, last value wins.
+  - Double-click a key = Press Key (click `detail === 2`, so the re-render after the first click doesn't break it).
+  - Hold-to-drag ring (separate commit `c91de3d`).
+- Right-click menu "not working": Rob's `--dev` instance live-reloaded half-edited HTML/JS (`key-states-h` gone from the HTML, still used in JS), so `select()` threw before `keyMenu`. Current code: contextmenu fires, no renderer exceptions.
+- Verified in a `--screenshot` instance over CDP: MDI pick, then color input events and outline 3 land in `mk10studioIcon`; title color live; double-click on an openPage key moves page 0 to 3; no exceptions. New theme test for `setKeyVectorIcon` (50 pass), lint clean. Native menu popup itself not visible to CDP.

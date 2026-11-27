@@ -1,7 +1,7 @@
 // Electron main: owns the single Session; all edits (UI, MCP) go through it.
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, net, protocol, shell, systemPreferences, Tray } from 'electron'
 import { copyFile, readFile, writeFile, mkdir } from 'node:fs/promises'
-import { createWriteStream, existsSync, mkdirSync, statSync, watch } from 'node:fs'
+import { createWriteStream, existsSync, mkdirSync, readFileSync, statSync, watch } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
 import { execFile, execFileSync, spawn } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
@@ -148,6 +148,15 @@ async function setKeyImage(page, row, col, file) {
   if (!file) return null
   return task('Set key image', () => session.setKeyImage(page, row, col, file))
 }
+
+// Material Design Icons (@mdi/svg, the set Home Assistant uses): [name, search words, SVG path data],
+// read once on first use. The renderer draws the path into the key PNG.
+const MDI = new URL('./node_modules/@mdi/svg/', import.meta.url)
+let mdi = null
+const mdiIcons = () => (mdi ??= JSON.parse(readFileSync(new URL('meta.json', MDI), 'utf8')).filter((m) => !m.deprecated).map((m) => [
+  m.name, [m.name, ...m.aliases, ...m.tags].join(' ').toLowerCase(),
+  readFileSync(new URL(`svg/${m.name}.svg`, MDI), 'utf8').match(/ d="([^"]+)"/)[1],
+]))
 
 async function setKeySound(page, row, col, file) {
   if (file === null) return task('Clear key sound', () => session.setKeySound(page, row, col, null))
@@ -396,6 +405,39 @@ function pushStats() {
   if (Object.keys(vals).length) dev.sendSystemData(vals).catch(() => {}) // port gone: syncPort reopens it
 }
 
+// Run application / script / Shortcut keys. A theme can come from anywhere and name any local
+// program, so each target runs only after the user allows it once (remembered in settings.allowedRuns).
+// Scripts run without a shell, in their own folder; AppleScripts through osascript.
+const RUN_LABEL = { app: 'open the application', script: 'run the script', shortcut: 'run the Shortcut' }
+async function runProgram({ run, target, type }) {
+  const id = `${run}:${target}`
+  settings.allowedRuns ??= []
+  if (!settings.allowedRuns.includes(id)) {
+    const ok = (await dialog.showMessageBox(win && !win.isDestroyed() ? win : undefined, {
+      type: 'question', buttons: ['Allow', "Don't run"], defaultId: 1, cancelId: 1,
+      message: `A key on the MK10 wants to ${RUN_LABEL[run]}:`, detail: `${target}\n\nAllow this key action from now on? You can revoke it in Settings.`,
+    })).response === 0
+    if (!ok) throw new Error('not allowed')
+    settings.allowedRuns.push(id)
+    await saveSettings()
+  }
+  if (run === 'app') {
+    const err = await shell.openPath(target)
+    if (err) throw new Error(err)
+    return
+  }
+  const [cmd, args, cwd] = run === 'shortcut' ? ['/usr/bin/shortcuts', ['run', target], undefined]
+    : ['.scpt', '.applescript'].includes(extname(target).toLowerCase()) ? ['/usr/bin/osascript', [target], dirname(target)]
+      : [target, [], dirname(target)]
+  // ponytail: 10 min cap and only the exit status is reported; stream output to the log if scripts need it
+  // stdin closed at once: `shortcuts run` reads stdin to EOF as the Shortcut's input and hangs on an open pipe
+  await new Promise((resolve, reject) => execFile(cmd, args, { cwd, timeout: 600_000, maxBuffer: 4 << 20 }, (e, _out, err) => {
+    if (e) return reject(new Error(`${type} exited ${e.code ?? e.signal}${err ? `: ${String(err).trim().split('\n').pop()}` : ''}`))
+    log(`key: ${type} finished`)
+    resolve()
+  }).stdin.end())
+}
+
 // ---- key actions (Phase 3b): the device reports each press with the key's action (V1 cmd 13);
 // the Mac runs the host-side ones. lib/keyactions.js decides what runs.
 let replayed = 0 // presses dropped since the port last opened (queued while it was closed)
@@ -413,7 +455,8 @@ function onKeyEvent(m) {
   }
   log(`key: ${plan.type} ${plan.target}`)
   const done = plan.run === 'url' ? shell.openExternal(plan.target)
-    : shell.openPath(plan.target).then((err) => { if (err) throw new Error(err) })
+    : plan.run === 'path' ? shell.openPath(plan.target).then((err) => { if (err) throw new Error(err) })
+    : runProgram(plan)
   done.catch((e) => { log(`key: ${plan.type} failed: ${e.message}`); status(`Key: ${plan.type} failed: ${e.message}`, { error: true }) })
 }
 
@@ -545,8 +588,25 @@ function registerIpc() {
   h('setKeyImage', setKeyImage)
   h('icons', () => listIcons())
   h('setKeyIcon', (p, r, c, name) => session.setKeyIcon(p, r, c, name))
+  h('mdiIcons', mdiIcons)
+  h('setKeyVectorIcon', (p, r, c, png, icon) => session.setKeyVectorIcon(p, r, c, Buffer.from(png), icon))
   h('setKeySound', setKeySound)
   h('setBackgroundVideo', setBackgroundVideo)
+  h('setKeyTitleOutline', (page, row, col, o) => session.setKeyTitleOutline(page, row, col, o))
+  h('setBakedTitle', (page, row, col, png, sig) => session.setBakedTitle(page, row, col, Buffer.from(png), sig))
+  h('pickRunTarget', async (page, row, col, kind) => {
+    const r = await dialog.showOpenDialog(win, kind === 'app'
+      ? { title: 'Choose an application', defaultPath: '/Applications', properties: ['openFile'], filters: [{ name: 'Applications', extensions: ['app'] }] }
+      : { title: 'Choose a script', properties: ['openFile'] })
+    if (r.canceled) return null
+    session.setKeyActionField(page, row, col, 'path', r.filePaths[0])
+    return r.filePaths[0]
+  })
+  h('shortcutNames', () => new Promise((resolve) => execFile('/usr/bin/shortcuts', ['list'], { timeout: 15000 },
+    (e, out) => resolve(e ? [] : String(out).split('\n').map((s) => s.trim()).filter(Boolean)))))
+  h('allowedRuns', () => settings.allowedRuns ?? [])
+  h('forgetRuns', async () => { settings.allowedRuns = []; await saveSettings() })
+  h('setVideoRect', (page, rect) => session.setVideoRect(page, rect))
   h('push', push)
   h('pull', pull)
   h('setLevel', (method, level) => session.setLevel(method, level))

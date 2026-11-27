@@ -7,6 +7,11 @@ import { statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { extname, isAbsolute, join } from 'node:path'
 
+// Studio's own run actions: an openFile action map with mk10studioRun (the device forwards the whole
+// map on a press). path holds the .app, the script, or the Shortcut's name.
+export const RUN_KINDS = { app: 'runApp', script: 'runScript', shortcut: 'runShortcut' }
+const OSA_EXT = new Set(['.scpt', '.applescript'])
+
 // openFile hands the file to its default app; for these that means running code
 export const RISKY_EXT = new Set(['.app', '.command', '.sh', '.bash', '.zsh', '.csh', '.tool', '.terminal',
   '.scpt', '.applescript', '.workflow', '.action', '.pkg', '.mpkg', '.dmg', '.jar', '.py', '.pl', '.rb',
@@ -31,8 +36,9 @@ export function planKeyAction(payload, { stat = statSync, sinceOpenMs = Infinity
   if (state?.type !== 'keyState' || !a?.type) return null
   if (!Number(state.pressed)) return null // run on press; the release frame repeats the action
   const type = String(a.type)
-  if (sinceOpenMs < OPEN_GRACE_MS && (type === 'openWeb' || type === 'openDir' || type === 'openFile')) return { drop: true, type }
+  if (sinceOpenMs < OPEN_GRACE_MS && (type === 'openWeb' || type === 'openDir' || type === 'openFile')) return { drop: true, type: RUN_KINDS[a.mk10studioRun] ?? type }
   const skip = (why) => ({ skip: `${type}: ${why}`, type })
+  if (type === 'openFile' && a.mk10studioRun) return planRun(String(a.mk10studioRun), String(a.path ?? '').trim(), stat)
   switch (type) {
     case 'openWeb': {
       const raw = String(a.Url ?? '').trim()
@@ -59,4 +65,27 @@ export function planKeyAction(payload, { stat = statSync, sinceOpenMs = Infinity
     default:
       return NOT_YET.has(type) ? skip('not supported in Studio yet') : null
   }
+}
+
+// -> {run: 'app' | 'script' | 'shortcut', target, type} or {skip}. Running still needs the user's
+// one-time OK per target (main.js), since a theme from elsewhere can name any local program.
+function planRun(kind, raw, stat) {
+  const type = RUN_KINDS[kind]
+  const skip = (why) => ({ skip: `${type ?? kind}: ${why}`, type: type ?? kind })
+  if (!type) return skip('unknown run kind')
+  if (kind === 'shortcut') {
+    if (!raw || raw.length > 200 || [...raw].some((ch) => ch.charCodeAt(0) < 32)) return skip(`not a Shortcut name: "${raw}"`)
+    return { run: kind, target: raw, type }
+  }
+  const p = expand(raw)
+  if (!isAbsolute(p)) return skip(`path must be absolute: "${raw}"`)
+  let st
+  try { st = stat(p) } catch { return skip(`not found: ${p}`) }
+  if (kind === 'app') {
+    if (!st.isDirectory() || extname(p).toLowerCase() !== '.app') return skip(`not an application (.app): ${p}`)
+    return { run: kind, target: p, type }
+  }
+  if (!st.isFile()) return skip(`not a file: ${p}`)
+  if (!OSA_EXT.has(extname(p).toLowerCase()) && !(st.mode & 0o111)) return skip(`not executable (chmod +x it, or use an AppleScript): ${p}`)
+  return { run: kind, target: p, type }
 }

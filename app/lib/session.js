@@ -8,7 +8,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import {
   decodeTheme, encodeTheme, decodeControlData, editableActionFields,
-  setKeyTitle, setKeyTitleParam, setKeyImage, setKeySound, setBackgroundVideo, setKeyActionField,
+  setKeyTitle, setKeyTitleParam, setKeyImage, setKeySound, setBackgroundVideo, setBackgroundVideoRect, setKeyTitleOutline, setBakedTitle, setKeyVectorIcon, setKeyActionField,
   copyKey, pasteKey, removeKey, moveKeys, parseKeyClip, keyRaw, setKeyRaw, pageRaw, setPageRaw, newKeyTypes, createKey, setKeyIcon, englishDescriptions, fontFamilies, deleteFolder,
 } from './theme.js'
 import { toKeyPng, toDeviceMp4, toDeviceWav } from './media.js'
@@ -142,13 +142,14 @@ export class Session extends EventEmitter {
 
   // Plain-data view of the theme for UI and MCP. Item `index` is stable within a page.
   summary() {
-    if (!this.theme) return { file: null, pushing: !!this.pushing, deviceOp: this.pushing || null }
+    const deviceOp = (this.opShown && this.pushing) || null // 'push' | 'pull', once confirmed
+    if (!this.theme) return { file: null, pushing: !!this.pushing, deviceOp }
     const { json, assets } = this.theme
     return {
       file: this.file,
       dirty: this.dirty,
       pushing: !!this.pushing,
-      deviceOp: this.pushing || null, // 'push' | 'pull'
+      deviceOp,
       currentPage: json.main?.currentPage,
       assetCount: assets.size,
       pages: json.pages.map((p, index) => ({
@@ -166,6 +167,8 @@ export class Session extends EventEmitter {
           row: num(it.row), col: num(it.col),
           title: it.title,
           titleParam: it.titleParam ? JSON.parse(it.titleParam) : undefined,
+          icon: it.mk10studioIcon ? JSON.parse(it.mk10studioIcon) : undefined,
+          outline: it.mk10studioOutline ? { ...JSON.parse(it.mk10studioOutline), base: it.mk10studioBase || null, sig: it.mk10studioSig || '' } : undefined,
           path: it.path || undefined,
           sound: it.soundFile || undefined,
           paths: it.paths || undefined,
@@ -388,6 +391,31 @@ export class Session extends EventEmitter {
     return key
   }
 
+  setKeyTitleOutline(page, row, col, outline) {
+    this.need()
+    setKeyTitleOutline(this.theme, page, row, col, outline)
+    this.touch('keyTitle')
+  }
+
+  setKeyVectorIcon(page, row, col, png, icon) {
+    this.need()
+    const key = setKeyVectorIcon(this.theme, page, row, col, png, icon)
+    this.touch('keyImage')
+    return key
+  }
+
+  setBakedTitle(page, row, col, png, sig) {
+    this.need()
+    setBakedTitle(this.theme, page, row, col, png, sig)
+    this.touch('keyImage')
+  }
+
+  setVideoRect(page, rect) {
+    this.need()
+    setBackgroundVideoRect(this.theme, page, rect)
+    this.touch('videoRect')
+  }
+
   // LilAlpine answers ssh and has /etc/alpine-release, so ssh wins when it answers. Stock Tina has no
   // ssh, only the vendor app's USB serial port (LilAlpine runs the same app, so it has the port too
   // and a serial push still works there). Errors when neither is found: never guesses a mode.
@@ -419,10 +447,18 @@ export class Session extends EventEmitter {
     })
   }
 
+  // the UI's progress overlay (summary deviceOp) waits for this: after the confirm or save dialog,
+  // so it never covers a question the user still has to answer
+  opStarted() {
+    this.opShown = true
+    this.emit('change', { kind: 'push' })
+  }
+
   // push and pull share one lock: one device operation at a time. pushing = 'push' | 'pull' | false
   async deviceLock(kind, fn) {
     if (this.pushing) throw new Error('a push or pull is already in progress')
     this.pushing = kind
+    this.opShown = false
     this.emit('change', { kind: 'push' })
     try {
       return await fn()
@@ -450,6 +486,7 @@ export class Session extends EventEmitter {
       if (typeof remote !== 'string' || !/^\/[\w./-]+\.Theme$/i.test(remote)) throw new Error(`config.json defaultTheme is not a plain .Theme path: ${JSON.stringify(remote)}`)
       const dest = await pickDest(remote)
       if (!dest) return null
+      this.opStarted()
       log(`scp <- ${o.host}:${remote}`)
       await run('scp', ['-q', '-o', 'ConnectTimeout=5', `${o.host}:${remote}`, dest], { timeout: TIMEOUT })
       decodeTheme(await readFile(dest)) // fail here, not on open, if the copy is not a theme
@@ -465,6 +502,7 @@ export class Session extends EventEmitter {
       log(`auto: ${o.mode === 'ssh' ? 'LilAlpine' : 'stock firmware'} detected, pushing over ${o.mode}`)
     }
     if (confirm && !(await confirm(o))) return null
+    this.opStarted()
     if (o.mode === 'ssh') return this.pushSsh(o, log)
     if (o.mode === 'serial') return this.pushSerial(o, log)
     throw new Error(`unknown push mode ${o.mode}`)

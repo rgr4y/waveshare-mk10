@@ -18,6 +18,7 @@
     "icons": "for f in icons/*.svg; do rsvg-convert -w 128 -h 128 \"$f\" -o \"${f%.svg}.png\" && echo \"rendered ${f%.svg}.png\"; done"
   },
   "dependencies": {
+    "@mdi/svg": "^7.4.47",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "monaco-editor": "0.57.0",
     "serialport": "^13.0.0",

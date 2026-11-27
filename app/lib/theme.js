@@ -161,6 +161,7 @@ export function setKeyTitleParam(theme, pageIndex, row, col, patch) {
     if (!TITLE_CHECKS[k](v)) throw new Error(`bad ${k}: ${JSON.stringify(v)}`)
     tp[k] = v
   }
+  if (it.mk10studioOutline) Object.assign(tp, { ShowTitle: false, ShowImage: true }) // title is in the baked image
   it.titleParam = JSON.stringify(Object.fromEntries(Object.entries(tp).sort(([a], [b]) => (a < b ? -1 : 1))))
 }
 
@@ -210,7 +211,7 @@ export function fontFamilies(theme) {
 // Action (controlData) fields that may be edited: existing QString fields only, never added, removed or
 // reordered (firmware ignores actions with extra/misordered fields). `type` and fields tied to other
 // data (keyString pairs with the int keycode; iconPath/parentDescription are editor metadata) are locked.
-const LOCKED_ACTION_FIELDS = new Set(['type', 'iconPath', 'parentDescription', 'keyString', 'AISoundControlKeyword'])
+const LOCKED_ACTION_FIELDS = new Set(['type', 'iconPath', 'parentDescription', 'keyString', 'AISoundControlKeyword', 'mk10studioRun'])
 // Int fields are locked too, except these, whose range the editor knows
 const INT_ACTION_FIELDS = new Set(['jumpToPage'])
 export const editableActionFields = (cd) =>
@@ -281,13 +282,82 @@ export function setKeyImage(theme, pageIndex, row, col, pngBuffer) {
   const it = needItem(theme, pageIndex, row, col)
   const oldPath = it.path
   const oldDir = it.paths
+  const oldBase = it.mk10studioBase
   const key = `/image/MK10/cache/${randomUUID()}.png`
   theme.assets.set(key, Buffer.from(pngBuffer))
   it.path = key
   if ('paths' in it) it.paths = ''
   delete it.frameDelays // static image replaces any animation
+  delete it.mk10studioIcon // a new image is no longer the vector icon
+  rebase(it, key)
   dropIfOrphan(theme, oldPath, false)
   dropIfOrphan(theme, oldDir, true)
+  dropIfOrphan(theme, oldBase, false)
+  return key
+}
+
+// ---- outlined titles. The device draws titles without outlines (titleParam has no such setting and
+// KeyboardDevice has no text-path drawing), so Studio draws the title, outlined, into the key image:
+//   mk10studioOutline  JSON {"color": "#rrggbb", "width": 1-8}
+//   mk10studioBase     the key's own image (asset key, '' for none); the baked image is drawn from it
+//   mk10studioSig      what the current baked image was drawn from; '' = needs drawing (the renderer
+//                      draws it, see bakeTitle in public/app.js)
+// While baked, titleParam ShowTitle is false (the device must not draw the title again) and ShowImage
+// is true (the baked image carries the title).
+const isAnimated = (it) => !!(it.paths || it.frameDelays || (it.jsonData && /States/.test(it.jsonData)))
+function rebase(it, key) {
+  if (!it.mk10studioOutline) return
+  it.mk10studioBase = key
+  it.mk10studioSig = ''
+}
+const patchTp = (it, patch) => {
+  const tp = { ...JSON.parse(it.titleParam || TITLE_PARAM), ...patch }
+  it.titleParam = JSON.stringify(Object.fromEntries(Object.entries(tp).sort(([a], [b]) => (a < b ? -1 : 1))))
+}
+// outline null or width 0 turns it off: the key gets its own image back and the device title again
+export function setKeyTitleOutline(theme, pageIndex, row, col, outline) {
+  const it = needItem(theme, pageIndex, row, col)
+  const width = outline?.width ?? 0
+  if (!width) {
+    if (!it.mk10studioOutline) return
+    const baked = it.path
+    it.path = it.mk10studioBase ?? ''
+    delete it.mk10studioOutline; delete it.mk10studioBase; delete it.mk10studioSig
+    patchTp(it, { ShowTitle: true })
+    dropIfOrphan(theme, baked, false)
+    return
+  }
+  if (!Number.isInteger(width) || width < 1 || width > 8) throw new Error(`outline width must be 0-8, got ${width}`)
+  if (!/^#[0-9a-f]{6}$/i.test(outline.color ?? '')) throw new Error(`bad outline color ${JSON.stringify(outline.color)}`)
+  if (isAnimated(it)) throw new Error('outlined titles need a still image: this key is animated or has states')
+  if (!it.mk10studioOutline) { it.mk10studioBase = it.path || ''; it.mk10studioSig = '' }
+  it.mk10studioOutline = JSON.stringify({ color: outline.color.toLowerCase(), width })
+  it.mk10studioSig = ''
+  patchTp(it, { ShowTitle: false, ShowImage: true })
+}
+// the renderer's drawing of base image + outlined title; sig says what it was drawn from
+export function setBakedTitle(theme, pageIndex, row, col, pngBuffer, sig) {
+  const it = needItem(theme, pageIndex, row, col)
+  if (!it.mk10studioOutline) throw new Error('this key has no outlined title')
+  const old = it.path
+  const key = `/image/MK10/cache/${randomUUID()}.png`
+  theme.assets.set(key, Buffer.from(pngBuffer))
+  it.path = key
+  it.mk10studioSig = String(sig)
+  if (old !== it.mk10studioBase) dropIfOrphan(theme, old, false)
+}
+
+// ---- vector icons (Material Design Icons). The renderer draws the icon, colored and outlined, into
+// the key PNG; mk10studioIcon keeps what it was drawn from so the colors can change later:
+//   mk10studioIcon  JSON {"name": mdi name, "color": "#rrggbb", "outline": "#rrggbb", "width": 0-8}
+// Any other image set on the key drops it (setKeyImage / setKeyIcon).
+export function setKeyVectorIcon(theme, pageIndex, row, col, pngBuffer, icon) {
+  const { name, color, outline, width } = icon ?? {}
+  if (!/^[a-z0-9-]+$/.test(name ?? '')) throw new Error(`bad icon name ${JSON.stringify(name)}`)
+  for (const c of [color, outline]) if (!/^#[0-9a-f]{6}$/i.test(c ?? '')) throw new Error(`bad icon color ${JSON.stringify(c)}`)
+  if (!Number.isInteger(width) || width < 0 || width > 8) throw new Error(`icon outline width must be 0-8, got ${width}`)
+  const key = setKeyImage(theme, pageIndex, row, col, pngBuffer)
+  needItem(theme, pageIndex, row, col).mk10studioIcon = JSON.stringify({ name, color: color.toLowerCase(), outline: outline.toLowerCase(), width })
   return key
 }
 
@@ -323,6 +393,23 @@ export function setBackgroundVideo(theme, pageIndex, mp4Buffer) {
   it.path = key
   dropIfOrphan(theme, old, false)
   return key
+}
+
+// Where the device shows the main background video. The app passes x/y/w/h to videoplayerinterfaceAPP
+// (-x -y -w -h) and the display engine scales the 640x256 stream to that rect, aspect not kept
+// (verified 2026-11-25: x 128 y 32 w 480 h 192 gave layer ch0 frame[128, 32, 480, 192]).
+// Bounds: inside the 896x304 panel; the 32 px minimum is ours, the scaler's real limit is untested.
+export const VIDEO_MIN = 32
+export function setBackgroundVideoRect(theme, pageIndex, rect) {
+  const it = (page(theme, pageIndex).items ?? [])
+    .find((x) => String(x.type) === '100' && x.backgroundType === 'main')
+  if (!it) throw new Error(`page ${pageIndex} has no main background video item (type 100)`)
+  const { x, y, w, h } = rect ?? {}
+  if (![x, y, w, h].every(Number.isInteger)) throw new Error('video x, y, w, h must be whole numbers')
+  if (x < 0 || y < 0 || w < VIDEO_MIN || h < VIDEO_MIN || x + w > 896 || y + h > 304) {
+    throw new Error(`video rect ${x},${y} ${w}x${h} must fit the 896x304 panel, at least ${VIDEO_MIN} px each way`)
+  }
+  Object.assign(it, { x: String(x), y: String(y), w: String(w), h: String(h) })
 }
 
 // ---- key clipboard (Phase 3d). Plain-text JSON so a key pastes across themes, app instances and editors:
@@ -628,12 +715,15 @@ export function setKeyIcon(theme, pageIndex, row, col, name) {
   const it = needItem(theme, pageIndex, row, col)
   const have = [...theme.assets].find(([, b]) => b.equals(png))?.[0]
   if (!have) return setKeyImage(theme, pageIndex, row, col, png)
-  const [oldPath, oldDir] = [it.path, it.paths]
+  const [oldPath, oldDir, oldBase] = [it.path, it.paths, it.mk10studioBase]
   it.path = have
   if ('paths' in it) it.paths = ''
   delete it.frameDelays
+  delete it.mk10studioIcon
+  rebase(it, have)
   dropIfOrphan(theme, oldPath, false)
   dropIfOrphan(theme, oldDir, true)
+  dropIfOrphan(theme, oldBase, false)
   return have
 }
 

@@ -10,7 +10,7 @@ import {
   decodeTheme, encodeTheme, formatQtJson, decodeControlData, encodeControlData,
   pages, listKeys, getItem, setKeyTitle, setKeyImage, setKeySound, setBackgroundVideo,
   editableActionFields, setKeyActionField, copyKey, pasteKey, removeKey, moveKeys, parseKeyClip, keyRaw, setKeyRaw,
-  pageRaw, setPageRaw, newKeyTypes, createKey, checkTitleDefaults, setKeyTitleParam, englishDescriptions, fontFamilies, deleteFolder, listIcons, setKeyIcon,
+  pageRaw, setPageRaw, newKeyTypes, createKey, checkTitleDefaults, setBackgroundVideoRect, setKeyTitleOutline, setBakedTitle, setKeyTitleParam, englishDescriptions, fontFamilies, deleteFolder, listIcons, setKeyIcon, setKeyVectorIcon,
 } from './theme.js'
 
 // Pristine stock theme (ScreenKeyMacOS v1.1 bundle, captured 2026-11-24 before an accidental vendor-app save); sha in SHA256SUMS.txt
@@ -337,6 +337,12 @@ test('real theme: createKey makes a plain key of each offered type in an empty s
   assert.deepEqual(checkTitleDefaults({ FontSize: 20, FontUnderline: true }), { FontSize: 20 })
   assert.throws(() => checkTitleDefaults({ FontSize: 200 }), /bad FontSize/)
   assert.throws(() => createKey(a, pi, r, c === 4 ? 3 : 4, 'openPage'), /can't create/)
+  const slot = [0, 1].flatMap((r) => [0, 1, 2, 3, 4].map((c) => [r, c])).find(([r, c]) => !getItem(a, pi, r, c))
+  if (slot) {
+    createKey(a, pi, ...slot, 'runShortcut')
+    const f = Object.fromEntries(decodeControlData(getItem(a, pi, ...slot).controlData).fields.map(([k, v]) => [k, v.value]))
+    assert.deepEqual([f.type, f.mk10studioRun, f.path], ['openFile', 'shortcut', ''])
+  }
   // the theme still round-trips through the codec
   const b = decodeTheme(encodeTheme(a))
   assert.equal(decodeControlData(getItem(b, pi, r, c).controlData).fields.find(([k]) => k === 'Url')[1].value, 'https://example.com/')
@@ -413,6 +419,25 @@ test('real theme: setKeyIcon sets a premade icon, reusing its asset', { skip }, 
   assert.throws(() => setKeyIcon(a, 0, k1.row, k1.col, '../x'), /no icon/)
 })
 
+test('real theme: setKeyVectorIcon keeps the icon settings; another image drops them', { skip }, () => {
+  const a = decodeTheme(load())
+  const [k] = listKeys(a, 0)
+  const png = Buffer.from('fake png')
+  const icon = { name: 'lightbulb', color: '#FFCC00', outline: '#000000', width: 2 }
+  setKeyVectorIcon(a, 0, k.row, k.col, png, icon)
+  const it = getItem(a, 0, k.row, k.col)
+  assert.deepEqual(JSON.parse(it.mk10studioIcon), { ...icon, color: '#ffcc00' })
+  assert.ok(a.assets.get(it.path).equals(png))
+  assert.throws(() => setKeyVectorIcon(a, 0, k.row, k.col, png, { ...icon, width: 9 }), /0-8/)
+  assert.throws(() => setKeyVectorIcon(a, 0, k.row, k.col, png, { ...icon, name: '../x' }), /bad icon name/)
+  assert.throws(() => setKeyVectorIcon(a, 0, k.row, k.col, png, { ...icon, color: 'red' }), /bad icon color/)
+  setKeyIcon(a, 0, k.row, k.col, 'globe')
+  assert.equal(it.mk10studioIcon, undefined)
+  setKeyVectorIcon(a, 0, k.row, k.col, png, icon)
+  setKeyImage(a, 0, k.row, k.col, Buffer.from('other'))
+  assert.equal(it.mk10studioIcon, undefined)
+})
+
 test('moveKeys: move to an empty slot, shift a run, swap; rejects bad targets untouched', { skip }, () => {
   const t = decodeTheme(load())
   const slots = [0, 1].flatMap((r) => [0, 1, 2, 3, 4].map((c) => [r, c]))
@@ -433,4 +458,52 @@ test('moveKeys: move to an empty slot, shift a run, swap; rejects bad targets un
   assert.throws(() => moveKeys(t, pi, [[b.row, b.col, ...empty]]), /already holds a key/)
   assert.throws(() => moveKeys(t, pi, [[b.row, b.col, 2, 0]]), /not a key slot/)
   assert.equal(JSON.stringify(t.json), before)
+})
+
+test('real theme: setBackgroundVideoRect moves the main video and refuses rects off the panel', { skip }, () => {
+  const a = decodeTheme(load())
+  const pi = a.json.pages.findIndex((p) => (p.items ?? []).some((i) => String(i.type) === '100' && i.backgroundType === 'main'))
+  setBackgroundVideoRect(a, pi, { x: 128, y: 32, w: 480, h: 192 })
+  const v = a.json.pages[pi].items.find((i) => String(i.type) === '100')
+  assert.deepEqual([v.x, v.y, v.w, v.h], ['128', '32', '480', '192'])
+  assert.throws(() => setBackgroundVideoRect(a, pi, { x: 500, y: 0, w: 640, h: 256 }), /must fit/)
+  assert.throws(() => setBackgroundVideoRect(a, pi, { x: 0, y: 0, w: 10, h: 256 }), /must fit/)
+  assert.throws(() => setBackgroundVideoRect(a, pi, { x: 0.5, y: 0, w: 640, h: 256 }), /whole numbers/)
+  const re = decodeTheme(encodeTheme(a))
+  assert.equal(re.json.pages[pi].items.find((i) => String(i.type) === '100').w, '480')
+})
+
+test('real theme: outlined title bakes into the image and comes back off', { skip }, () => {
+  const a = decodeTheme(load())
+  let at
+  for (const [pi, p] of a.json.pages.entries()) {
+    const it = (p.items ?? []).find((i) => String(i.type) === '115' && i.path && !i.paths && !i.frameDelays && !/States/.test(i.jsonData ?? ''))
+    if (it) { at = [pi, Number(it.row), Number(it.col), it]; break }
+  }
+  const [pi, r, c, it] = at
+  const own = it.path
+  setKeyTitleOutline(a, pi, r, c, { width: 2, color: '#000000' })
+  assert.equal(it.mk10studioBase, own)
+  assert.equal(JSON.parse(it.titleParam).ShowTitle, false)
+  assert.equal(JSON.parse(it.titleParam).ShowImage, true)
+  const png = Buffer.from('\x89PNG baked')
+  setBakedTitle(a, pi, r, c, png, 'sig1')
+  const baked = it.path
+  assert.notEqual(baked, own)
+  assert.ok(a.assets.has(own) && a.assets.has(baked)) // base kept: referenced by mk10studioBase
+  setBakedTitle(a, pi, r, c, Buffer.from('\x89PNG baked 2'), 'sig2')
+  assert.ok(!a.assets.has(baked)) // the previous drawing goes
+  setKeyTitleParam(a, pi, r, c, { ShowTitle: true })
+  assert.equal(JSON.parse(it.titleParam).ShowTitle, false) // the device must not draw it twice
+  setKeyImage(a, pi, r, c, Buffer.from('\x89PNG new own'))
+  assert.equal(it.mk10studioBase, it.path)
+  assert.equal(it.mk10studioSig, '')
+  const newOwn = it.path
+  setKeyTitleOutline(a, pi, r, c, { width: 0 })
+  assert.equal(it.path, newOwn)
+  assert.equal(it.mk10studioOutline, undefined)
+  assert.equal(JSON.parse(it.titleParam).ShowTitle, true)
+  assert.throws(() => setKeyTitleOutline(a, pi, r, c, { width: 9, color: '#000000' }), /0-8/)
+  assert.throws(() => setKeyTitleOutline(a, pi, r, c, { width: 2, color: 'black' }), /color/)
+  assert.ok(decodeTheme(encodeTheme(a)))
 })

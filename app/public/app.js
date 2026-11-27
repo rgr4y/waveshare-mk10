@@ -205,6 +205,126 @@ function renderPages() {
   $('page-count').textContent = `${topPages().length} / 6`
 }
 
+// Outlined titles (see setKeyTitleOutline in lib/theme.js): draw the key's own image plus its title with
+// an outline into a 128x128 PNG, laid out like the preview tile (2 px padding, line height 1.15), and
+// store it as the key image. Runs whenever a shown key's drawing is stale (sig differs), so edits from
+// any path (inspector, paste, MCP) get redrawn once the key is on screen.
+// ponytail: underline is drawn as a plain bar; the device's own spacing may differ from the preview
+const baking = new Set()
+// ---- Material Design Icons in the icon dialog: search by name, alias or tag; the chosen icon is
+// drawn white into a 128x128 PNG, a little low like the line-art icons so a top title fits
+const MDI_MAX = 120 // results shown at once
+let mdiList = null // [name, words, path] from main, loaded on first search
+let mdiPick = null // the key the dialog is choosing for
+async function showMdi() {
+  const words = $('mdi-q').value.toLowerCase().split(/\s+/).filter(Boolean)
+  if (!words.length) {
+    $('icon-grid-mdi').replaceChildren()
+    $('mdi-info').textContent = ''
+    return
+  }
+  mdiList ??= await window.mk10.mdiIcons()
+  const hits = mdiList.filter(([, w]) => words.every((q) => w.includes(q)))
+  $('icon-grid-mdi').replaceChildren(...hits.slice(0, MDI_MAX).map(([name]) => {
+    const li = tpl('tpl-icon-item')
+    const img = li.querySelector('img')
+    img.loading = 'lazy'
+    img.src = `../node_modules/@mdi/svg/svg/${name}.svg`
+    li.querySelector('span').textContent = name
+    li.querySelector('button').addEventListener('click', () => {
+      const { page, row, col } = mdiPick
+      $('icon-dlg').close()
+      run(setVectorIcon(page, row, col, { name, color: '#ffffff', outline: '#000000', width: 0 }))
+    })
+    return li
+  }))
+  $('mdi-info').textContent = hits.length > MDI_MAX ? `${hits.length} matches, showing ${MDI_MAX}: type more to narrow` : `${hits.length} matches`
+}
+// icon: { name, color, outline, width } (outline width 0-8 px, 0 = none)
+async function mdiPng(d, icon) {
+  const c = new OffscreenCanvas(128, 128)
+  const g = c.getContext('2d')
+  g.translate(26, 32) // 76 px icon, centred across, 6 px low
+  g.scale(76 / 24, 76 / 24)
+  const p = new Path2D(d)
+  if (icon.width) {
+    g.lineJoin = 'round'
+    g.lineWidth = (icon.width * 2 * 24) / 76 // half of the stroke is under the fill
+    g.strokeStyle = icon.outline
+    g.stroke(p)
+  }
+  g.fillStyle = icon.color
+  g.fill(p)
+  return new Uint8Array(await (await c.convertToBlob({ type: 'image/png' })).arrayBuffer())
+}
+async function setVectorIcon(page, row, col, icon) {
+  mdiList ??= await window.mk10.mdiIcons()
+  const d = mdiList.find(([n]) => n === icon.name)?.[2]
+  if (!d) throw new Error(`no Material Design icon named ${icon.name}`)
+  return window.mk10.setKeyVectorIcon(page, row, col, await mdiPng(d, icon), icon)
+}
+
+// color pickers apply while the user drags: one call at a time, and the last color always lands
+function liveColor(box, send) {
+  let busy = false
+  let next = null
+  const go = (el) => {
+    if (busy) { next = el; return }
+    busy = true
+    run(send(el)).finally(() => {
+      busy = false
+      if (next) { const n = next; next = null; go(n) }
+    })
+  }
+  box.addEventListener('input', (e) => { if (e.target.type === 'color') go(e.target) })
+}
+
+async function bakeTitle(pageIndex, it) {
+  const o = it.outline
+  const tp = it.titleParam ?? {}
+  const sig = JSON.stringify([it.title ?? '', tp.FontFamily, tp.FontSize, tp.FontStyle, !!tp.FontUnderline, tp.TitleAlignment, tp.TitleColor, o.color, o.width, o.base])
+  const id = `${pageIndex}:${it.row},${it.col}:${sig}`
+  if (o.sig === sig || baking.has(id)) return
+  baking.add(id)
+  try {
+    const c = new OffscreenCanvas(128, 128)
+    const g = c.getContext('2d')
+    const a = o.base && await assetUrl(o.base)
+    if (a) {
+      const img = await createImageBitmap(await (await fetch(a.url)).blob())
+      const k = Math.min(128 / img.width, 128 / img.height) // object-fit: contain, like the tile
+      g.drawImage(img, (128 - img.width * k) / 2, (128 - img.height * k) / 2, img.width * k, img.height * k)
+    }
+    const size = tp.FontSize ?? 21
+    const font = `${/italic/i.test(tp.FontStyle ?? '') ? 'italic ' : ''}${/bold/i.test(tp.FontStyle ?? '') ? 700 : 400} ${size}px "${tp.FontFamily ?? 'Arial'}", Arial, sans-serif`
+    await document.fonts.load(font, it.title || 'A').catch(() => {})
+    Object.assign(g, { font, textAlign: 'center', textBaseline: 'middle', lineJoin: 'round', miterLimit: 2 })
+    const lines = String(it.title ?? '').split('\n')
+    const lh = size * 1.15
+    const top = tp.TitleAlignment === 'middle' ? (128 - lines.length * lh) / 2 : tp.TitleAlignment === 'bottom' ? 126 - lines.length * lh : 2
+    lines.forEach((line, i) => {
+      const y = top + i * lh + lh / 2
+      g.lineWidth = o.width * 2
+      g.strokeStyle = o.color
+      g.strokeText(line, 64, y)
+      g.fillStyle = tp.TitleColor ?? '#ffffff'
+      g.fillText(line, 64, y)
+      if (tp.FontUnderline && line) {
+        const w = g.measureText(line).width
+        const uy = y + size * 0.45
+        g.fillStyle = o.color
+        g.fillRect(64 - w / 2 - o.width, uy - o.width, w + 2 * o.width, Math.max(1, size / 14) + 2 * o.width)
+        g.fillStyle = tp.TitleColor ?? '#ffffff'
+        g.fillRect(64 - w / 2, uy, w, Math.max(1, size / 14))
+      }
+    })
+    const png = new Uint8Array(await (await c.convertToBlob({ type: 'image/png' })).arrayBuffer())
+    await window.mk10.setBakedTitle(pageIndex, it.row, it.col, png, sig)
+  } finally {
+    baking.delete(id)
+  }
+}
+
 function renderKeys() {
   const p = curPage()
   const box = $('keys')
@@ -218,6 +338,7 @@ function renderKeys() {
       el.style.top = `${row * 128}px`
       el.dataset.slot = String(row * 5 + col)
       if (it) {
+        if (raw.outline) run(bakeTitle(ui.page, raw))
         el.addEventListener('pointerdown', (e) => holdToDrag(e, el))
         const tp = it.titleParam ?? {}
         const t = el.querySelector('.key-title')
@@ -245,8 +366,10 @@ function renderKeys() {
       else wireDrop(el, VIDEO_RE, (file) => run(window.mk10.setBackgroundVideo(ui.page, file)))
       // empty slots select too, so a paste has a target
       el.dataset.selected = String(ui.sel?.kind === 'key' && ui.sel.row === row && ui.sel.col === col)
-      el.addEventListener('click', () => {
+      el.addEventListener('click', (e) => {
         if (Date.now() - ui.dragEndAt < 400) return // the click that ends a drag
+        // double click = Press Key. detail is the OS click count, so it survives the re-render the first click causes
+        if (e.detail === 2 && it) return pressKey(ui.page, row, col)
         select({ kind: 'key', row, col })
         if (!it && !cellWidgets(p, row, col).length) openNewKey(row, col)
       })
@@ -270,7 +393,19 @@ const slotRC = (i) => [Math.floor(i / 5), i % 5]
 function holdToDrag(e, el) {
   if (e.button !== 0) return
   const [x0, y0] = [e.clientX, e.clientY]
-  const stop = () => { clearTimeout(timer); removeEventListener('pointermove', moved); removeEventListener('pointerup', stop) }
+  const ring = $('hold-ring')
+  ring.style.left = `${x0}px`
+  ring.style.top = `${y0}px`
+  ring.style.setProperty('--hold-ms', `${HOLD_MS}ms`)
+  ring.classList.remove('on')
+  void ring.offsetWidth // restart the fill animation
+  ring.classList.add('on')
+  const stop = () => {
+    ring.classList.remove('on')
+    clearTimeout(timer)
+    removeEventListener('pointermove', moved)
+    removeEventListener('pointerup', stop)
+  }
   const moved = (m) => { if (Math.hypot(m.clientX - x0, m.clientY - y0) > 6) stop() }
   const timer = setTimeout(() => { stop(); startDrag(el, x0, y0) }, HOLD_MS)
   addEventListener('pointermove', moved)
@@ -346,6 +481,9 @@ function startDrag(el, x0, y0) {
 function renderBackground() {
   const v = videoItem(curPage())
   $('bg').dataset.selected = String(ui.sel?.kind === 'video')
+  // where the device shows it (item x/y/w/h); a page without a video keeps the stock 640x256 slot
+  const r = v ? { x: v.x ?? 0, y: v.y ?? 0, w: v.w ?? 640, h: v.h ?? 256 } : { x: 0, y: 0, w: 640, h: 256 }
+  Object.assign($('bg').style, { left: `${r.x}px`, top: `${r.y}px`, width: `${r.w}px`, height: `${r.h}px` })
   $('bg-none').hidden = !!v
   const video = $('bgvideo')
   const key = v?.path ?? null
@@ -452,13 +590,29 @@ function draw(box, items, dx) {
 }
 
 // [key, value, editable] rows; editable fields come from the main process (existing text fields only)
+// Studio's run keys are openFile actions with mk10studioRun (lib/keyactions.js); show them by what they do
+const RUN_TYPE = { app: ['Run application', 'Application'], script: ['Run script', 'Script'], shortcut: ['Run Shortcut', 'Shortcut'] }
 function actionRows(a) {
   if (!a) return [['type', '(none)']]
-  const hide = new Set(['iconPath', 'parentDescription', 'AISoundControlKeyword', 'editable'])
+  const hide = new Set(['iconPath', 'parentDescription', 'AISoundControlKeyword', 'editable', 'mk10studioRun'])
   const edit = new Set(a.editable ?? [])
+  const run = RUN_TYPE[a.mk10studioRun]
   return Object.entries(a).filter(([k, v]) => !hide.has(k) && (v !== '' || edit.has(k)))
     // keyboard_switch is a toggle: each press steps to the next state (States list below)
-    .map(([k, v]) => [k, k === 'type' && v === 'keyboard_switch' ? 'keyboard_switch (toggle)' : String(v), edit.has(k), fieldLabel(a.type, k)])
+    .map(([k, v]) => [k, k === 'type' && run ? run[0] : k === 'type' && v === 'keyboard_switch' ? 'keyboard_switch (toggle)' : String(v), edit.has(k),
+      k === 'path' && run ? run[1] : fieldLabel(a.type, k)])
+}
+
+// Shortcuts app names for Run Shortcut keys, read once (`shortcuts list`)
+let shortcutNames = null
+function shortcutOptions(current) {
+  if (!shortcutNames) {
+    shortcutNames = []
+    window.mk10.shortcutNames().then((l) => { shortcutNames = l; if (ui.sel?.kind === 'key') renderInspector() })
+  }
+  const opts = [['', shortcutNames.length ? '(choose a Shortcut)' : '(no Shortcuts found)'], ...shortcutNames.map((n) => [n, n])]
+  if (current && !shortcutNames.includes(current)) opts.push([current, `${current} (not found)`])
+  return opts
 }
 
 // deviceVolumeadjustValue (type deviceVolume) -> "Adjust value"; the raw name stays in the tooltip
@@ -692,9 +846,20 @@ function renderInspector() {
       if (el.type === 'checkbox') el.checked = v !== false
       else el.value = v ?? ''
     }
+    // outlined title: Studio draws it into the image, so the Title / Image switches are fixed while on
+    const ol = key.outline
+    const still = !(key.states || key.paths || key.frameDelays)
+    $('tp-outline').hidden = !still && !ol
+    for (const el of $('tp-outline').querySelectorAll('[data-ol]')) {
+      if (el !== document.activeElement) el.value = el.dataset.ol === 'width' ? (ol?.width ?? 0) : (ol?.color ?? '#000000')
+    }
+    for (const k of ['ShowTitle', 'ShowImage']) document.querySelector(`[data-tp=${k}]`).closest('label').hidden = !!ol
+    const ic = key.icon // vector icon: Studio draws it, so its colors stay editable
+    $('key-icon-style').hidden = !ic
+    if (ic) for (const el of $('key-icon-style').querySelectorAll('[data-ic]')) if (el !== document.activeElement) el.value = ic[el.dataset.ic]
     const f = face(key)
     fillImg($('key-thumb'), f.path || f.paths, f.path ? null : f.frameDelays)
-    $('key-states-h').hidden = $('key-states').hidden = !key.states
+    $('key-states-grp').hidden = !key.states
     $('btn-key-image').hidden = !!key.states // per-state images; item path is not what the device shows
     $('btn-key-icon').hidden = !!key.states
     $('key-sound').textContent = key.sound ? base(key.sound) : 'none'
@@ -710,9 +875,16 @@ function renderInspector() {
     renderMacro(key)
     fillKv($('key-action'), actionRows(key.action), (field, value) =>
       run(window.mk10.setKeyActionField(ui.page, sel.row, sel.col, field, value)),
-    key.action?.type === 'openPage' ? { pageName: pageOptions } : key.action?.type === 'pageSwitch' ? { jumpToPage: jumpOptions } : {})
+    key.action?.type === 'openPage' ? { pageName: pageOptions } : key.action?.type === 'pageSwitch' ? { jumpToPage: jumpOptions }
+      : key.action?.mk10studioRun === 'shortcut' ? { path: shortcutOptions } : {})
+    $('btn-run-pick').hidden = !['app', 'script'].includes(key.action?.mk10studioRun)
+    $('btn-run-pick').textContent = key.action?.mk10studioRun === 'app' ? 'Choose application…' : 'Choose script…'
   }
-  if (vid) fillKv($('video-info'), [['asset', base(vid.path ?? '(none)')], ['size', '640 × 256']])
+  if (vid) {
+    fillKv($('video-info'), [['asset', base(vid.path ?? '(none)')], ['stream', '640 × 256, scaled to the box below']])
+    const r = { x: vid.x ?? 0, y: vid.y ?? 0, w: vid.w ?? 640, h: vid.h ?? 256 }
+    for (const el of $('video-rect').querySelectorAll('[data-vr]')) if (el !== document.activeElement) el.value = r[el.dataset.vr]
+  }
   if (!key) stopListening()
 }
 
@@ -737,7 +909,7 @@ const saveMacro = (steps) => {
 function renderMacro(key) {
   const on = !!key.macro
   $('key-macro').hidden = !on
-  $('key-action-h').hidden = $('key-action').hidden = on
+  $('key-action-grp').hidden = on
   if (!on) return
   const id = `${ui.page},${ui.sel.row},${ui.sel.col}`
   if (macro.key !== id) stopListening()
@@ -836,6 +1008,19 @@ function onMacroKey(k) {
   if (!k.down && last?.type === 'keyboard' && last.keyType === 1 && last.keycode === k.code) last.keyType = 0
   else steps.push({ type: 'keyboard', keycode: k.code, keyType: k.down ? 1 : 2, label: k.label })
   saveMacro(steps)
+}
+
+// background video box: fields edit x/y/w/h; with Keep 5:2 a width change sets the height and back
+function wireVideoRect() {
+  const vr = (k) => document.querySelector(`[data-vr=${k}]`)
+  const save = (r) => run(window.mk10.setVideoRect(ui.page, r).catch((e) => { renderInspector(); throw e }))
+  $('video-rect').addEventListener('change', (e) => {
+    const r = Object.fromEntries(['x', 'y', 'w', 'h'].map((k) => [k, Math.round(Number(vr(k).value))]))
+    if ($('video-aspect').checked && e.target.dataset.vr === 'w') r.h = Math.round(r.w / 2.5)
+    if ($('video-aspect').checked && e.target.dataset.vr === 'h') r.w = Math.round(r.h * 2.5)
+    save(r)
+  })
+  $('btn-video-reset').addEventListener('click', () => save({ x: 0, y: 0, w: 640, h: 256 }))
 }
 
 function wireMacro() {
@@ -1050,9 +1235,16 @@ async function init() {
     cfg.titleDefaults = d
     run(window.mk10.setTitleDefaults(d))
   })
+  const showRuns = async () => {
+    const n = (await window.mk10.allowedRuns()).length
+    $('runs-info').textContent = n ? `${n} allowed so far.` : 'None allowed yet.'
+    $('btn-forget-runs').disabled = !n
+  }
+  $('btn-forget-runs').addEventListener('click', () => run(window.mk10.forgetRuns().then(showRuns)))
   const openSettings = () => {
     if ($('settings-dlg').open) return
     showTitleDefaults()
+    showRuns()
     $('settings-dlg').showModal()
     showPerms()
     permTimer = setInterval(showPerms, 2000)
@@ -1075,6 +1267,7 @@ async function init() {
   $('btn-settings').addEventListener('click', openSettings)
   $('btn-capture').addEventListener('click', () => run(window.mk10.openCapture()))
   wireMacro()
+  wireVideoRect()
   $('btn-pull').addEventListener('click', () => run(window.mk10.pull()))
   // the device has no getter for either level, so each slider starts where it was last set from here
   for (const [id, method, label, start] of [['brightness', 'setBacklight', 'Brightness', 50], ['volume', 'setVolume', 'Volume', 4]]) {
@@ -1162,8 +1355,10 @@ async function init() {
     }
     $('icon-grid').replaceChildren(...names.filter((n) => !n.startsWith('PictureFont/')).map(item))
     $('icon-grid-pf').replaceChildren(...names.filter((n) => n.startsWith('PictureFont/')).map(item))
+    mdiPick = { page, row, col }
     $('icon-dlg').showModal()
   })
+  $('mdi-q').addEventListener('input', () => showMdi())
   $('icon-dlg').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close() })
   const selKey = () => (ui.sel?.kind === 'key' ? keyAt(curPage(), ui.sel.row, ui.sel.col) : null)
   $('btn-key-sound').addEventListener('click', () => {
@@ -1189,6 +1384,39 @@ async function init() {
     const v = el.type === 'checkbox' ? el.checked : el.type === 'number' ? Number(el.value) : el.value
     run(window.mk10.setKeyTitleParam(ui.page, ui.sel.row, ui.sel.col, { [el.dataset.tp]: v }))
   })
+  $('btn-run-pick').addEventListener('click', () => {
+    const k = ui.sel?.kind === 'key' && keyAt(curPage(), ui.sel.row, ui.sel.col)
+    if (k) run(window.mk10.pickRunTarget(ui.page, ui.sel.row, ui.sel.col, k.action?.mk10studioRun))
+  })
+  const sendOutline = () => {
+    if (ui.sel?.kind !== 'key') return
+    const v = (k) => document.querySelector(`[data-ol=${k}]`).value
+    const width = Math.max(0, Math.min(8, Math.round(Number(v('width')) || 0)))
+    return window.mk10.setKeyTitleOutline(ui.page, ui.sel.row, ui.sel.col, { width, color: v('color') })
+  }
+  $('tp-outline').addEventListener('change', () => run(sendOutline()))
+  liveColor($('tp-outline'), sendOutline)
+  liveColor($('key-title-style'), (el) => ui.sel?.kind === 'key' && el.dataset.tp
+    && window.mk10.setKeyTitleParam(ui.page, ui.sel.row, ui.sel.col, { [el.dataset.tp]: el.value }))
+  const sendIcon = () => {
+    const k = selKey()
+    if (!k?.icon) return
+    const v = (n) => document.querySelector(`[data-ic=${n}]`).value
+    const width = Math.max(0, Math.min(8, Math.round(Number(v('width')) || 0)))
+    return setVectorIcon(ui.page, ui.sel.row, ui.sel.col, { name: k.icon.name, color: v('color'), outline: v('outline'), width })
+  }
+  $('key-icon-style').addEventListener('change', () => run(sendIcon()))
+  liveColor($('key-icon-style'), sendIcon)
+  // collapsible inspector groups (<details data-grp>): open or closed is remembered in this browser
+  for (const d of document.querySelectorAll('details[data-grp]')) {
+    try {
+      const v = localStorage.getItem(`grp:${d.dataset.grp}`)
+      if (v) d.open = v === 'open'
+    } catch { /* storage off: groups start open */ }
+    d.addEventListener('toggle', () => {
+      try { localStorage.setItem(`grp:${d.dataset.grp}`, d.open ? 'open' : 'closed') } catch { /* not remembered */ }
+    })
+  }
   $('key-title').addEventListener('change', (e) => {
     if (ui.sel?.kind === 'key') run(window.mk10.setKeyTitle(ui.page, ui.sel.row, ui.sel.col, e.target.value))
   })

@@ -155,7 +155,8 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
   overflow: hidden;
 }
 .bg { position: absolute; left: 0; top: 0; width: 640px; height: 256px; background: #050608; cursor: pointer; }
-.bg video { width: 640px; height: 256px; object-fit: cover; display: block; pointer-events: none; }
+.bg video { width: 100%; height: 100%; object-fit: fill; display: block; pointer-events: none; } /* the device stretches to the item's w x h */
+.video-rect { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); }
 .bg-none { position: absolute; inset: 0; display: grid; place-items: center; color: #3f4552; font-size: 14px; }
 /* selection/drop ring as an overlay so the key image can't paint over it */
 .bg::after, .key::after { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 3; }
@@ -297,6 +298,8 @@ body.rpc { display: flex; flex-direction: column; height: 100vh; margin: 0; over
 .title-style { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); margin: 0 0 var(--sp-3); }
 .title-style [data-tp=FontFamily] { grid-column: 1 / -1; }
 .title-style input[type=color] { width: 100%; height: 30px; padding: 0 var(--sp-0-5); }
+.title-style .tp-outline { grid-column: 1 / -1; display: flex; align-items: center; gap: var(--sp-2); }
+.title-style .tp-outline input[type=number] { width: 64px; }
 .title-style .tp-checks { grid-column: 1 / -1; display: flex; gap: var(--sp-3); flex-wrap: wrap; }
 
 /* premade icon picker */
@@ -308,6 +311,8 @@ body.rpc { display: flex; flex-direction: column; height: 100vh; margin: 0; over
 .icon-dlg { width: 720px; }
 #icon-grid-pf .icon-btn { background: #6f86a8; } /* the glyphs are black dots */
 #icon-grid-pf .icon-btn span { color: #10141c; }
+#icon-grid-mdi img { filter: invert(1); } /* the SVGs are black */
+.mdi-q { margin: var(--sp-2) var(--sp-3) 0; width: calc(100% - 2 * var(--sp-3)); }
 .icon-sec { margin: 0; padding: var(--sp-2) var(--sp-3) 0; font-size: 12px; color: var(--muted); font-weight: 600; }
 
 /* macro timeline */
@@ -331,3 +336,27 @@ body.rpc { display: flex; flex-direction: column; height: 100vh; margin: 0; over
 .keys[data-dragging=true] .key:not(.empty) { transition: left .18s ease, top .18s ease; z-index: 1; }
 .keys[data-dragging=true] .key[data-lifted=true] { transition: none; z-index: 5; scale: 1.06; opacity: .92; cursor: grabbing; box-shadow: 0 10px 28px rgba(0, 0, 0, .55); }
 #btn-reboot { width: 100%; margin-top: var(--sp-2); }
+
+/* press-and-hold ring at the pointer while a key waits to lift for dragging (HOLD_MS in app.js);
+   it shows only after 80 ms so plain clicks don't flash it */
+@property --hold { syntax: '<percentage>'; inherits: false; initial-value: 0%; }
+.hold-ring {
+  position: fixed; z-index: 50; width: 28px; height: 28px; margin: -14px 0 0 -14px; border-radius: 50%;
+  pointer-events: none; opacity: 0;
+  background: conic-gradient(var(--accent) var(--hold), rgb(255 255 255 / 0.25) 0);
+  mask: radial-gradient(circle, transparent 8px, #000 9px);
+}
+.hold-ring.on { animation: hold-fill calc(var(--hold-ms) - 80ms) linear 80ms forwards; }
+@keyframes hold-fill { from { opacity: 1; --hold: 0%; } to { opacity: 1; --hold: 100%; } }
+
+/* collapsible inspector groups: the summary looks like an h3 with a chevron */
+details.grp > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: var(--sp-1); }
+details.grp > summary::-webkit-details-marker { display: none; }
+details.grp > summary::before { content: ''; width: 6px; height: 6px; border: solid var(--muted); border-width: 0 1.5px 1.5px 0; transform: rotate(-45deg); transition: transform .12s; flex: none; margin: var(--sp-4) 0 var(--sp-2); }
+details.grp[open] > summary::before { transform: rotate(45deg); }
+details.grp > summary h3 { flex: 1; }
+.key-title-input { width: 100%; margin-bottom: var(--sp-2); }
+.icon-style { display: flex; align-items: center; gap: var(--sp-2); margin: 0 0 var(--sp-3); }
+.icon-style input[type=number] { width: 64px; }
+.icon-style input[type=color] { width: 48px; height: 30px; padding: 0 var(--sp-0-5); }
+.icon-style[hidden] { display: none; }

@@ -71,8 +71,20 @@
 
       <div id="insp-key" class="insp-section" hidden>
         <h2>Key <span id="key-pos" class="muted"></span></h2>
+        <details class="grp" data-grp="key-image" open>
+        <summary><h3>Image</h3></summary>
         <div class="thumb-row"><div class="thumb-box"><img id="key-thumb" class="thumb" alt=""><button id="btn-key-image" type="button" class="thumb-edit" title="Replace image…" aria-label="Replace image"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 2.5l3 3L5.5 13.5H2.5v-3z"/><path d="M9 4l3 3"/></svg></button></div><button id="btn-key-icon" type="button">Choose icon…</button></div>
-        <label class="field"><span>Title</span><input id="key-title" type="text" autocomplete="off"></label>
+        <div id="key-icon-style" class="icon-style" title="Studio draws the icon into the key image" hidden>
+          <span>Icon</span>
+          <input data-ic="color" type="color" aria-label="Icon color">
+          <span>Outline</span>
+          <input data-ic="width" type="number" min="0" max="8" step="1" aria-label="Icon outline width (px, 0 = off)">
+          <input data-ic="outline" type="color" aria-label="Icon outline color">
+        </div>
+        </details>
+        <details class="grp" data-grp="key-title" open>
+        <summary><h3>Title</h3></summary>
+        <input id="key-title" class="key-title-input" type="text" autocomplete="off" aria-label="Title">
         <div id="key-title-style" class="title-style">
           <select id="tp-family" data-tp="FontFamily" title="Font. Fonts from this computer are copied to the device on an ssh push" aria-label="Font"></select>
           <input data-tp="FontSize" type="number" min="6" max="96" step="1" title="Font size (px)" aria-label="Font size">
@@ -84,10 +96,19 @@
             <label class="inline"><input data-tp="ShowImage" type="checkbox"> Image</label>
             <label class="inline"><input data-tp="FontUnderline" type="checkbox"> Underline</label>
           </div>
+          <div id="tp-outline" class="tp-outline" title="Drawn by Studio into the key image (the device can't outline titles). 0 = off">
+            <span>Outline</span>
+            <input data-ol="width" type="number" min="0" max="8" step="1" aria-label="Outline width (px, 0 = off)">
+            <input data-ol="color" type="color" aria-label="Outline color">
+          </div>
         </div>
-        <div class="field"><span>Sound</span><div class="row-buttons"><span id="key-sound" class="muted"></span><button id="btn-key-sound" type="button">Choose…</button><button id="btn-key-sound-play" type="button" title="Play here">Play</button><button id="btn-key-sound-clear" type="button">Clear</button></div></div>
-        <div id="key-macro" hidden>
-          <h3>Macro <span id="macro-kind" class="muted"></span></h3>
+        </details>
+        <details class="grp" data-grp="key-sound" open>
+        <summary><h3>Sound</h3></summary>
+        <div class="row-buttons"><span id="key-sound" class="muted"></span><button id="btn-key-sound" type="button">Choose…</button><button id="btn-key-sound-play" type="button" title="Play here">Play</button><button id="btn-key-sound-clear" type="button">Clear</button></div>
+        </details>
+        <details id="key-macro" class="grp" data-grp="key-macro" open hidden>
+          <summary><h3>Macro <span id="macro-kind" class="muted"></span></h3></summary>
           <ol id="macro-steps" class="macro-steps"></ol>
           <div class="row-buttons">
             <button id="btn-macro-rec" type="button" title="Every key down and up goes into the macro, Cmd shortcuts included. Click again to stop">Record keys</button>
@@ -100,39 +121,66 @@
             <button type="button" data-add="loop">+ Repeat</button>
           </div>
           <p id="macro-hint" class="hint">The device plays the steps in order. Down and Up hold and let go of a key, so several keys can be held together.</p>
-        </div>
-        <h3 id="key-action-h">Action <span class="muted">(values editable; type fixed)</span></h3>
+        </details>
+        <details id="key-action-grp" class="grp" data-grp="key-action" open>
+        <summary><h3>Action <span class="muted">(values editable; type fixed)</span></h3></summary>
         <dl id="key-action" class="kv"></dl>
-        <h3 id="key-states-h" hidden>States <span class="muted">(toggles on each press; right-click &gt; Press Key previews)</span></h3>
-        <dl id="key-states" class="kv" hidden></dl>
+        <button id="btn-run-pick" type="button" hidden>Choose…</button>
+        </details>
+        <details id="key-states-grp" class="grp" data-grp="key-states" open hidden>
+        <summary><h3>States <span class="muted">(toggles on each press; right-click &gt; Press Key previews)</span></h3></summary>
+        <dl id="key-states" class="kv"></dl>
+        </details>
       </div>
 
       <div id="insp-page" class="insp-section" hidden>
         <h2 id="pg-title"></h2>
         <label id="pg-name-field" class="field" hidden><span>Folder name <span class="muted">(the title of the key that opens it)</span></span><input id="pg-name" type="text" autocomplete="off"></label>
         <dl id="pg-info" class="kv"></dl>
-        <h3>Main background</h3>
+        <details class="grp" data-grp="page-video" open>
+        <summary><h3>Main background</h3></summary>
         <dl id="pg-video" class="kv"></dl>
         <button id="btn-pg-video" type="button">Replace video…</button>
         <p class="hint">Or drop a video on the background. Transcoded to 640×256 h264 via ffmpeg.</p>
-        <h3>Info panel</h3>
+        </details>
+        <details class="grp" data-grp="page-panel" open>
+        <summary><h3>Info panel</h3></summary>
         <dl id="pg-panel" class="kv"></dl>
-        <h3>Raw JSON <span class="muted">(the whole page: canvas and every item)</span></h3>
+        </details>
+        <details class="grp" data-grp="page-json" open>
+        <summary><h3>Raw JSON <span class="muted">(the whole page: canvas and every item)</span></h3></summary>
         <textarea id="page-json" class="raw-json" readonly title="Click to edit"></textarea>
         <div class="row-buttons"><button id="btn-page-raw-edit" type="button">Edit…</button></div>
+        </details>
       </div>
 
       <div id="insp-video" class="insp-section" hidden>
         <h2>Background video</h2>
         <dl id="video-info" class="kv"></dl>
+        <details class="grp" data-grp="video-rect" open>
+        <summary><h3>Position on the panel</h3></summary>
+        <div id="video-rect" class="video-rect">
+          <label class="field"><span>X</span><input data-vr="x" type="number" min="0" max="864" step="1"></label>
+          <label class="field"><span>Y</span><input data-vr="y" type="number" min="0" max="272" step="1"></label>
+          <label class="field"><span>Width</span><input data-vr="w" type="number" min="32" max="896" step="1"></label>
+          <label class="field"><span>Height</span><input data-vr="h" type="number" min="32" max="304" step="1"></label>
+        </div>
+        <div class="row-buttons">
+          <label class="inline" title="Keep 640:256 (2.5:1) when changing width or height"><input id="video-aspect" type="checkbox" checked> Keep 5:2</label>
+          <button id="btn-video-reset" type="button">Reset to 0, 0, 640×256</button>
+        </div>
+        <p class="hint">The device scales the video to this box; the panel is 896×304 and the keys cover x 0–640, y 0–256.</p>
+        </details>
         <button id="btn-video" type="button">Replace video…</button>
         <p class="hint">The file is transcoded to 640×256 h264 (25 fps, no audio) via ffmpeg. This can take a while.</p>
       </div>
 
       <div id="insp-raw" class="insp-section" hidden>
-        <h3>Raw JSON <span class="muted">(every field of the key)</span></h3>
+        <details class="grp" data-grp="key-json" open>
+        <summary><h3>Raw JSON <span class="muted">(every field of the key)</span></h3></summary>
         <textarea id="raw-json" class="raw-json" readonly title="Click to edit"></textarea>
         <div class="row-buttons"><button id="btn-raw-edit" type="button">Edit…</button></div>
+        </details>
       </div>
 
       <div class="insp-section grow">
@@ -179,7 +227,11 @@
     <ul id="icon-grid" class="icon-grid"></ul>
     <h3 class="icon-sec">PictureFont</h3>
     <ul id="icon-grid-pf" class="icon-grid"></ul>
-    <p class="hint palette-foot">Line-art icons and the vendor app's PictureFont glyphs; the key's title still shows over them · Esc closes</p>
+    <h3 class="icon-sec">Material Design Icons</h3>
+    <input id="mdi-q" class="mdi-q" type="search" placeholder="Search Material Design Icons (home, lightbulb, volume…)" spellcheck="false" autocomplete="off">
+    <ul id="icon-grid-mdi" class="icon-grid"></ul>
+    <p id="mdi-info" class="hint icon-sec"></p>
+    <p class="hint palette-foot">Line-art icons, the vendor app's PictureFont glyphs and Material Design Icons (Apache 2.0); the key's title still shows over them · Esc closes</p>
   </dialog>
 
   <dialog id="settings-dlg" class="settings">
@@ -195,7 +247,7 @@
       <section>
         <h3>Key actions and stats</h3>
         <label class="inline"><input id="key-actions" type="checkbox"> Run key actions on this computer</label>
-        <p class="hint">When a key is pressed, the device reports its action and Studio runs the ones the Mac handles: <b>Open website</b> (http and https only), <b>Open folder</b> and <b>Open file</b> (scripts and apps are refused). Keyboard, macro and page keys run on the device either way. Typing text, passwords, sound devices, screenshots and music are not supported yet. While either is on, Studio keeps the MK10's USB serial port open, so the vendor ScreenKey app can't use it.</p>
+        <p class="hint">When a key is pressed, the device reports its action and Studio runs the ones the Mac handles: <b>Open website</b> (http and https only), <b>Open folder</b> and <b>Open file</b> (scripts and apps are refused there), and Studio's own <b>Run application</b>, <b>Run script</b> and <b>Run Shortcut</b> keys (each program asks once). Keyboard, macro and page keys run on the device either way. Typing text, passwords, sound devices, screenshots and music are not supported yet. While either is on, Studio keeps the MK10's USB serial port open, so the vendor ScreenKey app can't use it.</p>
         <label class="inline"><input id="live-stats" type="checkbox"> Send this computer's stats to the info panel</label>
         <p class="hint">Once a second: CPU, GPU and RAM usage, CPU model, disk space, and network speed and totals, for the widgets the current page shows (CPU Usage, GPU Usage, RAM Usage and the other names the vendor app uses). Temperatures are not sent (Apple Silicon sensors need root). The device keeps its own clock and date.</p>
       </section>
@@ -235,6 +287,12 @@
       </section>
 
       <section>
+        <h3>Programs keys may run</h3>
+        <p class="hint">Run application, Run script and Run Shortcut keys ask once per program before Studio runs it. <span id="runs-info"></span></p>
+        <button id="btn-forget-runs" type="button">Forget all</button>
+      </section>
+
+      <section>
         <h3>Key capture</h3>
         <p class="hint">Shows every key event the Mac sees, with its QMK keycode (proof of concept for keybinding).</p>
         <button id="btn-capture" type="button">Capture keys…</button>
@@ -269,6 +327,8 @@
   <template id="tpl-page">
     <li class="page-item"><button type="button" class="page-btn"><span class="cur" title="Current page on device">●</span><svg class="icon page-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 4.5a1 1 0 0 1 1-1h3.5l1.5 1.5h6a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z"/></svg><span class="page-label"></span><span class="page-sub muted"></span></button><ul class="page-children"></ul></li>
   </template>
+
+  <div id="hold-ring" class="hold-ring" aria-hidden="true"></div>
 
   <template id="tpl-key">
     <div class="key">

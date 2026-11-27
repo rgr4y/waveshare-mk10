@@ -43,3 +43,20 @@ test('planKeyAction: presses replayed right after the port opens are dropped', (
   assert.equal(planKeyAction(web, { sinceOpenMs: OPEN_GRACE_MS }).run, 'url')
   assert.equal(planKeyAction(press({ type: 'keyboard' }), { sinceOpenMs: 5 }), null)
 })
+
+test('planKeyAction: Studio run keys (openFile + mk10studioRun)', () => {
+  const stat = fakeStat({ '/Applications/Notes.app': 'dir', '/x/go.sh': 'exec', '/x/plain.sh': 'file', '/x/a.scpt': 'file', '/x/dir': 'dir' })
+  const plan = (kind, path) => planKeyAction(press({ type: 'openFile', mk10studioRun: kind, path }), { stat })
+  assert.deepEqual(plan('app', '/Applications/Notes.app'), { run: 'app', target: '/Applications/Notes.app', type: 'runApp' })
+  assert.match(plan('app', '/x/dir').skip, /not an application/)
+  assert.deepEqual(plan('script', '/x/go.sh'), { run: 'script', target: '/x/go.sh', type: 'runScript' })
+  assert.match(plan('script', '/x/plain.sh').skip, /not executable/)
+  assert.equal(plan('script', '/x/a.scpt').run, 'script') // AppleScript runs through osascript
+  assert.match(plan('script', 'go.sh').skip, /absolute/)
+  assert.deepEqual(plan('shortcut', ' Morning '), { run: 'shortcut', target: 'Morning', type: 'runShortcut' })
+  assert.match(plan('shortcut', '').skip, /not a Shortcut name/)
+  assert.match(plan('rm', '/x/go.sh').skip, /unknown run kind/)
+  // plain openFile still refuses scripts
+  assert.match(planKeyAction(press({ type: 'openFile', path: '/x/go.sh' }), { stat }).skip, /refusing/)
+  assert.equal(planKeyAction(press({ type: 'openFile', mk10studioRun: 'app', path: '/Applications/Notes.app' }), { stat, sinceOpenMs: 10 }).drop, true)
+})
