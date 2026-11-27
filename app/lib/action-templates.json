@@ -709,7 +709,7 @@
   "icon": "globe"
  },
  "runApp": {
-  "group": "Mac (run by Studio)",
+  "group": "Run by Studio",
   "label": "Run application",
   "fields": [
    [
@@ -751,7 +751,7 @@
   "icon": "app"
  },
  "runScript": {
-  "group": "Mac (run by Studio)",
+  "group": "Run by Studio",
   "label": "Run script",
   "fields": [
    [
@@ -793,7 +793,7 @@
   "icon": "terminal"
  },
  "runShortcut": {
-  "group": "Mac (run by Studio)",
+  "group": "Run by Studio",
   "label": "Run Shortcut",
   "fields": [
    [

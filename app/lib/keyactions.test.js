@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { homedir } from 'node:os'
-import { planKeyAction, OPEN_GRACE_MS } from './keyactions.js'
+import { runCommand, planKeyAction, OPEN_GRACE_MS } from './keyactions.js'
 
 const press = (action, pressed = 1) => [{ type: 'keyState', row: 0, col: 1, pressed }, action]
 const fakeStat = (files) => (p) => {
@@ -46,7 +46,7 @@ test('planKeyAction: presses replayed right after the port opens are dropped', (
 
 test('planKeyAction: Studio run keys (openFile + mk10studioRun)', () => {
   const stat = fakeStat({ '/Applications/Notes.app': 'dir', '/x/go.sh': 'exec', '/x/plain.sh': 'file', '/x/a.scpt': 'file', '/x/dir': 'dir' })
-  const plan = (kind, path) => planKeyAction(press({ type: 'openFile', mk10studioRun: kind, path }), { stat })
+  const plan = (kind, path) => planKeyAction(press({ type: 'openFile', mk10studioRun: kind, path }), { stat, platform: 'darwin' })
   assert.deepEqual(plan('app', '/Applications/Notes.app'), { run: 'app', target: '/Applications/Notes.app', type: 'runApp' })
   assert.match(plan('app', '/x/dir').skip, /not an application/)
   assert.deepEqual(plan('script', '/x/go.sh'), { run: 'script', target: '/x/go.sh', type: 'runScript' })
@@ -59,4 +59,29 @@ test('planKeyAction: Studio run keys (openFile + mk10studioRun)', () => {
   // plain openFile still refuses scripts
   assert.match(planKeyAction(press({ type: 'openFile', path: '/x/go.sh' }), { stat }).skip, /refusing/)
   assert.equal(planKeyAction(press({ type: 'openFile', mk10studioRun: 'app', path: '/Applications/Notes.app' }), { stat, sinceOpenMs: 10 }).drop, true)
+})
+
+test('planKeyAction: run keys on Windows and Linux', () => {
+  const win = (kind, path, files) => planKeyAction(press({ type: 'openFile', mk10studioRun: kind, path }), { stat: fakeStat(files), platform: 'win32' })
+  assert.equal(win('app', 'C:\\Apps\\x.exe', { 'C:\\Apps\\x.exe': 'file' }).run, 'app')
+  assert.match(win('app', 'C:\\Apps\\x.txt', { 'C:\\Apps\\x.txt': 'file' }).skip, /\.exe or \.lnk/)
+  assert.equal(win('script', 'C:\\s\\a.ps1', { 'C:\\s\\a.ps1': 'file' }).run, 'script') // no exec bit needed
+  assert.match(win('script', 'C:\\s\\a.py', { 'C:\\s\\a.py': 'file' }).skip, /\.bat, \.cmd/)
+  assert.match(win('shortcut', 'Morning', {}).skip, /macOS only/)
+  const lin = (kind, path, files) => planKeyAction(press({ type: 'openFile', mk10studioRun: kind, path }), { stat: fakeStat(files), platform: 'linux' })
+  assert.equal(lin('app', '/usr/share/applications/f.desktop', { '/usr/share/applications/f.desktop': 'file' }).run, 'app')
+  assert.equal(lin('app', '/opt/x/run', { '/opt/x/run': 'exec' }).run, 'app')
+  assert.match(lin('script', '/x/a.scpt', { '/x/a.scpt': 'file' }).skip, /not executable \(chmod \+x it\)/)
+})
+
+test('runCommand: never a shell; per-platform launchers', () => {
+  assert.deepEqual(runCommand({ run: 'app', target: '/Applications/Notes.app' }, 'darwin'), { open: '/Applications/Notes.app' })
+  assert.deepEqual(runCommand({ run: 'script', target: '/x/a.scpt' }, 'darwin'), { cmd: '/usr/bin/osascript', args: ['/x/a.scpt'], cwd: '/x' })
+  assert.deepEqual(runCommand({ run: 'script', target: '/x/go.sh' }, 'linux'), { cmd: '/x/go.sh', args: [], cwd: '/x' })
+  assert.equal(runCommand({ run: 'app', target: '/opt/x/run' }, 'linux').detached, true)
+  assert.deepEqual(runCommand({ run: 'app', target: '/a/f.desktop' }, 'linux').args, ['launch', '/a/f.desktop'])
+  const bat = runCommand({ run: 'script', target: 'C:\\My Scripts\\go.bat' }, 'win32')
+  assert.deepEqual([bat.cmd, bat.args.at(-1), bat.verbatim], ['cmd.exe', '""C:\\My Scripts\\go.bat""', true])
+  assert.equal(runCommand({ run: 'script', target: 'C:\\s\\a.ps1' }, 'win32').cmd, 'powershell.exe')
+  assert.deepEqual(runCommand({ run: 'shortcut', target: 'Morning' }, 'darwin').args, ['run', 'Morning'])
 })

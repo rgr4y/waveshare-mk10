@@ -2,7 +2,7 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, net, protocol, shell, systemPreferences, Tray } from 'electron'
 import { copyFile, readFile, writeFile, mkdir } from 'node:fs/promises'
 import { createWriteStream, existsSync, mkdirSync, readFileSync, statSync, watch } from 'node:fs'
-import { basename, dirname, extname, join } from 'node:path'
+import { basename, dirname, extname, join, sep } from 'node:path'
 import { execFile, execFileSync, spawn } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 import { createInterface } from 'node:readline'
@@ -11,7 +11,7 @@ import { listIcons, checkTitleDefaults } from './lib/theme.js'
 import { hidToQmk, isModifier, CODE_TO_HID, qmkLabel } from './lib/qmk.js'
 import { fontManifest, syncDeviceFonts, systemFonts, DEVICE_FONT_DIR } from './lib/fonts.js'
 import { wire, Device } from './lib/device.js'
-import { planKeyAction, OPEN_GRACE_MS } from './lib/keyactions.js'
+import { planKeyAction, runCommand, OPEN_GRACE_MS } from './lib/keyactions.js'
 import { collectStats, readContract, sampleHost, ALL_STATS } from './lib/stats.js'
 
 // device fonts, copied from the MK10 over ssh, served to the renderer as mk10font://f/<file>
@@ -25,13 +25,15 @@ const IMAGE_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tiff', 'heic', '
 const AUDIO_EXT = ['wav', 'mp3', 'm4a', 'aac', 'aif', 'aiff', 'flac', 'ogg', 'opus', 'caf']
 const VIDEO_EXT = ['mp4', 'mov', 'm4v', 'mkv', 'avi', 'webm', 'gif']
 
-const argv = process.argv.slice(2)
+const argv = process.argv.slice(app.isPackaged ? 1 : 2) // dev: [electron, '.', ...]; packaged: [exe, ...]
 const flag = (name) => { const i = argv.indexOf(name); return i < 0 ? undefined : (argv[i + 1] ?? true) }
 const DEV = argv.includes('--dev')
 const SHOT = !!flag('--screenshot')
 // a dev run is the generic, unsigned "Electron" binary: never register that as a login item
 const MAC = process.platform === 'darwin'
 const LOGIN_OK = app.isPackaged
+// a .app started from Finder gets PATH=/usr/bin:/bin:/usr/sbin:/sbin; ffmpeg and zstd are Homebrew's
+if (app.isPackaged) process.env.PATH = ['/opt/homebrew/bin', '/usr/local/bin', process.env.PATH].join(':')
 
 const session = new Session()
 let win = null
@@ -297,7 +299,8 @@ const BUILD = devBuild()
 // 'input': Electron before-input-event, what the app sees (menu shortcuts are blocked while it is focused);
 // 'hid': native/hidtap (IOHIDManager), raw HID usages incl. consumer keys that macOS handles itself.
 const HIDTAP_SRC = join(import.meta.dirname, 'native', 'hidtap.swift')
-const HIDTAP = join(import.meta.dirname, 'native', 'build', 'hidtap')
+// packaged: prebuilt by package.mjs and unpacked next to app.asar (a binary inside the asar can't run)
+const HIDTAP = join(import.meta.dirname, 'native', 'build', 'hidtap').replace(`app.asar${sep}`, `app.asar.unpacked${sep}`)
 let capWin = null
 
 // ---- macro recording: while on, every key the main window gets goes to the renderer's macro editor
@@ -326,8 +329,8 @@ function recordKey(e, i) {
 }
 
 function startHidtap(sendCap) {
-  if (!existsSync(HIDTAP) || statSync(HIDTAP).mtimeMs < statSync(HIDTAP_SRC).mtimeMs) {
-    // ponytail: compiled on first use with swiftc; packaging builds it ahead (Phase 5)
+  if (!app.isPackaged && (!existsSync(HIDTAP) || statSync(HIDTAP).mtimeMs < statSync(HIDTAP_SRC).mtimeMs)) {
+    // dev: compiled on first use with swiftc; package.mjs builds it ahead
     sendCap({ t: 'log', msg: 'building native/build/hidtap with swiftc…' })
     try {
       mkdirSync(dirname(HIDTAP), { recursive: true }) // swiftc does not create the output dir
@@ -421,17 +424,22 @@ async function runProgram({ run, target, type }) {
     settings.allowedRuns.push(id)
     await saveSettings()
   }
-  if (run === 'app') {
-    const err = await shell.openPath(target)
+  const c = runCommand({ run, target })
+  if (c.open) {
+    const err = await shell.openPath(c.open)
     if (err) throw new Error(err)
     return
   }
-  const [cmd, args, cwd] = run === 'shortcut' ? ['/usr/bin/shortcuts', ['run', target], undefined]
-    : ['.scpt', '.applescript'].includes(extname(target).toLowerCase()) ? ['/usr/bin/osascript', [target], dirname(target)]
-      : [target, [], dirname(target)]
+  if (c.detached) {
+    await new Promise((resolve, reject) => {
+      const p = spawn(c.cmd, c.args, { cwd: c.cwd, detached: true, stdio: 'ignore' })
+      p.once('error', reject).once('spawn', () => { p.unref(); resolve() })
+    })
+    return
+  }
   // ponytail: 10 min cap and only the exit status is reported; stream output to the log if scripts need it
   // stdin closed at once: `shortcuts run` reads stdin to EOF as the Shortcut's input and hangs on an open pipe
-  await new Promise((resolve, reject) => execFile(cmd, args, { cwd, timeout: 600_000, maxBuffer: 4 << 20 }, (e, _out, err) => {
+  await new Promise((resolve, reject) => execFile(c.cmd, c.args, { cwd: c.cwd, windowsVerbatimArguments: !!c.verbatim, timeout: 600_000, maxBuffer: 4 << 20 }, (e, _out, err) => {
     if (e) return reject(new Error(`${type} exited ${e.code ?? e.signal}${err ? `: ${String(err).trim().split('\n').pop()}` : ''}`))
     log(`key: ${type} finished`)
     resolve()
@@ -595,14 +603,15 @@ function registerIpc() {
   h('setKeyTitleOutline', (page, row, col, o) => session.setKeyTitleOutline(page, row, col, o))
   h('setBakedTitle', (page, row, col, png, sig) => session.setBakedTitle(page, row, col, Buffer.from(png), sig))
   h('pickRunTarget', async (page, row, col, kind) => {
+    const filters = { darwin: ['app'], win32: ['exe', 'lnk'] }[process.platform] // Linux: any file (.desktop or executable)
     const r = await dialog.showOpenDialog(win, kind === 'app'
-      ? { title: 'Choose an application', defaultPath: '/Applications', properties: ['openFile'], filters: [{ name: 'Applications', extensions: ['app'] }] }
-      : { title: 'Choose a script', properties: ['openFile'] })
+      ? { title: 'Choose an application', defaultPath: MAC ? '/Applications' : undefined, properties: ['openFile'], filters: filters && [{ name: 'Applications', extensions: filters }] }
+      : { title: 'Choose a script', properties: ['openFile'], filters: process.platform === 'win32' ? [{ name: 'Scripts', extensions: ['bat', 'cmd', 'ps1', 'exe'] }] : undefined })
     if (r.canceled) return null
     session.setKeyActionField(page, row, col, 'path', r.filePaths[0])
     return r.filePaths[0]
   })
-  h('shortcutNames', () => new Promise((resolve) => execFile('/usr/bin/shortcuts', ['list'], { timeout: 15000 },
+  h('shortcutNames', () => !MAC ? [] : new Promise((resolve) => execFile('/usr/bin/shortcuts', ['list'], { timeout: 15000 },
     (e, out) => resolve(e ? [] : String(out).split('\n').map((s) => s.trim()).filter(Boolean)))))
   h('allowedRuns', () => settings.allowedRuns ?? [])
   h('forgetRuns', async () => { settings.allowedRuns = []; await saveSettings() })

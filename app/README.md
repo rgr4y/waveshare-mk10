@@ -15,7 +15,15 @@ npm run dev        # same, reloads the window when public/ changes
 npm test           # node --test lib/
 npm run lint       # npm run lint:fix to autofix
 npm run cli -- ...  # headless theme info/roundtrip/device calls (runs under Electron's Node: serialport reads hang under Node 26)
+npm run package    # dist/MK10 Studio-darwin-arm64/MK10 Studio.app (see below)
 ```
+
+`npm run package` (package.mjs, @electron/packager) compiles `native/build/hidtap` and builds an arm64
+`MK10 Studio.app`. It signs with the hardened runtime and `entitlements.plist` when `APP_IDENTITY` is
+set (a Developer ID Application identity, name or SHA-1), and also notarizes when `APPLE_ID`,
+`APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID` are set; unsigned otherwise. The repo's `.env`
+(gitignored) holds them: `source ../.env && npm run package`. The app still needs Homebrew `ffmpeg` and
+`zstd` (it adds /opt/homebrew/bin to PATH). Settings are shared with dev runs (same userData).
 
 Editor: Open a `.Theme` (the dialog starts in the stock ScreenKey theme dir when present; the stock
 `defaultTheme.Theme` opens fine, edits are saved wherever you choose, so use Save As to keep the original).
@@ -172,13 +180,20 @@ appended to `/tmp/mk10.log`. **Save log…** writes the same lines to a file you
   sound devices, screenshots and music show "not supported yet". Each run or refusal goes to
   Activity, and refusals also show a toast. While this is on, Studio holds the USB serial port
   (retrying every 2 s), which locks the vendor app out. The rules are in `lib/keyactions.js`.
-- **Run application / Run script / Run Shortcut** (+ New key, group "Mac (run by Studio)"): Studio's own
+- **Run application / Run script / Run Shortcut** (+ New key, group "Run by Studio"): Studio's own
   key types, stored as an `openFile` action with an extra `mk10studioRun` field (`app`, `script`,
-  `shortcut`) that the device passes along with the press. The path is a `.app`, an executable file or
-  an AppleScript (`.scpt`, `.applescript`, run with `osascript`), or a Shortcut's name (`shortcuts run`);
-  "Choose application…" / "Choose script…" and a Shortcut list fill it in. Scripts run without a shell,
-  in their own folder, for up to 10 minutes. Each program asks once before it first runs (a theme can
-  name anything); Settings > Programs keys may run > Forget all resets that.
+  `shortcut`) that the device passes along with the press. What the path may be depends on the computer
+  Studio runs on (`planRun` / `runCommand` in `lib/keyactions.js`):
+  - macOS: a `.app`; an executable file or an AppleScript (`.scpt`, `.applescript`, via `osascript`);
+    a Shortcut's name (`shortcuts run`).
+  - Windows: an `.exe` or `.lnk`; a `.bat` / `.cmd` (via `cmd.exe`), `.ps1` (via `powershell.exe
+    -ExecutionPolicy Bypass`) or `.exe`. No Shortcuts.
+  - Linux: a `.desktop` file (`gio launch`) or an executable (started detached); an executable script.
+    No Shortcuts.
+  "Choose application…" / "Choose script…" and a Shortcut list fill it in. Nothing goes through a
+  shell; scripts run in their own folder for up to 10 minutes. Each program asks once before it first
+  runs (a theme can name anything); Settings > Programs keys may run > Forget all resets that.
+  Only macOS has been run; Windows and Linux are covered by unit tests, and Studio isn't packaged for them.
 - **Live stats** (Settings > Key actions and stats, on by default): once a second Studio sends the
   computer's CPU, GPU and RAM usage, CPU model, disk space and network speed/totals (macOS: en* interfaces, `netstat -ib`; Linux: /proc/net/dev) to the device's info widgets (V1 cmd 1),
   limited to the keys the current page asked for (V1 cmd 15 contract). GPU usage comes from

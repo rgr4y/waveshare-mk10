@@ -5,12 +5,15 @@
 // they are checked here and never handed to a shell.
 import { statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { extname, isAbsolute, join } from 'node:path'
+import { extname, isAbsolute, join, posix, win32 } from 'node:path'
 
 // Studio's own run actions: an openFile action map with mk10studioRun (the device forwards the whole
 // map on a press). path holds the .app, the script, or the Shortcut's name.
 export const RUN_KINDS = { app: 'runApp', script: 'runScript', shortcut: 'runShortcut' }
 const OSA_EXT = new Set(['.scpt', '.applescript'])
+// what each platform accepts (the Windows sets go by extension: Windows has no exec bit)
+const WIN_APP_EXT = new Set(['.exe', '.lnk'])
+const WIN_SCRIPT_EXT = new Set(['.bat', '.cmd', '.ps1', '.exe'])
 
 // openFile hands the file to its default app; for these that means running code
 export const RISKY_EXT = new Set(['.app', '.command', '.sh', '.bash', '.zsh', '.csh', '.tool', '.terminal',
@@ -30,7 +33,7 @@ const expand = (p) => (p === '~' ? homedir() : p.startsWith('~/') ? join(homedir
 // -> null when there is nothing for the Mac to do (release frame, device-run action),
 //    {run: 'url' | 'path', target, type} to run, {skip: reason, type} to report, or
 //    {drop: true, type} for a press replayed when the port opened (sinceOpenMs < OPEN_GRACE_MS).
-export function planKeyAction(payload, { stat = statSync, sinceOpenMs = Infinity } = {}) {
+export function planKeyAction(payload, { stat = statSync, sinceOpenMs = Infinity, platform = process.platform } = {}) {
   if (!Array.isArray(payload)) return null
   const [state, a] = payload
   if (state?.type !== 'keyState' || !a?.type) return null
@@ -38,7 +41,7 @@ export function planKeyAction(payload, { stat = statSync, sinceOpenMs = Infinity
   const type = String(a.type)
   if (sinceOpenMs < OPEN_GRACE_MS && (type === 'openWeb' || type === 'openDir' || type === 'openFile')) return { drop: true, type: RUN_KINDS[a.mk10studioRun] ?? type }
   const skip = (why) => ({ skip: `${type}: ${why}`, type })
-  if (type === 'openFile' && a.mk10studioRun) return planRun(String(a.mk10studioRun), String(a.path ?? '').trim(), stat)
+  if (type === 'openFile' && a.mk10studioRun) return planRun(String(a.mk10studioRun), String(a.path ?? '').trim(), stat, platform)
   switch (type) {
     case 'openWeb': {
       const raw = String(a.Url ?? '').trim()
@@ -69,23 +72,54 @@ export function planKeyAction(payload, { stat = statSync, sinceOpenMs = Infinity
 
 // -> {run: 'app' | 'script' | 'shortcut', target, type} or {skip}. Running still needs the user's
 // one-time OK per target (main.js), since a theme from elsewhere can name any local program.
-function planRun(kind, raw, stat) {
+//   app:      macOS a .app bundle; Windows an .exe or .lnk; Linux a .desktop file or an executable
+//   script:   macOS / Linux an executable file (macOS also AppleScript); Windows .bat, .cmd, .ps1, .exe
+//   shortcut: macOS only, a Shortcut's name
+function planRun(kind, raw, stat, platform) {
   const type = RUN_KINDS[kind]
   const skip = (why) => ({ skip: `${type ?? kind}: ${why}`, type: type ?? kind })
   if (!type) return skip('unknown run kind')
   if (kind === 'shortcut') {
+    if (platform !== 'darwin') return skip('Shortcuts are macOS only')
     if (!raw || raw.length > 200 || [...raw].some((ch) => ch.charCodeAt(0) < 32)) return skip(`not a Shortcut name: "${raw}"`)
     return { run: kind, target: raw, type }
   }
+  const P = platform === 'win32' ? win32 : posix // the target platform's path rules
   const p = expand(raw)
-  if (!isAbsolute(p)) return skip(`path must be absolute: "${raw}"`)
+  if (!P.isAbsolute(p)) return skip(`path must be absolute: "${raw}"`)
   let st
   try { st = stat(p) } catch { return skip(`not found: ${p}`) }
+  const ext = P.extname(p).toLowerCase()
+  const exec = st.isFile() && !!(st.mode & 0o111)
+  const ok = { run: kind, target: p, type }
   if (kind === 'app') {
-    if (!st.isDirectory() || extname(p).toLowerCase() !== '.app') return skip(`not an application (.app): ${p}`)
-    return { run: kind, target: p, type }
+    if (platform === 'darwin') return st.isDirectory() && ext === '.app' ? ok : skip(`not an application (.app): ${p}`)
+    if (platform === 'win32') return st.isFile() && WIN_APP_EXT.has(ext) ? ok : skip(`not an application (.exe or .lnk): ${p}`)
+    return (st.isFile() && ext === '.desktop') || exec ? ok : skip(`not an application (.desktop or executable): ${p}`)
   }
   if (!st.isFile()) return skip(`not a file: ${p}`)
-  if (!OSA_EXT.has(extname(p).toLowerCase()) && !(st.mode & 0o111)) return skip(`not executable (chmod +x it, or use an AppleScript): ${p}`)
-  return { run: kind, target: p, type }
+  if (platform === 'win32') return WIN_SCRIPT_EXT.has(ext) ? ok : skip(`not a script Windows runs (.bat, .cmd, .ps1, .exe): ${p}`)
+  if (exec || (platform === 'darwin' && OSA_EXT.has(ext))) return ok
+  return skip(`not executable (chmod +x it${platform === 'darwin' ? ', or use an AppleScript' : ''}): ${p}`)
+}
+
+// How main.js runs a planned app / script / Shortcut, never through a shell:
+//   {open: path}                    hand it to the OS (shell.openPath): .app, .exe, .lnk
+//   {cmd, args, cwd, detached}      spawn and let it run on its own (Linux apps)
+//   {cmd, args, cwd, verbatim}      execFile and wait (up to 10 min); verbatim = Windows cmd.exe
+//                                   quoting, passed as is
+export function runCommand({ run, target }, platform = process.platform) {
+  const P = platform === 'win32' ? win32 : posix
+  const ext = P.extname(target).toLowerCase()
+  const cwd = P.dirname(target)
+  if (run === 'shortcut') return { cmd: '/usr/bin/shortcuts', args: ['run', target] }
+  if (run === 'app') {
+    if (platform !== 'linux') return { open: target }
+    return ext === '.desktop' ? { cmd: 'gio', args: ['launch', target], cwd } : { cmd: target, args: [], cwd, detached: true }
+  }
+  if (platform === 'darwin' && OSA_EXT.has(ext)) return { cmd: '/usr/bin/osascript', args: [target], cwd }
+  // cmd /s /c strips the outer pair of quotes, leaving the path quoted. Windows paths can't contain "
+  if (platform === 'win32' && (ext === '.bat' || ext === '.cmd')) return { cmd: 'cmd.exe', args: ['/d', '/s', '/c', `""${target}""`], cwd, verbatim: true }
+  if (platform === 'win32' && ext === '.ps1') return { cmd: 'powershell.exe', args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', target], cwd }
+  return { cmd: target, args: [], cwd }
 }

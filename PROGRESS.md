@@ -1260,3 +1260,47 @@ Verification
   - Hold-to-drag ring (separate commit `c91de3d`).
 - Right-click menu "not working": Rob's `--dev` instance live-reloaded half-edited HTML/JS (`key-states-h` gone from the HTML, still used in JS), so `select()` threw before `keyMenu`. Current code: contextmenu fires, no renderer exceptions.
 - Verified in a `--screenshot` instance over CDP: MDI pick, then color input events and outline 3 land in `mk10studioIcon`; title color live; double-click on an openPage key moves page 0 to 3; no exceptions. New theme test for `setKeyVectorIcon` (50 pass), lint clean. Native menu popup itself not visible to CDP.
+
+## 2026-11-25 — Package as a .app
+
+- Outcome: `npm run package` (`app/package.mjs`, `@electron/packager` 20.3.0) builds `dist/MK10 Studio-darwin-arm64/MK10 Studio.app`, bundle id `com.robvella.mk10studio`. It signs with `APP_IDENTITY` (hardened runtime, `app/entitlements.plist`: allow-jit, apple-events) and notarizes when the Apple ID variables from `.env` are set.
+- Packaging fixes in `main.js`:
+  - `argv` slice was wrong when packaged: there's no `.` argument, so the first flag was dropped.
+  - Prepend Homebrew to PATH, so ffmpeg and zstd are found from Finder.
+  - hidtap: run from `app.asar.unpacked`, no swiftc when packaged.
+- The asar drops Monaco esm/dev/maps and non-darwin serialport prebuilds: 52 MB asar.
+- Verified: unsigned build launches with `--screenshot`, loads the theme and renders. Before the argv fix, one test launch ran as a normal instance for about 25 s (MCP started on 47110; it may have touched the serial port).
+- Not run: the signed and notarized build. Rob runs `source .env && npm run package --prefix app`.
+
+## 2026-11-25 — Run keys per platform
+
+- Outcome: `planRun` takes the target platform and accepts per-OS targets: `.app` / `.exe` `.lnk` / `.desktop` or an executable. Scripts: exec bit or AppleScript / `.bat` `.cmd` `.ps1` `.exe`. Shortcuts are macOS only.
+- New `runCommand()` in `lib/keyactions.js` says how to run each target: openPath; execFile with `cmd.exe /d /s /c ""path""` (verbatim) or `powershell -File`; a detached spawn for Linux apps. `main.js runProgram` follows it.
+- Pickers filter per OS; the template group is renamed "Run by Studio".
+- Verified: unit tests for win32 and linux (with win32 path rules), 52 pass, lint clean. Nothing has run on Windows or Linux.
+
+## 2026-11-25 — Device host-link relay test, blackout loop, video pause
+
+- Outcome: investigation only. The one commit adds `docs/display-pipeline.md`.
+  - Device has `curl` with working HTTPS and `bash`. Rob added `jq` and `openssl` to the default image.
+  - The `gd32-relay` perl script fails on `/dev/ttyGS0`. The original path is bind-mounted to the relay's own pty, so reopening it after a hangup makes the relay read its own output: about 1000 reads/s of one frame, 69% CPU, with the Mac attached.
+  - Fixed copy (kept in the session scratchpad, not in the repo): it opens the real tty through a private node `/dev/.mk10-relay-<tty>` made with `mknod` from the real major/minor. The node can't live in `/run` because that is mounted `nodev`.
+  - Fixed relay result: 20 messages each way in 20 s, survived 2 hangup/reopens, 0% CPU.
+  - The ttyGS0 relay was not left running. Press frames (cmd 13) were not captured from it, because Rob was not asked to press keys before the device rebooted.
+- Blackout:
+  - The device rebooted cleanly at 16:28:37, about 1 min after the last relay run. Rob rebooted it because the screen was not coming back.
+  - A 6-round `rc-service keyboard-device restart` loop (display snapshot 18 s after each) showed healthy state every time: both apps running, backlight 228, display unblanked, layers enabled, framebuffer drawn. No blackout reproduced.
+  - The only unverified candidate is the fixed-relay restart at 16:27.
+  - Lead (unverified): `dd: error writing '/dev/fb0': No space left on device` logged 602 times in the device app log after video resets, which may be a framebuffer wipe with no redraw.
+- MD icon recolor: Rob's sun key is `weather-sunset-up`, picked before `mk10studioIcon` existed, so it has no recorded name and no Icon/Outline row. Re-picking fixes it.
+- Background video pause: no vendor option. The device app has internal `videoStop` and `playSlots`/`stopSlots` but no key action or protocol command. `videoplayerinterfaceAPP` was disassembled; the launcher itself has no pause. `libvideoplayerinterface.so` exports a real `videoplayerinterface::pause()`/`play()`. The stock launcher's "pause" is libc `pause(2)` in its idle loop, and it never calls them. A replacement launcher (SIGUSR1 pause, SIGUSR2 play) was proposed and not built. `kill -STOP` was not run.
+- Device changes: `strace` installed with `apk add` (Rob decides whether it stays), and `/tmp/rl.sh` and the relay test files are in `/tmp`. Both device-side leftovers need handoff to the LilAlpine agent: the relay fix and the `strace` decision. The empty `native/mk10-videoplayer` directory created by an `mkdir` was removed.
+- Follow-up:
+  - Capture cmd 13 press frames through the fixed relay on `ttyGS0`, with Rob pressing keys and the relay run while he watches the screen.
+  - Hand the relay fix to the LilAlpine agent.
+  - Video pause: build the replacement launcher if wanted (a distro item). Static background image is the fallback.
+  - Design for on-device script keys, `/etc/mk10/env` secrets and a script allowlist was proposed; Rob has not said go.
+- Display pipeline (`docs/display-pipeline.md`):
+  - `lcd0` is a virtual 896x304 HV output. It has no pinctrl state, and the PD pins it would use are SPI chip-select and `dc` GPIOs.
+  - `KeyboardDevice` runs at about 16 fps: `DISP_CAPTURE_COMMIT` on `/dev/disp`, then `G2D_CMD_BITBLT_H`, then open, write and close on `fb1`-`fb11`. Seen with strace.
+  - DRM, cedrus and mpv need mainline. On 5.4 there is no D1 mixer or cedrus entry, and the uAPI is too old. The open question for mainline is whether DRM writeback can replace the capture.
