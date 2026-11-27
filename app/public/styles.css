@@ -188,8 +188,17 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 .key-title[data-align=bottom] { bottom: 0; }
 
 /* secondary 240x296 panel at x=656 */
-.secondary { position: absolute; left: 656px; top: 0; width: 240px; height: 296px; overflow: hidden; background: #0b0d11; pointer-events: none; }
-.sec { position: absolute; }
+.secondary { position: absolute; left: 656px; top: 0; width: 240px; height: 296px; overflow: hidden; background: #0b0d11; touch-action: none; }
+.sec { position: absolute; cursor: default; }
+.sec[data-selected=true] { outline: 2px solid var(--accent); outline-offset: -1px; }
+.sec[data-selected=true]:not([data-bg=true]) { cursor: move; }
+/* align bar above the panel; it keeps its space while hidden so the panel doesn't jump */
+.panel-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); visibility: hidden; }
+.panel-bar[data-on=true] { visibility: visible; }
+.panel-bar input[type=number] { width: 52px; }
+/* zoomed panel is wider than the stage: scroll instead of clipping both sides */
+.stage[data-zoom=true] { overflow-x: auto; align-items: flex-start; }
+.stage[data-zoom=true] .panel-bar { position: sticky; left: var(--sp-5); }
 .sec-image { object-fit: fill; }
 .widgets { overflow: hidden; }
 .sec-digits { display: flex; align-items: center; justify-content: center; }

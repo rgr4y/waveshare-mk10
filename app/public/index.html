@@ -51,6 +51,19 @@
         <p>Open a ScreenKey <code>.Theme</code> to start.</p>
         <button id="btn-open-stock" type="button" class="primary" hidden>Open stock defaultTheme</button>
       </div>
+      <div id="panel-bar" class="panel-bar" data-on="false">
+        <button type="button" data-align="left">Left</button>
+        <button type="button" data-align="center">Center</button>
+        <button type="button" data-align="right">Right</button>
+        <button type="button" data-align="top">Top</button>
+        <button type="button" data-align="middle">Middle</button>
+        <button type="button" data-align="bottom">Bottom</button>
+        <button type="button" data-z="forward" title="Draw above the next item">Forward</button>
+        <button type="button" data-z="back" title="Draw below the previous item">Back</button>
+        <label class="inline"><input id="panel-snap" type="checkbox" checked> Snap</label>
+        <label class="inline" title="Grid in px; hold Option while dragging to ignore it"><input id="panel-grid" type="number" min="2" max="40" step="1" value="8"> px</label>
+        <label class="inline"><input id="panel-zoom" type="checkbox"> Zoom</label>
+      </div>
       <div id="panel" class="panel" hidden>
         <div id="bg" class="bg" title="Background video">
           <video id="bgvideo" muted loop autoplay playsinline></video>
@@ -152,6 +165,17 @@
         <textarea id="page-json" class="raw-json" readonly title="Click to edit"></textarea>
         <div class="row-buttons"><button id="btn-page-raw-edit" type="button">Edit…</button></div>
         </details>
+      </div>
+
+      <div id="insp-panel" class="insp-section" hidden>
+        <h2 id="panel-title">Panel item</h2>
+        <div class="video-rect">
+          <label class="field"><span>X</span><input id="panel-x" type="number" min="0" max="239" step="1"></label>
+          <label class="field"><span>Y</span><input id="panel-y" type="number" min="0" max="295" step="1"></label>
+        </div>
+        <dl id="panel-info" class="kv"></dl>
+        <p id="panel-arc-hint" class="hint" hidden>The device draws this arc static; pushed values don't move it.</p>
+        <div class="row-buttons"><button id="btn-panel-delete" type="button">Delete</button></div>
       </div>
 
       <div id="insp-video" class="insp-section" hidden>

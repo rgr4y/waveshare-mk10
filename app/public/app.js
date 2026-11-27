@@ -6,7 +6,8 @@ const ui = {
   summary: { file: null },
   page: 0,
   stateView: new Map(), // `${page},${row},${col}` -> preview state of a multi-state key
-  sel: null, // {kind:'key', row, col} | {kind:'video'}
+  sel: null, // {kind:'key', row, col} | {kind:'video'} | {kind:'page'} | {kind:'panel', index} (index into the page's items)
+  panelZoom: false,
   assets: new Map(), // key -> Promise<{url, mime}|null>
   videoKey: null,
   dragEndAt: 0, // ms; the click that ends a key drag is ignored
@@ -561,13 +562,20 @@ setInterval(() => document.querySelectorAll('[data-clock]').forEach(tickClock), 
 function renderWidgets() {
   const all = widgetItems(curPage())
   draw($('widgets'), all.filter(onKeyArea), 0)
-  draw($('secondary'), all.filter((i) => !onKeyArea(i)), 656)
+  draw($('secondary'), all.filter((i) => !onKeyArea(i)), 656, true)
 }
 
-function draw(box, items, dx) {
-  // approximate device z-order: images under gauges under text
+// the info panel's items; the one that covers it all (type 114, 240x296 at its corner) is its background
+const panelItems = (p) => (p?.items ?? []).filter((i) => i.backgroundType === 'secondary')
+const isPanelBg = (i) => i.type === '114' && i.x === 656 && i.y === 0 && i.w === 240 && i.h === 296
+const panelItem = (p, index) => panelItems(p).find((i) => i.index === index)
+const selPanel = () => (ui.sel?.kind === 'panel' ? panelItem(curPage(), ui.sel.index) : null)
+
+// byZ: the device draws the info panel by the numeric z field (higher on top)
+function draw(box, items, dx, byZ = false) {
+  // key-area widgets: approximate device z-order, images under gauges under text
   const rank = (t) => (t === '114' ? 0 : t === '113' || t === '111' ? 2 : 1)
-  items.sort((a, b) => rank(a.type) - rank(b.type))
+  items.sort(byZ ? (a, b) => (Number(a.z) || 0) - (Number(b.z) || 0) : (a, b) => rank(a.type) - rank(b.type))
   box.replaceChildren(...items.map((it) => {
     let el
     if (it.type === '111') {
@@ -610,6 +618,7 @@ function draw(box, items, dx) {
     } else if (it.type === '109' || it.type === '101') {
       el = tpl('tpl-sec-ring')
       el.querySelector('.ring-label').textContent = it.systemData ?? ''
+      if (it.radius) el.style.width = el.style.height = `${2 * it.radius * (it.scale || 1)}px`
     } else {
       el = tpl('tpl-sec-box')
       el.querySelector('.box-type').textContent = `type ${it.type}`
@@ -619,6 +628,12 @@ function draw(box, items, dx) {
     }
     el.style.left = `${it.x - dx}px`
     el.style.top = `${it.y}px`
+    el.dataset.index = it.index
+    if (byZ) {
+      el.style.zIndex = Number(it.z) || 0
+      el.dataset.selected = String(ui.sel?.kind === 'panel' && ui.sel.index === it.index)
+      el.dataset.bg = String(isPanelBg(it))
+    }
     return el
   }))
 }
@@ -856,13 +871,37 @@ async function applyRawEditor() {
   else loadRaw()
 }
 
+function renderPanelInspector(it) {
+  const bg = isPanelBg(it)
+  $('panel-title').textContent = bg ? 'Panel background' : (WIDGET_NAMES[it.type] ?? `type ${it.type}`)
+  for (const [id, v] of [['panel-x', it.x - 656], ['panel-y', it.y]]) {
+    const el = $(id)
+    el.disabled = bg
+    if (el !== document.activeElement) el.value = v
+  }
+  const info = [['data name', it.systemData || '(none)']]
+  if (it.type === '113') info.push(['text', it.flag === '1' ? 'live value' : (it.text ?? '')])
+  $('panel-info').replaceChildren(...info.flatMap(([k, v]) => {
+    const dt = document.createElement('dt')
+    const dd = document.createElement('dd')
+    dt.textContent = k
+    dd.textContent = v
+    return [dt, dd]
+  }))
+  $('panel-arc-hint').hidden = it.type !== '109'
+}
+
 function renderInspector() {
   const p = curPage()
   const sel = ui.sel
   const key = sel?.kind === 'key' ? keyAt(p, sel.row, sel.col) : null
   const vid = sel?.kind === 'video' ? videoItem(p) : null
   const pg = sel?.kind === 'page' ? p : null
-  $('insp-none').hidden = !!(key || vid || pg)
+  const pan = selPanel()
+  $('panel-bar').dataset.on = String(!!pan)
+  $('insp-none').hidden = !!(key || vid || pg || pan)
+  $('insp-panel').hidden = !pan
+  if (pan) renderPanelInspector(pan)
   const under = sel?.kind === 'key' && !key ? cellWidgets(p, sel.row, sel.col) : []
   $('insp-hint').textContent = under.length ? `No key here, but not empty: ${under.map(widgetLabel).join(', ')}. Paste is blocked on this cell.`
     : sel?.kind === 'key' ? 'Empty slot. Paste a key here (Cmd+V or right-click). The background video is in the page Inspector (click the page).' : 'Click a page or a key.'
@@ -1110,6 +1149,8 @@ function wireMacro() {
 function render() {
   renderTop()
   if (!ui.summary.file) return
+  // a delete, undo or page change can leave the selection pointing at nothing
+  if (ui.sel?.kind === 'panel' && !selPanel()) ui.sel = { kind: 'page' }
   renderPages()
   renderKeys()
   renderBackground()
@@ -1122,14 +1163,138 @@ function select(sel) {
   ui.sel = sel
   renderKeys()
   renderBackground()
+  renderWidgets()
   renderInspector()
 }
 
 // scale the 896x304 panel to the stage
 function fit() {
   const st = $('stage')
-  const z = Math.min((st.clientWidth - 40) / 896, (st.clientHeight - 80) / 304, 2)
+  st.dataset.zoom = String(ui.panelZoom)
+  // zoomed: the 296 px info panel fills the stage height and the stage scrolls sideways
+  const z = ui.panelZoom ? Math.min((st.clientHeight - 80) / 304, 4) : Math.min((st.clientWidth - 40) / 896, (st.clientHeight - 80) / 304, 2)
   $('panel').style.zoom = String(Math.max(z, 0.3))
+}
+
+// ---- info panel: select, drag, nudge, align
+const panelZoomOf = () => parseFloat($('panel').style.zoom) || 1
+let panelSnap = true
+let panelGrid = 8
+const snapTo = (v, e) => (panelSnap && !e?.altKey ? Math.round(v / panelGrid) * panelGrid : v)
+
+// box in canvas coords; text uses its measured size
+function panelBox(index) {
+  const el = $('secondary').querySelector(`[data-index="${index}"]`)
+  return el && { x: el.offsetLeft + 656, y: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight }
+}
+
+function wirePanel() {
+  const box = $('secondary')
+  let drag = null
+  box.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return
+    const el = e.target.closest('.sec')
+    const index = el ? Number(el.dataset.index) : null
+    const it = el ? panelItem(curPage(), index) : panelItems(curPage()).find(isPanelBg)
+    // empty area: the background item when there is one, else the page
+    if (!el || isPanelBg(it ?? {})) {
+      select(it ? { kind: 'panel', index: it.index } : { kind: 'page' })
+      return
+    }
+    if (ui.sel?.kind !== 'panel' || ui.sel.index !== index) select({ kind: 'panel', index })
+    const cur = box.querySelector(`[data-index="${index}"]`)
+    box.setPointerCapture(e.pointerId)
+    drag = { index, x0: e.clientX, y0: e.clientY, px: cur.offsetLeft, py: cur.offsetTop, moved: false }
+  })
+  box.addEventListener('pointermove', (e) => {
+    if (!drag) return
+    const z = panelZoomOf()
+    const dx = (e.clientX - drag.x0) / z
+    const dy = (e.clientY - drag.y0) / z
+    if (!drag.moved && Math.hypot(dx, dy) < 2) return // a click is not a move
+    if (!drag.moved) { drag.moved = true; run(window.mk10.panelBegin()) } // one undo snapshot per drag
+    drag.nx = snapTo(drag.px + dx, e)
+    drag.ny = snapTo(drag.py + dy, e)
+    const el = box.querySelector(`[data-index="${drag.index}"]`)
+    if (el) { el.style.left = `${drag.nx}px`; el.style.top = `${drag.ny}px` }
+  })
+  const end = (e) => {
+    const d = drag
+    drag = null
+    if (!d?.moved) return
+    if (e.type === 'pointercancel') return render() // snap the element back
+    run(window.mk10.panelMove(ui.page, d.index, 656 + Math.round(d.nx), Math.round(d.ny), { snapshot: false }))
+  }
+  box.addEventListener('pointerup', end)
+  box.addEventListener('pointercancel', end)
+
+  // align bar
+  $('panel-bar').addEventListener('click', (e) => {
+    const b = e.target.closest('button')
+    const index = ui.sel?.index
+    if (!b || ui.sel?.kind !== 'panel' || isPanelBg(selPanel())) return
+    if (b.dataset.z) return void run(window.mk10.panelZ(ui.page, index, b.dataset.z))
+    const r = panelBox(index)
+    if (r) run(window.mk10.panelAlign(ui.page, index, b.dataset.align, { w: r.w, h: r.h }))
+  })
+  try { panelSnap = localStorage.getItem('panelSnap') !== 'false' } catch { /* storage unavailable: default on */ }
+  try { panelGrid = Math.min(40, Math.max(2, Number(localStorage.getItem('panelGrid')) || 8)) } catch { /* default 8 */ }
+  $('panel-snap').checked = panelSnap
+  $('panel-grid').value = panelGrid
+  $('panel-snap').addEventListener('change', (e) => {
+    panelSnap = e.target.checked
+    try { localStorage.setItem('panelSnap', String(panelSnap)) } catch { /* not persisted */ }
+  })
+  $('panel-grid').addEventListener('change', (e) => {
+    panelGrid = Math.min(40, Math.max(2, Math.round(Number(e.target.value)) || 8))
+    e.target.value = panelGrid
+    try { localStorage.setItem('panelGrid', String(panelGrid)) } catch { /* not persisted */ }
+  })
+  $('panel-zoom').addEventListener('change', (e) => {
+    ui.panelZoom = e.target.checked
+    fit()
+    $('stage').scrollLeft = ui.panelZoom ? 656 * panelZoomOf() : 0 // canvas x 656 into view
+  })
+
+  // inspector
+  for (const [id, axis] of [['panel-x', 'x'], ['panel-y', 'y']]) {
+    $(id).addEventListener('change', (e) => {
+      const it = selPanel()
+      const v = Math.round(Number(e.target.value))
+      if (!it || e.target.value === '' || Number.isNaN(v)) return renderInspector()
+      run(window.mk10.panelMove(ui.page, it.index, axis === 'x' ? 656 + v : it.x, axis === 'y' ? v : it.y))
+    })
+  }
+  $('btn-panel-delete').addEventListener('click', () => deletePanelSel())
+}
+
+function deletePanelSel() {
+  const it = selPanel()
+  if (!it) return
+  run(window.mk10.panelDelete(ui.page, it.index))
+  select({ kind: 'page' })
+}
+
+// arrows: 1 px, Shift 10 px, snap on = one grid step. Rapid presses share one undo snapshot.
+let nudge = { at: 0, x: 0, y: 0 }
+function nudgePanel(e) {
+  const it = selPanel()
+  if (!it || isPanelBg(it)) return
+  const fresh = Date.now() - nudge.at > 600
+  if (fresh) {
+    run(window.mk10.panelBegin())
+    nudge = { at: 0, x: it.x - 656, y: it.y } // the summary lags the last nudge, so a burst tracks its own position
+  }
+  nudge.at = Date.now()
+  const dir = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1
+  const step = (v) => {
+    if (e.shiftKey) return v + dir * 10
+    if (!panelSnap) return v + dir
+    return (dir > 0 ? Math.floor(v / panelGrid) + 1 : Math.ceil(v / panelGrid) - 1) * panelGrid
+  }
+  if (e.key.endsWith('Left') || e.key.endsWith('Right')) nudge.x = step(nudge.x)
+  else nudge.y = step(nudge.y)
+  run(window.mk10.panelMove(ui.page, it.index, 656 + nudge.x, nudge.y, { snapshot: false }))
 }
 
 // ---- drag & drop (files only; path resolved in preload)
@@ -1375,7 +1540,8 @@ async function init() {
   window.mk10.onSelect(async ({ page, row, col, kind }) => {
     await changing.catch(() => {})
     ui.page = page
-    ui.sel = kind === 'page' ? { kind: 'page' } : Number.isNaN(row) ? { kind: 'video' } : { kind: 'key', row, col }
+    // dev: --select page,-1,N picks panel item N
+    ui.sel = kind === 'page' ? { kind: 'page' } : Number.isNaN(row) ? { kind: 'video' } : row < 0 ? { kind: 'panel', index: col } : { kind: 'key', row, col }
     render()
   })
 
@@ -1502,16 +1668,23 @@ async function init() {
   document.addEventListener('dragover', (e) => e.preventDefault())
   document.addEventListener('drop', (e) => e.preventDefault())
   new ResizeObserver(fit).observe($('stage'))
+  wirePanel()
   // Edit menu / shortcuts: text fields and selected text keep native behavior; otherwise act on the key
   const typing = () => ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName) || !!window.getSelection()?.toString()
   const keyEdit = (op) => {
     if (op === 'undo') return run(window.mk10.keyOp('undo'))
+    if (op === 'delete' && ui.sel?.kind === 'panel') return deletePanelSel()
     if (ui.sel?.kind !== 'key' || op === 'redo') return
     if (op !== 'paste' && !keyAt(curPage(), ui.sel.row, ui.sel.col)) return
     run(window.mk10.keyOp(op, ui.page, ui.sel.row, ui.sel.col))
   }
   window.mk10.onEdit((op) => (typing() || document.querySelector('dialog[open]') ? run(window.mk10.nativeEdit(op)) : keyEdit(op)))
   window.addEventListener('keydown', (e) => {
+    if (ui.sel?.kind === 'panel' && e.key.startsWith('Arrow') && !typing() && !document.querySelector('dialog[open]')) {
+      e.preventDefault()
+      nudgePanel(e)
+      return
+    }
     if ((e.key === 'Backspace' || e.key === 'Delete') && !typing() && !document.querySelector('dialog[open]')) keyEdit('delete')
     if (e.key === 'Escape' && document.activeElement?.tagName !== 'INPUT') select(null)
   })
