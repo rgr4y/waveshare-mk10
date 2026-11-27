@@ -1,15 +1,27 @@
 // Build "MK10 Studio.app" (arm64) into dist/. `npm run package`.
 // Signing: APP_IDENTITY (codesign identity name or SHA-1, a Developer ID Application cert) signs it with
 // the hardened runtime. Notarizing: also set APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and APPLE_TEAM_ID.
-// Without APP_IDENTITY the app is unsigned. `set -a; source ../.env` (or the exports in it) first.
+// ../.env (gitignored, `export KEY=value` lines) is loaded if present. Without APP_IDENTITY the build stops:
+// an unsigned build keeps Electron's ad-hoc signature, so macOS lists it as "Electron" (Local Network, TCC)
+// and forgets its grants on every rebuild (the cdhash changes). `--unsigned` builds one anyway.
 // `npm run package -- --install` also replaces /Applications/MK10 Studio.app with the build.
 import { packager } from '@electron/packager'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, rmSync } from 'node:fs'
 
+try {
+  process.loadEnvFile('../.env')
+} catch (e) {
+  if (e.code !== 'ENOENT') throw e
+}
 const env = process.env
 const sign = env.APP_IDENTITY
 const notarize = sign && env.APPLE_ID && env.APPLE_APP_SPECIFIC_PASSWORD && env.APPLE_TEAM_ID
+
+if (!sign && !process.argv.includes('--unsigned')) {
+  console.error('APP_IDENTITY is not set (../.env or the environment). Pass --unsigned to build an unsigned app.')
+  process.exit(1)
+}
 
 console.log('compiling native/build/hidtap (swiftc)…')
 mkdirSync('native/build', { recursive: true })
