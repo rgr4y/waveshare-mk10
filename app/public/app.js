@@ -14,6 +14,7 @@ const ui = {
 
 const IMAGE_RE = /\.(png|jpe?g|gif|webp|bmp|tiff?|heic|svg)$/i
 const VIDEO_RE = /\.(mp4|mov|m4v|mkv|avi|webm|gif)$/i
+const BG_RE = /\.(mp4|mov|m4v|mkv|avi|webm|gif|png|jpe?g|webp|bmp|tiff?|heic)$/i // videos, or a still held as a clip
 const ANY_MEDIA_RE = new RegExp(`${IMAGE_RE.source}|${VIDEO_RE.source}`, 'i')
 const base = (p) => String(p).split('/').pop()
 
@@ -120,7 +121,16 @@ function opener(p) {
 
 // A multi-state key shows the image and title of its current state; Press Key steps the preview state
 // (editor only, the theme keeps its State).
-const stateIndex = (it) => ui.stateView.get(`${ui.page},${it.row},${it.col}`) ?? it.states.state
+// A Freeze background toggle follows the device's video: state 2 (play icon) while paused.
+const stateIndex = (it) => ui.stateView.get(`${ui.page},${it.row},${it.col}`)
+  ?? (it.action?.mk10studioRun === 'freeze' && it.states.list.length > 1 ? Number(ui.bgPaused) : it.states.state)
+// the drawn icon of a key, or of the state shown on a multi-state key (null: a plain image)
+const iconOf = (k) => (k.states ? k.stateIcons?.[stateIndex(k)] ?? null : k.icon)
+// image edits on a multi-state key go to the state shown in the editor
+const shownState = (page, row, col) => {
+  const k = keyAt(ui.summary.pages?.[page], row, col)
+  return k?.states ? stateIndex(k) : undefined
+}
 function face(it) {
   const st = it.states?.list[stateIndex(it)]
   return st ? { ...it, path: st.path, paths: st.paths, frameDelays: st.frameDelays, title: st.title || it.title } : it
@@ -134,7 +144,8 @@ function pressKey(page, row, col) {
   if (key?.states && page === ui.page) {
     const n = (stateIndex(key) + 1) % key.states.list.length
     ui.stateView.set(`${page},${row},${col}`, n)
-    setStatus({ msg: `Press: state ${n + 1} of ${key.states.list.length} (${key.states.list[n].keyString ?? ''}), preview only` })
+    const ks = key.states.list[n].keyString
+    setStatus({ msg: `Press: state ${n + 1} of ${key.states.list.length}${ks ? ` (${ks})` : ''}, preview only` })
     return render()
   }
   const a = key?.action
@@ -232,9 +243,9 @@ async function showMdi() {
     img.src = `../node_modules/@mdi/svg/svg/${name}.svg`
     li.querySelector('span').textContent = name
     li.querySelector('button').addEventListener('click', () => {
-      const { page, row, col } = mdiPick
+      const { page, row, col, state } = mdiPick
       $('icon-dlg').close()
-      run(setVectorIcon(page, row, col, { name, color: '#ffffff', outline: '#000000', width: 0 }))
+      run(setVectorIcon(page, row, col, { name, color: '#ffffff', outline: '#000000', width: 0 }, state))
     })
     return li
   }))
@@ -257,11 +268,35 @@ async function mdiPng(d, icon) {
   g.fill(p)
   return new Uint8Array(await (await c.convertToBlob({ type: 'image/png' })).arrayBuffer())
 }
-async function setVectorIcon(page, row, col, icon) {
+// premade line-art icon tinted: icon { premade, color, outline, width }; the outline is the tinted
+// shape stamped around the icon at 16 angles, width px out
+async function premadePng(icon) {
+  const src = await createImageBitmap(new Blob([await window.mk10.iconPng(icon.premade)], { type: 'image/png' }))
+  const tint = (color) => {
+    const c = new OffscreenCanvas(128, 128)
+    const g = c.getContext('2d')
+    g.drawImage(src, 0, 0, 128, 128)
+    g.globalCompositeOperation = 'source-in'
+    g.fillStyle = color
+    g.fillRect(0, 0, 128, 128)
+    return c
+  }
+  const c = new OffscreenCanvas(128, 128)
+  const g = c.getContext('2d')
+  if (icon.width) {
+    const o = tint(icon.outline)
+    for (let i = 0; i < 16; i++) g.drawImage(o, Math.cos((i * Math.PI) / 8) * icon.width, Math.sin((i * Math.PI) / 8) * icon.width)
+  }
+  g.drawImage(tint(icon.color), 0, 0)
+  return new Uint8Array(await (await c.convertToBlob({ type: 'image/png' })).arrayBuffer())
+}
+// draw a Material Design or premade icon into the key (state: a multi-state key's state)
+async function setVectorIcon(page, row, col, icon, state) {
+  if (icon.premade) return window.mk10.setKeyVectorIcon(page, row, col, await premadePng(icon), icon, state)
   mdiList ??= await window.mk10.mdiIcons()
   const d = mdiList.find(([n]) => n === icon.name)?.[2]
   if (!d) throw new Error(`no Material Design icon named ${icon.name}`)
-  return window.mk10.setKeyVectorIcon(page, row, col, await mdiPng(d, icon), icon)
+  return window.mk10.setKeyVectorIcon(page, row, col, await mdiPng(d, icon), icon, state)
 }
 
 // color pickers apply while the user drags: one call at a time, and the last color always lands
@@ -356,14 +391,13 @@ function renderKeys() {
         // an image sets the key's image (GIF counts as an image here); a video goes to the background
         wireDrop(el, ANY_MEDIA_RE, (file) => {
           if (!IMAGE_RE.test(file)) return run(window.mk10.setBackgroundVideo(ui.page, file))
-          if (raw.states) return setStatus({ error: true, msg: 'Multi-state key: its images are per state; replacing them is not supported yet' })
           select({ kind: 'key', row, col })
-          return run(window.mk10.setKeyImage(ui.page, row, col, file))
+          return run(window.mk10.setKeyImage(ui.page, row, col, file, raw.states ? stateIndex(raw) : undefined))
         })
       }
       // empty slots take clicks (select, right-click Paste) and cover the background video, so a video
       // dropped on one still goes to the background; the page Inspector also replaces it
-      else wireDrop(el, VIDEO_RE, (file) => run(window.mk10.setBackgroundVideo(ui.page, file)))
+      else wireDrop(el, BG_RE, (file) => run(window.mk10.setBackgroundVideo(ui.page, file)))
       // empty slots select too, so a paste has a target
       el.dataset.selected = String(ui.sel?.kind === 'key' && ui.sel.row === row && ui.sel.col === col)
       el.addEventListener('click', (e) => {
@@ -591,10 +625,12 @@ function draw(box, items, dx) {
 
 // [key, value, editable] rows; editable fields come from the main process (existing text fields only)
 // Studio's run keys are openFile actions with mk10studioRun (lib/keyactions.js); show them by what they do
-const RUN_TYPE = { app: ['Run application', 'Application'], script: ['Run script', 'Script'], shortcut: ['Run Shortcut', 'Shortcut'] }
+const RUN_TYPE = { app: ['Run application', 'Application'], script: ['Run script', 'Script'], shortcut: ['Run Shortcut', 'Shortcut'],
+  background: ['Swap background', 'Background'], freeze: ['Freeze background'] }
 function actionRows(a) {
   if (!a) return [['type', '(none)']]
   const hide = new Set(['iconPath', 'parentDescription', 'AISoundControlKeyword', 'editable', 'mk10studioRun'])
+  if (a.mk10studioRun === 'freeze') hide.add('path') // the key pauses the playing video; it has no file
   const edit = new Set(a.editable ?? [])
   const run = RUN_TYPE[a.mk10studioRun]
   return Object.entries(a).filter(([k, v]) => !hide.has(k) && (v !== '' || edit.has(k)))
@@ -684,7 +720,7 @@ function renderPageInspector(p) {
     ['theme index', String(p.index)],
   ])
   const vid = videoItem(p)
-  fillKv($('pg-video'), [['video', vid ? base(vid.path ?? '(none)') : 'none: this page has no video slot']])
+  fillKv($('pg-video'), [['video', vid ? base(vid.path ?? '(none)') : 'none: this page has no video slot'], ['on device', ui.bgPaused ? 'paused' : 'playing']])
   $('btn-pg-video').hidden = !vid
   const img = (p.items ?? []).find((i) => i.type === '114' && i.backgroundType === 'secondary')
   fillKv($('pg-panel'), [['image', img ? base(img.path || img.paths || '(none)') : 'none']])
@@ -854,14 +890,15 @@ function renderInspector() {
       if (el !== document.activeElement) el.value = el.dataset.ol === 'width' ? (ol?.width ?? 0) : (ol?.color ?? '#000000')
     }
     for (const k of ['ShowTitle', 'ShowImage']) document.querySelector(`[data-tp=${k}]`).closest('label').hidden = !!ol
-    const ic = key.icon // vector icon: Studio draws it, so its colors stay editable
+    const ic = iconOf(key) // an icon Studio draws (MDI or premade), so its colors stay editable
     $('key-icon-style').hidden = !ic
     if (ic) for (const el of $('key-icon-style').querySelectorAll('[data-ic]')) if (el !== document.activeElement) el.value = ic[el.dataset.ic]
     const f = face(key)
     fillImg($('key-thumb'), f.path || f.paths, f.path ? null : f.frameDelays)
     $('key-states-grp').hidden = !key.states
-    $('btn-key-image').hidden = !!key.states // per-state images; item path is not what the device shows
-    $('btn-key-icon').hidden = !!key.states
+    // a multi-state key: the buttons set the image of the state shown (Press Key / double-click steps it)
+    $('btn-key-image').title = key.states ? `Replace state ${stateIndex(key) + 1} image…` : 'Replace image…'
+    $('btn-key-icon').textContent = key.states ? `State ${stateIndex(key) + 1} icon…` : 'Choose icon…'
     $('key-sound').textContent = key.sound ? base(key.sound) : 'none'
     $('key-sound').title = key.sound ?? ''
     $('btn-key-sound-play').hidden = $('btn-key-sound-clear').hidden = !key.sound
@@ -877,8 +914,8 @@ function renderInspector() {
       run(window.mk10.setKeyActionField(ui.page, sel.row, sel.col, field, value)),
     key.action?.type === 'openPage' ? { pageName: pageOptions } : key.action?.type === 'pageSwitch' ? { jumpToPage: jumpOptions }
       : key.action?.mk10studioRun === 'shortcut' ? { path: shortcutOptions } : {})
-    $('btn-run-pick').hidden = !['app', 'script'].includes(key.action?.mk10studioRun)
-    $('btn-run-pick').textContent = key.action?.mk10studioRun === 'app' ? 'Choose application…' : 'Choose script…'
+    $('btn-run-pick').hidden = !['app', 'script', 'background'].includes(key.action?.mk10studioRun)
+    $('btn-run-pick').textContent = { app: 'Choose application…', background: 'Choose image or video…' }[key.action?.mk10studioRun] ?? 'Choose script…'
   }
   if (vid) {
     fillKv($('video-info'), [['asset', base(vid.path ?? '(none)')], ['stream', '640 × 256, scaled to the box below']])
@@ -1319,6 +1356,17 @@ async function init() {
   $('btn-open-stock').hidden = !cfg.stockDir
 
   window.mk10.onStatus(setStatus)
+  const onBg = (p) => {
+    ui.bgPaused = !!p
+    // the device's toggle images follow the player, so drop any Press Key preview of them
+    for (const k of [...ui.stateView.keys()]) {
+      const [pg, r, c] = k.split(',').map(Number)
+      if (keyAt(ui.summary?.pages?.[pg], r, c)?.action?.mk10studioRun === 'freeze') ui.stateView.delete(k)
+    }
+    if (ui.summary) render()
+  }
+  window.mk10.onBgState(onBg)
+  window.mk10.bgState().then(onBg, () => {})
   window.mk10.onLog(addLog)
   // a select sent right after an open must land after that open's page reset, not before it
   let changing = Promise.resolve()
@@ -1336,12 +1384,13 @@ async function init() {
   $('btn-save').addEventListener('click', () => run(window.mk10.save()))
   $('btn-push').addEventListener('click', () => run(window.mk10.push()))
   $('btn-key-image').addEventListener('click', () => {
-    if (ui.sel?.kind === 'key') run(window.mk10.setKeyImage(ui.page, ui.sel.row, ui.sel.col))
+    if (ui.sel?.kind === 'key') run(window.mk10.setKeyImage(ui.page, ui.sel.row, ui.sel.col, null, shownState(ui.page, ui.sel.row, ui.sel.col)))
   })
   $('btn-key-icon').addEventListener('click', async () => {
     if (ui.sel?.kind !== 'key') return
     const { row, col } = ui.sel
     const page = ui.page
+    const state = shownState(page, row, col)
     const names = await window.mk10.icons().catch(() => [])
     const item = (n) => {
       const li = tpl('tpl-icon-item')
@@ -1349,13 +1398,13 @@ async function init() {
       li.querySelector('span').textContent = n.replace(/^PictureFont\//, '')
       li.querySelector('button').addEventListener('click', () => {
         $('icon-dlg').close()
-        run(window.mk10.setKeyIcon(page, row, col, n))
+        run(window.mk10.setKeyIcon(page, row, col, n, state))
       })
       return li
     }
     $('icon-grid').replaceChildren(...names.filter((n) => !n.startsWith('PictureFont/')).map(item))
     $('icon-grid-pf').replaceChildren(...names.filter((n) => n.startsWith('PictureFont/')).map(item))
-    mdiPick = { page, row, col }
+    mdiPick = { page, row, col, state }
     $('icon-dlg').showModal()
   })
   $('mdi-q').addEventListener('input', () => showMdi())
@@ -1400,10 +1449,12 @@ async function init() {
     && window.mk10.setKeyTitleParam(ui.page, ui.sel.row, ui.sel.col, { [el.dataset.tp]: el.value }))
   const sendIcon = () => {
     const k = selKey()
-    if (!k?.icon) return
+    const ic = k && iconOf(k)
+    if (!ic) return
     const v = (n) => document.querySelector(`[data-ic=${n}]`).value
     const width = Math.max(0, Math.min(8, Math.round(Number(v('width')) || 0)))
-    return setVectorIcon(ui.page, ui.sel.row, ui.sel.col, { name: k.icon.name, color: v('color'), outline: v('outline'), width })
+    const which = ic.premade ? { premade: ic.premade } : { name: ic.name }
+    return setVectorIcon(ui.page, ui.sel.row, ui.sel.col, { ...which, color: v('color'), outline: v('outline'), width }, shownState(ui.page, ui.sel.row, ui.sel.col))
   }
   $('key-icon-style').addEventListener('change', () => run(sendIcon()))
   liveColor($('key-icon-style'), sendIcon)
@@ -1443,7 +1494,7 @@ async function init() {
   })
 
   $('bg').addEventListener('click', () => { if (videoItem(curPage())) select({ kind: 'video' }) })
-  wireDrop($('bg'), VIDEO_RE, (file) => {
+  wireDrop($('bg'), BG_RE, (file) => {
     select({ kind: 'video' })
     return run(window.mk10.setBackgroundVideo(ui.page, file))
   })

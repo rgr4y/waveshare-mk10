@@ -1304,3 +1304,69 @@ Verification
   - `lcd0` is a virtual 896x304 HV output. It has no pinctrl state, and the PD pins it would use are SPI chip-select and `dc` GPIOs.
   - `KeyboardDevice` runs at about 16 fps: `DISP_CAPTURE_COMMIT` on `/dev/disp`, then `G2D_CMD_BITBLT_H`, then open, write and close on `fb1`-`fb11`. Seen with strace.
   - DRM, cedrus and mpv need mainline. On 5.4 there is no D1 mixer or cedrus entry, and the uAPI is too old. The open question for mainline is whether DRM writeback can replace the capture.
+
+## 2026-11-25 — Studio: still image as the main background
+
+- Outcome: the background accepts a still image (png, jpg, webp, bmp, tiff, heic), from the picker or by dropping it on the background or an empty slot. `toDeviceMp4` turns the still into a 1 s, 25 fps clip of that frame (`-loop 1 -t 1`). The stock player loops it, so the background holds still. No device changes. This replaces "pause the video", which the stock launcher can't do.
+- Changed: `app/lib/media.js` (`STILL_RE`), `app/main.js` (picker extensions), `app/public/app.js` (`BG_RE` for drops), `app/public/index.html` (labels and hint).
+- Verified: a 1200x800 test PNG came out as 5.4 KB h264 Main@4.1, 640x256 yuv420p, 25 frames, 1.000 s. Lint is clean and 52 tests pass. Not yet pushed to the device or looked at on the panel.
+
+## 2026-11-25 — vplayer: background video launcher that can pause
+
+- Outcome: `tools/vplayer/vplayer.c` is a drop-in for `/usr/bin/videoplayerinterfaceAPP`. It takes the same `-x -y -w -h -f -r` args and makes the same calls into `/vendor/lib/libvideoplayerinterface.so` (getopt mapping and call order checked against the stock disassembly). SIGUSR1 toggles `videoplayerinterface::pause()`/`play()`. INT/TERM/QUIT/HUP/PIPE destroy the player and exit 1, as the stock launcher does. Signals are taken with `sigwait`, so library calls never run inside a signal handler. The stock launcher exits on SIGUSR1, so a USR1 key must not target it.
+- Build: `tools/vplayer/build.sh` (zig cc, arm-linux-gnueabihf.2.23). It needs only GLIBC_2.4, and `/vendor/lib` is already in the device's ld.so.conf.
+- Device test (temporary, reverted): killed the stock player and ran `/tmp/vplayer` with its args. While playing, the ch0 layer buffer address changed between snapshots. After USR1 it held one address for 3 snapshots, and the player logged `XPLAYER_COMMAND_PAUSE`, `paused (rc 0)`. A second USR1 logged `XPLAYER_COMMAND_START` and the address changed again. CPU was 4.4%. Afterwards `rc-service keyboard-device restart` brought back the stock player. `/tmp/vplayer` and its log are still in `/tmp`.
+- Not done: installing it (a distro item: repoint the `/usr/bin/videoplayerinterfaceAPP` symlink) and a key that sends the signal.
+
+## 2026-11-25 — Studio: Swap background and Freeze background keys
+
+- Outcome: two new "Run by Studio" key types.
+  - **Swap background:** "Choose image or video…" stores a 640x256 `MainScreen` mp4 asset and names it in the action path. A press plays it on the device; a second press of the same key returns to the page's video.
+  - **Freeze background:** a press toggles pause on the playing video.
+  - Both go over ssh to vplayer. SIGUSR1 freezes. Swapping writes `/run/mk10-background` and sends SIGUSR2 (vplayer `c8a029d`).
+  - Studio refuses unless the running player's exe is `*/vplayer`, because the stock launcher would exit.
+  - The asset path must match `^/theme/MK10/MainScreen/[\w-]+\.mp4$`, in both the planner and the session, because it goes into a device shell line.
+- Changed: `app/lib/action-templates.json`, `app/lib/keyactions.js` (`RUN_KINDS`, `BG_ASSET_RE`, `planRun`), `app/lib/theme.js` (`setKeyBackground`), `app/lib/session.js` (`setKeyBackground`, `backgroundKey`), `app/main.js`, `app/public/app.js`, `app/README.md`, tests. New `docs/handoff-vplayer.md` for the LilAlpine agent.
+- Verified:
+  - Lint is clean and 53 tests pass, with the real-theme tests run, not skipped.
+  - `backgroundKey` against the device with the stock player: both kinds refused with "vplayer is not installed", and the stock player was not signalled (same pid).
+  - With vplayer run by hand under the `videoplayerinterfaceAPP` name: swap played the key's mp4, freeze paused, the second swap went back to the page video, and a missing asset gave "not on the device: push the theme first". Stock player restored afterwards.
+  - Not yet checked in the Studio window (new-key palette and the "Choose image or video…" button). No physical key press has run it end to end.
+- Follow-up: the LilAlpine agent installs vplayer (`docs/handoff-vplayer.md`). Then Rob makes a key, pushes, and presses it with Studio running.
+
+## 2026-11-25 — Toggle keys with per-state icons; Freeze background follows the player
+
+- Findings:
+  - jsonData States on an `openFile` key did nothing on the device: the icon did not change.
+  - A `keyboard_switch` key with `mk10studioRun` added to its controlData does flip its state images. The device forwards the whole map, `mk10studioRun` included, in V1 cmd 13. The frame carries no state index (Rob's RPC log).
+  - Rob had vplayer installed at 18:20 (`/usr/libexec/mk10/vplayer`). That was the first build, without the state file.
+- Outcome:
+  - Freeze background is now a two-state `keyboard_switch` toggle: pause icon, then play icon. The new premade icons are `app/icons/pause|play`. States use keycode 0 (KC_NO).
+  - The planner runs `mk10studioRun` on `keyboard_switch` keys as well as `openFile`.
+  - Any multi-state key: the image, icon and MDI buttons and image drops set the image of the state shown in the editor (`setKeyImage`/`setKeyIcon`/`setKeyVectorIcon` take a state).
+  - vplayer writes `/run/mk10-vplayer-state`. Studio polls it every 10 s while key actions are on and the theme has a Freeze key, and after each background key press. The page inspector shows "on device", and Freeze keys preview the matching state. Unreadable counts as playing.
+- Verified:
+  - Lint is clean and 54 tests pass, with the real-theme tests run.
+  - Screenshot of a test instance: the new key shows the pause icon, and the inspector shows "State 1 icon…".
+  - On the device, by hand: the state file read playing, then paused after USR1, then playing after USR2, and was removed at exit. Rob's installed vplayer was put back with a `keyboard-device` restart.
+- Not checked:
+  - a real press of the new key end to end with the state-file build installed;
+  - the in-app state flip from a press.
+- Follow-up: reinstall vplayer from the new build (distro).
+
+## 2026-11-25 — Colorable state icons; premade icons tintable
+
+- Outcome:
+  - Toggle states get the same Icon color, outline width and outline color controls as vector icons.
+  - Premade icons (app/icons line art) are now tinted the same way as Material Design icons. The renderer tints the PNG with a `source-in` fill; the outline is the tinted shape stamped at 16 angles. The bytes come over the `iconPng` IPC.
+  - Icon looks: `mk10studioIcon` for plain keys (now also `{premade, color, outline, width}`), and `mk10studioStateIcons` for states, a JSON array on the item. New Freeze background keys start with white pause/play looks.
+- Verified:
+  - Lint is clean and 54 tests pass, with the real-theme tests run.
+  - A CDP-driven test instance on a copy of the device theme: state 1 pause went red with a 3 px black outline, then Press Key, then state 2 play went green. The canvas and the inspector showed each state's own look (screenshots in the session scratchpad).
+  - Rob confirmed the vplayer rebuild (state file) works on the device: `/run/mk10-vplayer-state` reads `playing`.
+- Not checked: pushing a recolored toggle to the device and looking at it.
+
+## 2026-11-25 — `npm run package -- --install`
+
+- Outcome: the `--install` flag on `package.mjs` replaces `/Applications/MK10 Studio.app` with the fresh build (`rm`, then `ditto`, which keeps the signature).
+- Verified: lint is clean. The package run itself was not run here; Rob runs the build.

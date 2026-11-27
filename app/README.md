@@ -16,6 +16,7 @@ npm test           # node --test lib/
 npm run lint       # npm run lint:fix to autofix
 npm run cli -- ...  # headless theme info/roundtrip/device calls (runs under Electron's Node: serialport reads hang under Node 26)
 npm run package    # dist/MK10 Studio-darwin-arm64/MK10 Studio.app (see below)
+npm run package -- --install   # same, then replaces /Applications/MK10 Studio.app
 ```
 
 `npm run package` (package.mjs, @electron/packager) compiles `native/build/hidtap` and builds an arm64
@@ -28,7 +29,7 @@ set (a Developer ID Application identity, name or SHA-1), and also notarizes whe
 Editor: Open a `.Theme` (the dialog starts in the stock ScreenKey theme dir when present; the stock
 `defaultTheme.Theme` opens fine, edits are saved wherever you choose, so use Save As to keep the original).
 Click a key to edit its title or replace its image (or drop an image on the key); click the background
-video area, or drop a video on it, to replace the video (transcoded with ffmpeg to 640x256 h264).
+video area, or drop a video or still image on it, to replace the video (transcoded with ffmpeg to 640x256 h264; an image becomes a 1 s still loop).
 Select the video (click the background) to set where the device shows it: X, Y, width and height
 on the 896x304 panel. The device scales the 640x256 stream to that box without keeping the aspect, so
 "Keep 5:2" ties width and height; Reset puts it back at 0, 0, 640x256.
@@ -194,6 +195,13 @@ appended to `/tmp/mk10.log`. **Save log…** writes the same lines to a file you
   shell; scripts run in their own folder for up to 10 minutes. Each program asks once before it first
   runs (a theme can name anything); Settings > Programs keys may run > Forget all resets that.
   Only macOS has been run; Windows and Linux are covered by unit tests, and Studio isn't packaged for them.
+- **Swap background / Freeze background** (same group; `mk10studioRun` `background` / `freeze`):
+  - Swap background: "Choose image or video…" transcodes the file like a page background into a `MainScreen` asset and names it in the key's path. A press makes the device play it; a second press of the same key returns to the page's own video.
+  - Freeze background: a two-state toggle (a `keyboard_switch` key, so the device flips its image on each press: pause icon, then play). A press pauses the playing video on its current frame; the next press resumes it. Studio reads vplayer's `/run/mk10-vplayer-state` after each press and every 10 s while the theme has such a key. The page inspector shows "on device: playing/paused", and the key's preview follows it. Anything unreadable counts as playing.
+  - Any multi-state key: the image and icon buttons set the image of the state shown in the editor. Double-click or Press Key steps to the next state.
+  - Icon colors: Material Design and premade icons (white line art, tinted) keep their color and outline. They are editable under the image for plain keys (`mk10studioIcon`) and per state (`mk10studioStateIcons`, a JSON array on the item; not inside States, because device tolerance of extra state fields is unchecked).
+  - Both need LilAlpine with `vplayer` installed as the device's `videoplayerinterfaceAPP` (`tools/vplayer`, `docs/handoff-vplayer.md`). Studio checks the player first: the stock launcher exits on SIGUSR1/SIGUSR2.
+  - Studio sends the press over ssh: SIGUSR1 to freeze, or `/run/mk10-background` plus SIGUSR2 to swap. They work only while Studio is running with key actions on. A theme reload or a restart of the device app starts the page video again.
 - **Live stats** (Settings > Key actions and stats, on by default): once a second Studio sends the
   computer's CPU, GPU and RAM usage, CPU model, disk space and network speed/totals (macOS: en* interfaces, `netstat -ib`; Linux: /proc/net/dev) to the device's info widgets (V1 cmd 1),
   limited to the keys the current page asked for (V1 cmd 15 contract). GPU usage comes from

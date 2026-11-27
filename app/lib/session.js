@@ -8,11 +8,12 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import {
   decodeTheme, encodeTheme, decodeControlData, editableActionFields,
-  setKeyTitle, setKeyTitleParam, setKeyImage, setKeySound, setBackgroundVideo, setBackgroundVideoRect, setKeyTitleOutline, setBakedTitle, setKeyVectorIcon, setKeyActionField,
+  setKeyTitle, setKeyTitleParam, setKeyImage, setKeySound, setBackgroundVideo, setBackgroundVideoRect, setKeyBackground, setKeyTitleOutline, setBakedTitle, setKeyVectorIcon, setKeyActionField,
   copyKey, pasteKey, removeKey, moveKeys, parseKeyClip, keyRaw, setKeyRaw, pageRaw, setPageRaw, newKeyTypes, createKey, setKeyIcon, englishDescriptions, fontFamilies, deleteFolder,
 } from './theme.js'
 import { toKeyPng, toDeviceMp4, toDeviceWav } from './media.js'
 import { Device } from './device.js'
+import { BG_ASSET_RE } from './keyactions.js'
 import { packV1, V1_RELOAD } from './proto.js'
 import { DEVICE_FONT_DIR } from './fonts.js'
 import { readMacro, setKeyMacro } from './macro.js'
@@ -168,6 +169,7 @@ export class Session extends EventEmitter {
           title: it.title,
           titleParam: it.titleParam ? JSON.parse(it.titleParam) : undefined,
           icon: it.mk10studioIcon ? JSON.parse(it.mk10studioIcon) : undefined,
+          stateIcons: it.mk10studioStateIcons ? JSON.parse(it.mk10studioStateIcons) : undefined,
           outline: it.mk10studioOutline ? { ...JSON.parse(it.mk10studioOutline), base: it.mk10studioBase || null, sig: it.mk10studioSig || '' } : undefined,
           path: it.path || undefined,
           sound: it.soundFile || undefined,
@@ -358,17 +360,17 @@ export class Session extends EventEmitter {
   }
 
   // input: path to any image ffmpeg can read, or a Buffer that is already a 128x128 PNG
-  async setKeyImage(page, row, col, input) {
+  async setKeyImage(page, row, col, input, state) {
     this.need()
     const png = typeof input === 'string' ? await toKeyPng(input) : input
-    const key = setKeyImage(this.theme, page, row, col, png)
+    const key = setKeyImage(this.theme, page, row, col, png, state)
     this.touch('keyImage')
     return key
   }
 
-  setKeyIcon(page, row, col, name) {
+  setKeyIcon(page, row, col, name, state) {
     this.need()
-    const key = setKeyIcon(this.theme, page, row, col, name)
+    const key = setKeyIcon(this.theme, page, row, col, name, state)
     this.touch('keyImage')
     return key
   }
@@ -391,15 +393,52 @@ export class Session extends EventEmitter {
     return key
   }
 
+  // input: path to a video or still image (transcoded like a page background)
+  async setKeyBackground(page, row, col, input) {
+    this.need()
+    const key = setKeyBackground(this.theme, page, row, col, await toDeviceMp4(input))
+    this.touch('keyAction')
+    return key
+  }
+
+  // Swap background / Freeze background key presses (LilAlpine with vplayer installed as the
+  // device's videoplayerinterfaceAPP; the stock launcher exits on SIGUSR1/2, so check first).
+  // swap: a second press of the same key goes back to the page's own video.
+  async backgroundKey(host, { run: kind, target }) {
+    if (kind !== 'freeze' && !BG_ASSET_RE.test(target)) throw new Error(`not a background asset: ${target}`) // it goes into a shell line
+    const sh = `P=$(pidof videoplayerinterfaceAPP) || { echo "no background video is playing" >&2; exit 2; }
+for p in $P; do case $(readlink /proc/$p/exe) in */vplayer) ;; *) echo "the device's video player can't pause or swap (vplayer is not installed)" >&2; exit 3;; esac; done
+${kind === 'freeze' ? 'kill -USR1 $P' : `F=/data${target}; S=/run/mk10-background
+[ -r "$F" ] || { echo "$F is not on the device: push the theme first" >&2; exit 4; }
+if [ "$(cat $S 2>/dev/null)" = "$F" ]; then : > $S; else echo "$F" > $S; fi
+kill -USR2 $P`}`
+    await run('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', host, sh], { timeout: 15_000 }).catch((e) => {
+      throw new Error(String(e.stderr ?? '').trim().split('\n').pop() || e.message)
+    })
+  }
+
+  // the device's background video state as vplayer reports it; true = paused. Anything unreadable
+  // (no vplayer, no ssh, player restarted) counts as playing.
+  async backgroundPaused(host) {
+    const out = await run('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', host, 'cat /run/mk10-vplayer-state'], { timeout: 10_000 })
+      .then(({ stdout }) => stdout.trim(), () => '')
+    return out === 'paused'
+  }
+
+  // true when some key in the theme is a Freeze background toggle (worth watching the player for)
+  hasFreezeKey() {
+    return !!this.theme?.json.pages.some((p) => (p.items ?? []).some((it) => actionOf(it)?.mk10studioRun === 'freeze'))
+  }
+
   setKeyTitleOutline(page, row, col, outline) {
     this.need()
     setKeyTitleOutline(this.theme, page, row, col, outline)
     this.touch('keyTitle')
   }
 
-  setKeyVectorIcon(page, row, col, png, icon) {
+  setKeyVectorIcon(page, row, col, png, icon, state) {
     this.need()
-    const key = setKeyVectorIcon(this.theme, page, row, col, png, icon)
+    const key = setKeyVectorIcon(this.theme, page, row, col, png, icon, state)
     this.touch('keyImage')
     return key
   }

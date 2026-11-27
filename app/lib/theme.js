@@ -278,8 +278,54 @@ function dropIfOrphan(theme, ref, isDir) {
   }
 }
 
-export function setKeyImage(theme, pageIndex, row, col, pngBuffer) {
+// Icons Studio draws (so their colors stay editable), as stored in mk10studioIcon / mk10studioStateIcons:
+//   Material Design  {"name": mdi name, "color", "outline", "width"}
+//   premade          {"premade": app/icons name, "color", "outline", "width"} (white line art, tinted)
+// colors "#rrggbb", outline width 0-8 px (0 = none). Returns the normalized JSON string.
+function iconMeta(icon) {
+  const { name, premade, color, outline, width } = icon ?? {}
+  if (premade !== undefined) {
+    if (premade.startsWith('PictureFont/') || !listIcons().includes(premade)) throw new Error(`bad premade icon ${JSON.stringify(premade)}`)
+  } else if (!/^[a-z0-9-]+$/.test(name ?? '')) throw new Error(`bad icon name ${JSON.stringify(name)}`)
+  for (const c of [color, outline]) if (!/^#[0-9a-f]{6}$/i.test(c ?? '')) throw new Error(`bad icon color ${JSON.stringify(c)}`)
+  if (!Number.isInteger(width) || width < 0 || width > 8) throw new Error(`icon outline width must be 0-8, got ${width}`)
+  const look = { color: color.toLowerCase(), outline: outline.toLowerCase(), width }
+  return JSON.stringify(premade !== undefined ? { premade, ...look } : { name, ...look })
+}
+const premadeMeta = (name) => (name.startsWith('PictureFont/') ? null : iconMeta({ premade: name, color: '#ffffff', outline: '#000000', width: 0 }))
+
+// Per-state icon looks: item field mk10studioStateIcons, a JSON array by state index (null = a plain
+// image). On the item, not inside States: whether the device tolerates extra state fields is unchecked.
+function setStateIconMeta(it, state, meta) {
+  const a = it.mk10studioStateIcons ? JSON.parse(it.mk10studioStateIcons) : []
+  a[state] = meta ? JSON.parse(meta) : null
+  while (a.length && !a[a.length - 1]) a.pop()
+  if (a.length) it.mk10studioStateIcons = JSON.stringify(a.map((x) => x ?? null))
+  else delete it.mk10studioStateIcons
+}
+
+// A multi-state key's image for one state (jsonData States[state]): the device draws that, not the item path.
+// meta: the icon it was drawn from (iconMeta), or null for any other image.
+function setStateImage(theme, it, state, pngBuffer, meta = null) {
+  const j = JSON.parse(it.jsonData || '{}')
+  const s = j.isMultiState && Array.isArray(j.States) ? j.States[state] : undefined
+  if (!s) throw new Error(`this key has no state ${state + 1}`)
+  const png = Buffer.from(pngBuffer)
+  const [oldPath, oldDir] = [s.path, s.paths]
+  const key = [...theme.assets].find(([, b]) => b.equals(png))?.[0] ?? `/image/MK10/cache/${randomUUID()}.png`
+  theme.assets.set(key, png)
+  Object.assign(s, { path: key, paths: '', frameDelays: '' })
+  it.jsonData = JSON.stringify(j)
+  setStateIconMeta(it, state, meta)
+  dropIfOrphan(theme, oldPath, false)
+  dropIfOrphan(theme, oldDir, true)
+  return key
+}
+
+// state: a multi-state key's state index (sets that state's image); undefined for a plain key
+export function setKeyImage(theme, pageIndex, row, col, pngBuffer, state) {
   const it = needItem(theme, pageIndex, row, col)
+  if (state !== undefined && state !== null) return setStateImage(theme, it, state, pngBuffer)
   const oldPath = it.path
   const oldDir = it.paths
   const oldBase = it.mk10studioBase
@@ -351,13 +397,12 @@ export function setBakedTitle(theme, pageIndex, row, col, pngBuffer, sig) {
 // the key PNG; mk10studioIcon keeps what it was drawn from so the colors can change later:
 //   mk10studioIcon  JSON {"name": mdi name, "color": "#rrggbb", "outline": "#rrggbb", "width": 0-8}
 // Any other image set on the key drops it (setKeyImage / setKeyIcon).
-export function setKeyVectorIcon(theme, pageIndex, row, col, pngBuffer, icon) {
-  const { name, color, outline, width } = icon ?? {}
-  if (!/^[a-z0-9-]+$/.test(name ?? '')) throw new Error(`bad icon name ${JSON.stringify(name)}`)
-  for (const c of [color, outline]) if (!/^#[0-9a-f]{6}$/i.test(c ?? '')) throw new Error(`bad icon color ${JSON.stringify(c)}`)
-  if (!Number.isInteger(width) || width < 0 || width > 8) throw new Error(`icon outline width must be 0-8, got ${width}`)
+// icon: see iconMeta (Material Design or a tinted premade icon); state: a multi-state key's state
+export function setKeyVectorIcon(theme, pageIndex, row, col, pngBuffer, icon, state) {
+  const meta = iconMeta(icon)
+  if (state !== undefined && state !== null) return setStateImage(theme, needItem(theme, pageIndex, row, col), state, pngBuffer, meta)
   const key = setKeyImage(theme, pageIndex, row, col, pngBuffer)
-  needItem(theme, pageIndex, row, col).mk10studioIcon = JSON.stringify({ name, color: color.toLowerCase(), outline: outline.toLowerCase(), width })
+  needItem(theme, pageIndex, row, col).mk10studioIcon = meta
   return key
 }
 
@@ -391,6 +436,21 @@ export function setBackgroundVideo(theme, pageIndex, mp4Buffer) {
   const key = `/theme/MK10/MainScreen/${randomUUID()}.mp4`
   theme.assets.set(key, Buffer.from(mp4Buffer))
   it.path = key
+  dropIfOrphan(theme, old, false)
+  return key
+}
+
+// A Swap background key's image or video: stored like a page background (MainScreen, which the device
+// extracts under /data) and named in the key's action path; the press runs on the device (vplayer).
+export function setKeyBackground(theme, pageIndex, row, col, mp4Buffer) {
+  const it = needItem(theme, pageIndex, row, col)
+  const cd = it.controlData ? decodeControlData(it.controlData) : null
+  const run = cd?.fields.find(([k]) => k === 'mk10studioRun')?.[1].value
+  if (run !== 'background') throw new Error(`key page ${pageIndex} row ${row} col ${col} is not a Swap background key`)
+  const old = cd.fields.find(([k]) => k === 'path')?.[1].value
+  const key = `/theme/MK10/MainScreen/${randomUUID()}.mp4`
+  theme.assets.set(key, Buffer.from(mp4Buffer))
+  setKeyActionField(theme, pageIndex, row, col, 'path', key)
   dropIfOrphan(theme, old, false)
   return key
 }
@@ -688,12 +748,24 @@ export function createKey(theme, pageIndex, row, col, type, titleDefaults = {}) 
     path: '', paths: '', soundFile: '', lock: '1', opacity: '100', rotate: '0', scale: '1', z: '1',
     maxWidth: '896', maxHeight: '304', scaledWidthTo: '128', scaledHeightTo: '128',
   }
-  // default image: the template's line-art icon
+  // default image: the template's line-art icon; a toggle template (states) gets one per state.
+  // The device steps the states on each press and draws each one's image (keyboard_switch only:
+  // jsonData States on an openFile key did nothing, checked 2026-11-25). keycode 0 = KC_NO, so no key is typed.
   const assets = {}
+  const asset = (name) => {
+    const png = iconPng(name)
+    const key = [...theme.assets].find(([, b]) => b.equals(png))?.[0] ?? Object.keys(assets).find((k) => assets[k] === png.toString('base64')) ?? `/image/MK10/cache/${randomUUID()}.png`
+    assets[key] = png.toString('base64')
+    return key
+  }
   if (t.icon) {
-    const png = iconPng(t.icon)
-    item.path = [...theme.assets].find(([, b]) => b.equals(png))?.[0] ?? `/image/MK10/cache/${randomUUID()}.png`
-    assets[item.path] = png.toString('base64')
+    item.path = asset(t.icon)
+    if (premadeMeta(t.icon)) item.mk10studioIcon = premadeMeta(t.icon) // colors editable in the Inspector
+  }
+  if (t.states) {
+    const States = t.states.map((name) => ({ frameDelays: '', keyString: '', keycode: 0, path: asset(name), paths: '', title: '' }))
+    item.jsonData = JSON.stringify({ State: 0, States, isMultiState: true })
+    item.mk10studioStateIcons = `[${t.states.map(premadeMeta).join(',')}]`
   }
   return pasteKey(theme, pageIndex, row, col, { mk10studio: 'key', v: 1, item, assets })
 }
@@ -710,16 +782,22 @@ export function iconPng(name) {
 }
 
 // Set a premade icon as the key's image; an asset with the same bytes is reused
-export function setKeyIcon(theme, pageIndex, row, col, name) {
+export function setKeyIcon(theme, pageIndex, row, col, name, state) {
   const png = iconPng(name)
   const it = needItem(theme, pageIndex, row, col)
+  if (state !== undefined && state !== null) return setStateImage(theme, it, state, png, premadeMeta(name))
   const have = [...theme.assets].find(([, b]) => b.equals(png))?.[0]
-  if (!have) return setKeyImage(theme, pageIndex, row, col, png)
+  if (!have) {
+    const key = setKeyImage(theme, pageIndex, row, col, png)
+    if (premadeMeta(name)) it.mk10studioIcon = premadeMeta(name)
+    return key
+  }
   const [oldPath, oldDir, oldBase] = [it.path, it.paths, it.mk10studioBase]
   it.path = have
   if ('paths' in it) it.paths = ''
   delete it.frameDelays
-  delete it.mk10studioIcon
+  if (premadeMeta(name)) it.mk10studioIcon = premadeMeta(name)
+  else delete it.mk10studioIcon
   rebase(it, have)
   dropIfOrphan(theme, oldPath, false)
   dropIfOrphan(theme, oldDir, true)

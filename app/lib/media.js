@@ -33,8 +33,11 @@ export const toKeyPng = (input) => viaFfmpeg([
 // tinyplay (no resampling) plays it at the right speed too
 export const toDeviceWav = (input, channels = 2) => viaFfmpeg(['-i', input, '-vn', '-ac', String(channels), '-ar', '48000', '-c:a', 'pcm_s16le'], 'wav')
 
-// cover-crop to 640x256, re-encode to what videoplayerinterfaceAPP played in testing
+// cover-crop to 640x256, re-encode to what videoplayerinterfaceAPP played in testing.
+// A still image becomes a 1 s clip of that frame: the player loops it, so the background holds still.
+export const STILL_RE = /\.(png|jpe?g|webp|bmp|tiff?|heic)$/i
 export const toDeviceMp4 = (input) => viaFfmpeg([
+  ...(STILL_RE.test(input) ? ['-loop', '1', '-t', '1'] : []),
   '-i', input, '-an',
   '-vf', `scale=${VIDEO.w}:${VIDEO.h}:force_original_aspect_ratio=increase,crop=${VIDEO.w}:${VIDEO.h},fps=${VIDEO.fps},format=yuv420p`,
   '-c:v', 'libx264', '-profile:v', 'main', '-level', '4.1', '-movflags', '+faststart',

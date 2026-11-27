@@ -9,7 +9,9 @@ import { extname, isAbsolute, join, posix, win32 } from 'node:path'
 
 // Studio's own run actions: an openFile action map with mk10studioRun (the device forwards the whole
 // map on a press). path holds the .app, the script, or the Shortcut's name.
-export const RUN_KINDS = { app: 'runApp', script: 'runScript', shortcut: 'runShortcut' }
+export const RUN_KINDS = { app: 'runApp', script: 'runScript', shortcut: 'runShortcut', background: 'swapBackground', freeze: 'freezeBackground' }
+// swapBackground's path: a theme asset the device extracts under /data (Studio writes these, see theme.js)
+export const BG_ASSET_RE = /^\/theme\/MK10\/MainScreen\/[\w-]+\.mp4$/
 const OSA_EXT = new Set(['.scpt', '.applescript'])
 // what each platform accepts (the Windows sets go by extension: Windows has no exec bit)
 const WIN_APP_EXT = new Set(['.exe', '.lnk'])
@@ -39,9 +41,12 @@ export function planKeyAction(payload, { stat = statSync, sinceOpenMs = Infinity
   if (state?.type !== 'keyState' || !a?.type) return null
   if (!Number(state.pressed)) return null // run on press; the release frame repeats the action
   const type = String(a.type)
-  if (sinceOpenMs < OPEN_GRACE_MS && (type === 'openWeb' || type === 'openDir' || type === 'openFile')) return { drop: true, type: RUN_KINDS[a.mk10studioRun] ?? type }
+  // Studio's run keys: openFile, or keyboard_switch for toggles (the device flips the state image itself;
+  // its keycode 0 types nothing). The press frame carries the action map but not the state.
+  const studio = a.mk10studioRun && (type === 'openFile' || type === 'keyboard_switch')
+  if (sinceOpenMs < OPEN_GRACE_MS && (studio || type === 'openWeb' || type === 'openDir' || type === 'openFile')) return { drop: true, type: RUN_KINDS[a.mk10studioRun] ?? type }
   const skip = (why) => ({ skip: `${type}: ${why}`, type })
-  if (type === 'openFile' && a.mk10studioRun) return planRun(String(a.mk10studioRun), String(a.path ?? '').trim(), stat, platform)
+  if (studio) return planRun(String(a.mk10studioRun), String(a.path ?? '').trim(), stat, platform)
   switch (type) {
     case 'openWeb': {
       const raw = String(a.Url ?? '').trim()
@@ -75,10 +80,14 @@ export function planKeyAction(payload, { stat = statSync, sinceOpenMs = Infinity
 //   app:      macOS a .app bundle; Windows an .exe or .lnk; Linux a .desktop file or an executable
 //   script:   macOS / Linux an executable file (macOS also AppleScript); Windows .bat, .cmd, .ps1, .exe
 //   shortcut: macOS only, a Shortcut's name
+//   background / freeze: the device's background video (swap to the key's asset / pause toggle)
 function planRun(kind, raw, stat, platform) {
   const type = RUN_KINDS[kind]
   const skip = (why) => ({ skip: `${type ?? kind}: ${why}`, type: type ?? kind })
   if (!type) return skip('unknown run kind')
+  // background keys act on the device's video player over ssh (main.js backgroundKey), nothing local
+  if (kind === 'freeze') return { run: kind, target: '', type }
+  if (kind === 'background') return BG_ASSET_RE.test(raw) ? { run: kind, target: raw, type } : skip(raw ? `not a background asset: "${raw}"` : 'choose an image or video for the key first')
   if (kind === 'shortcut') {
     if (platform !== 'darwin') return skip('Shortcuts are macOS only')
     if (!raw || raw.length > 200 || [...raw].some((ch) => ch.charCodeAt(0) < 32)) return skip(`not a Shortcut name: "${raw}"`)

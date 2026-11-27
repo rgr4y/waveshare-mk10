@@ -7,7 +7,7 @@ import { execFile, execFileSync, spawn } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 import { createInterface } from 'node:readline'
 import { Session, DEFAULT_SSH } from './lib/session.js'
-import { listIcons, checkTitleDefaults } from './lib/theme.js'
+import { listIcons, iconPng, checkTitleDefaults } from './lib/theme.js'
 import { hidToQmk, isModifier, CODE_TO_HID, qmkLabel } from './lib/qmk.js'
 import { fontManifest, syncDeviceFonts, systemFonts, DEVICE_FONT_DIR } from './lib/fonts.js'
 import { wire, Device } from './lib/device.js'
@@ -24,6 +24,7 @@ const MIME = { '.png': 'image/png', '.gif': 'image/gif', '.mp4': 'video/mp4', '.
 const IMAGE_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tiff', 'heic', 'svg']
 const AUDIO_EXT = ['wav', 'mp3', 'm4a', 'aac', 'aif', 'aiff', 'flac', 'ogg', 'opus', 'caf']
 const VIDEO_EXT = ['mp4', 'mov', 'm4v', 'mkv', 'avi', 'webm', 'gif']
+const STILL_EXT = ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'tiff', 'heic'] // becomes a still clip (media.js STILL_RE)
 
 const argv = process.argv.slice(app.isPackaged ? 1 : 2) // dev: [electron, '.', ...]; packaged: [exe, ...]
 const flag = (name) => { const i = argv.indexOf(name); return i < 0 ? undefined : (argv[i + 1] ?? true) }
@@ -145,10 +146,10 @@ async function pickFile(title, name, extensions) {
   return r.canceled ? null : r.filePaths[0]
 }
 
-async function setKeyImage(page, row, col, file) {
+async function setKeyImage(page, row, col, file, state) {
   file ??= await pickFile('Choose key image', 'Images', IMAGE_EXT)
   if (!file) return null
-  return task('Set key image', () => session.setKeyImage(page, row, col, file))
+  return task(state == null ? 'Set key image' : `Set state ${state + 1} image`, () => session.setKeyImage(page, row, col, file, state ?? undefined))
 }
 
 // Material Design Icons (@mdi/svg, the set Home Assistant uses): [name, search words, SVG path data],
@@ -168,7 +169,7 @@ async function setKeySound(page, row, col, file) {
 }
 
 async function setBackgroundVideo(page, file) {
-  file ??= await pickFile('Choose background video', 'Video', VIDEO_EXT)
+  file ??= await pickFile('Choose background video or image', 'Video or image', [...VIDEO_EXT, ...STILL_EXT])
   if (!file) return null
   return task('Transcoding video (640x256 h264, can take a while)', () => session.setBackgroundVideo(page, file))
 }
@@ -464,9 +465,22 @@ function onKeyEvent(m) {
   log(`key: ${plan.type} ${plan.target}`)
   const done = plan.run === 'url' ? shell.openExternal(plan.target)
     : plan.run === 'path' ? shell.openPath(plan.target).then((err) => { if (err) throw new Error(err) })
+    : plan.run === 'background' || plan.run === 'freeze' ? session.backgroundKey(settings.ssh.host, plan).finally(watchBackground)
     : runProgram(plan)
   done.catch((e) => { log(`key: ${plan.type} failed: ${e.message}`); status(`Key: ${plan.type} failed: ${e.message}`, { error: true }) })
 }
+
+// Background video pause state (vplayer's /run file over ssh), shown in the editor: after each
+// background key and every 10 s while the theme has a Freeze background key and key actions are on.
+// Unreadable = playing. ponytail: 10 s poll over plain ssh; a persistent ssh (ControlMaster) if it lags.
+let bgPaused = false
+async function watchBackground() {
+  const p = await session.backgroundPaused(settings.ssh.host)
+  if (p === bgPaused) return
+  bgPaused = p
+  if (win && !win.isDestroyed()) win.webContents.send('mk10:bgState', p)
+}
+setInterval(() => { if (settings.keyActions && session.hasFreezeKey()) watchBackground() }, 10_000)
 
 // ---- developer: JSON-RPC window. Shows every message Studio's serial Device sends or gets.
 // Long strings (saveToFile base64 chunks) are cut so the log stays readable.
@@ -595,14 +609,19 @@ function registerIpc() {
   h('macroRecord', (on) => { macroRec = !!on; recHeld.clear() })
   h('setKeyImage', setKeyImage)
   h('icons', () => listIcons())
-  h('setKeyIcon', (p, r, c, name) => session.setKeyIcon(p, r, c, name))
+  h('iconPng', (name) => iconPng(name)) // premade icon bytes, for tinting in the renderer
+  h('setKeyIcon', (p, r, c, name, state) => session.setKeyIcon(p, r, c, name, state ?? undefined))
   h('mdiIcons', mdiIcons)
-  h('setKeyVectorIcon', (p, r, c, png, icon) => session.setKeyVectorIcon(p, r, c, Buffer.from(png), icon))
+  h('setKeyVectorIcon', (p, r, c, png, icon, state) => session.setKeyVectorIcon(p, r, c, Buffer.from(png), icon, state ?? undefined))
   h('setKeySound', setKeySound)
   h('setBackgroundVideo', setBackgroundVideo)
   h('setKeyTitleOutline', (page, row, col, o) => session.setKeyTitleOutline(page, row, col, o))
   h('setBakedTitle', (page, row, col, png, sig) => session.setBakedTitle(page, row, col, Buffer.from(png), sig))
   h('pickRunTarget', async (page, row, col, kind) => {
+    if (kind === 'background') {
+      const file = await pickFile('Choose the image or video this key shows', 'Video or image', [...VIDEO_EXT, ...STILL_EXT])
+      return file && task('Transcoding for the key (640x256 h264)', () => session.setKeyBackground(page, row, col, file))
+    }
     const filters = { darwin: ['app'], win32: ['exe', 'lnk'] }[process.platform] // Linux: any file (.desktop or executable)
     const r = await dialog.showOpenDialog(win, kind === 'app'
       ? { title: 'Choose an application', defaultPath: MAC ? '/Applications' : undefined, properties: ['openFile'], filters: filters && [{ name: 'Applications', extensions: filters }] }
@@ -616,6 +635,7 @@ function registerIpc() {
   h('allowedRuns', () => settings.allowedRuns ?? [])
   h('forgetRuns', async () => { settings.allowedRuns = []; await saveSettings() })
   h('setVideoRect', (page, rect) => session.setVideoRect(page, rect))
+  h('bgState', () => bgPaused)
   h('push', push)
   h('pull', pull)
   h('setLevel', (method, level) => session.setLevel(method, level))

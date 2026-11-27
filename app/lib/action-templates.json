@@ -833,5 +833,88 @@
    ]
   ],
   "icon": "shortcut"
+ },
+ "swapBackground": {
+  "group": "Run by Studio",
+  "label": "Swap background",
+  "fields": [
+   [
+    "AISoundControlKeyword",
+    10,
+    ""
+   ],
+   [
+    "description",
+    10,
+    "Swap background"
+   ],
+   [
+    "iconPath",
+    10,
+    "/static/icon/dark/openFile.png"
+   ],
+   [
+    "mk10studioRun",
+    10,
+    "background"
+   ],
+   [
+    "parentDescription",
+    10,
+    "System file control"
+   ],
+   [
+    "path",
+    10,
+    ""
+   ],
+   [
+    "type",
+    10,
+    "openFile"
+   ]
+  ],
+  "icon": "camera"
+ },
+ "freezeBackground": {
+  "group": "Run by Studio",
+  "label": "Freeze background",
+  "fields": [
+   [
+    "AISoundControlKeyword",
+    10,
+    ""
+   ],
+   [
+    "description",
+    10,
+    "Freeze background"
+   ],
+   [
+    "iconPath",
+    10,
+    "/static/icon/dark/keyboard.png"
+   ],
+   [
+    "mk10studioRun",
+    10,
+    "freeze"
+   ],
+   [
+    "parentDescription",
+    10,
+    "System input control"
+   ],
+   [
+    "type",
+    10,
+    "keyboard_switch"
+   ]
+  ],
+  "icon": "pause",
+  "states": [
+   "pause",
+   "play"
+  ]
  }
 }

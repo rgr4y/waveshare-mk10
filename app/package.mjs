@@ -2,9 +2,10 @@
 // Signing: APP_IDENTITY (codesign identity name or SHA-1, a Developer ID Application cert) signs it with
 // the hardened runtime. Notarizing: also set APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and APPLE_TEAM_ID.
 // Without APP_IDENTITY the app is unsigned. `set -a; source ../.env` (or the exports in it) first.
+// `npm run package -- --install` also replaces /Applications/MK10 Studio.app with the build.
 import { packager } from '@electron/packager'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, rmSync } from 'node:fs'
 
 const env = process.env
 const sign = env.APP_IDENTITY
@@ -31,3 +32,11 @@ const [dir] = await packager({
   osxNotarize: notarize ? { appleId: env.APPLE_ID, appleIdPassword: env.APPLE_APP_SPECIFIC_PASSWORD, teamId: env.APPLE_TEAM_ID } : undefined,
 })
 console.log(`built ${dir}/MK10 Studio.app`)
+
+if (process.argv.includes('--install')) {
+  const dest = '/Applications/MK10 Studio.app'
+  console.log(`installing to ${dest} (quit a running copy first)…`)
+  rmSync(dest, { recursive: true, force: true })
+  execFileSync('ditto', [`${dir}/MK10 Studio.app`, dest], { stdio: 'inherit', timeout: 60_000 })
+  console.log(`installed ${dest}`)
+}

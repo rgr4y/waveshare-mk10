@@ -10,7 +10,7 @@ import {
   decodeTheme, encodeTheme, formatQtJson, decodeControlData, encodeControlData,
   pages, listKeys, getItem, setKeyTitle, setKeyImage, setKeySound, setBackgroundVideo,
   editableActionFields, setKeyActionField, copyKey, pasteKey, removeKey, moveKeys, parseKeyClip, keyRaw, setKeyRaw,
-  pageRaw, setPageRaw, newKeyTypes, createKey, checkTitleDefaults, setBackgroundVideoRect, setKeyTitleOutline, setBakedTitle, setKeyTitleParam, englishDescriptions, fontFamilies, deleteFolder, listIcons, setKeyIcon, setKeyVectorIcon,
+  pageRaw, setPageRaw, newKeyTypes, createKey, checkTitleDefaults, setBackgroundVideoRect, setKeyTitleOutline, setBakedTitle, setKeyTitleParam, englishDescriptions, fontFamilies, deleteFolder, listIcons, setKeyIcon, setKeyVectorIcon, setKeyBackground, iconPng,
 } from './theme.js'
 
 // Pristine stock theme (ScreenKeyMacOS v1.1 bundle, captured 2026-11-24 before an accidental vendor-app save); sha in SHA256SUMS.txt
@@ -315,6 +315,7 @@ test('real theme: createKey makes a plain key of each offered type in an empty s
   assert.equal(cd.fields.find(([k]) => k === 'type')[1].value, 'openWeb')
   assert.equal(encodeControlData(cd), it.controlData)
   setKeyActionField(a, pi, r, c, 'Url', 'https://example.com/')
+  assert.throws(() => setKeyBackground(a, pi, r, c, Buffer.from('x')), /not a Swap background key/)
   assert.throws(() => createKey(a, pi, r, c, 'openWeb'), /already holds a key/)
   // a type with a default icon gets it as its image; a second key reuses the same asset
   const free = [0, 1].flatMap((r) => [0, 1, 2, 3, 4].map((c) => [r, c])).filter(([r, c]) => !getItem(a, pi, r, c))
@@ -431,8 +432,12 @@ test('real theme: setKeyVectorIcon keeps the icon settings; another image drops 
   assert.throws(() => setKeyVectorIcon(a, 0, k.row, k.col, png, { ...icon, width: 9 }), /0-8/)
   assert.throws(() => setKeyVectorIcon(a, 0, k.row, k.col, png, { ...icon, name: '../x' }), /bad icon name/)
   assert.throws(() => setKeyVectorIcon(a, 0, k.row, k.col, png, { ...icon, color: 'red' }), /bad icon color/)
+  // a premade icon is tinted line art: its look is kept too (white, no outline)
   setKeyIcon(a, 0, k.row, k.col, 'globe')
-  assert.equal(it.mk10studioIcon, undefined)
+  assert.deepEqual(JSON.parse(it.mk10studioIcon), { premade: 'globe', color: '#ffffff', outline: '#000000', width: 0 })
+  setKeyVectorIcon(a, 0, k.row, k.col, png, { premade: 'globe', color: '#00FF00', outline: '#000000', width: 1 })
+  assert.equal(JSON.parse(it.mk10studioIcon).color, '#00ff00')
+  assert.throws(() => setKeyVectorIcon(a, 0, k.row, k.col, png, { premade: 'nope', color: '#000000', outline: '#000000', width: 0 }), /bad premade icon/)
   setKeyVectorIcon(a, 0, k.row, k.col, png, icon)
   setKeyImage(a, 0, k.row, k.col, Buffer.from('other'))
   assert.equal(it.mk10studioIcon, undefined)
@@ -506,4 +511,49 @@ test('real theme: outlined title bakes into the image and comes back off', { ski
   assert.throws(() => setKeyTitleOutline(a, pi, r, c, { width: 9, color: '#000000' }), /0-8/)
   assert.throws(() => setKeyTitleOutline(a, pi, r, c, { width: 2, color: 'black' }), /color/)
   assert.ok(decodeTheme(encodeTheme(a)))
+})
+
+test('real theme: a Swap background key keeps its asset; replacing it drops the old one', { skip }, () => {
+  const a = decodeTheme(load())
+  const pi = a.json.pages.findIndex((p, i) => i < 6 && [0, 1].some((r) => [0, 1, 2, 3, 4].some((c) => !getItem(a, i, r, c))))
+  const [r, c] = [0, 1].flatMap((r) => [0, 1, 2, 3, 4].map((c) => [r, c])).find(([r, c]) => !getItem(a, pi, r, c))
+  createKey(a, pi, r, c, 'swapBackground')
+  const path = () => decodeControlData(getItem(a, pi, r, c).controlData).fields.find(([k]) => k === 'path')[1].value
+  const k1 = setKeyBackground(a, pi, r, c, Buffer.from('one'))
+  assert.match(k1, /^\/theme\/MK10\/MainScreen\/[\w-]+\.mp4$/)
+  assert.equal(path(), k1)
+  assert.equal(String(a.assets.get(k1)), 'one')
+  const k2 = setKeyBackground(a, pi, r, c, Buffer.from('two'))
+  assert.equal(path(), k2)
+  assert.ok(!a.assets.has(k1)) // only this key referenced it
+})
+
+test('real theme: Freeze background is a two-state toggle; image edits go to one state', { skip }, () => {
+  const a = decodeTheme(load())
+  const pi = a.json.pages.findIndex((p, i) => i < 6 && [0, 1].some((r) => [0, 1, 2, 3, 4].some((c) => !getItem(a, i, r, c))))
+  const [r, c] = [0, 1].flatMap((r) => [0, 1, 2, 3, 4].map((c) => [r, c])).find(([r, c]) => !getItem(a, pi, r, c))
+  createKey(a, pi, r, c, 'freezeBackground')
+  const it = getItem(a, pi, r, c)
+  assert.equal(decodeControlData(it.controlData).fields.find(([k]) => k === 'type')[1].value, 'keyboard_switch')
+  const states = () => JSON.parse(getItem(a, pi, r, c).jsonData).States
+  const [s0, s1] = states()
+  assert.ok(a.assets.get(s0.path).equals(iconPng('pause')) && a.assets.get(s1.path).equals(iconPng('play')))
+  assert.equal(s0.keycode, 0)
+  // state 2 gets a new image; state 1 and the play icon's asset (now unused) behave
+  const k = setKeyImage(a, pi, r, c, iconPng('lock'), 1)
+  assert.equal(states()[1].path, k)
+  assert.equal(states()[0].path, s0.path)
+  assert.ok(!a.assets.has(s1.path) || [...a.json.pages].some((p) => JSON.stringify(p).includes(s1.path)))
+  // per-state icon looks live in the item's mk10studioStateIcons; a plain image clears that state's entry
+  const looks = () => JSON.parse(getItem(a, pi, r, c).mk10studioStateIcons ?? '[]')
+  assert.equal(looks()[0].premade, 'pause')
+  assert.equal(looks()[1], undefined) // state 2 got a plain image above
+  setKeyIcon(a, pi, r, c, 'play', 1)
+  assert.ok(a.assets.get(states()[1].path).equals(iconPng('play')))
+  assert.equal(looks()[1].premade, 'play')
+  setKeyVectorIcon(a, pi, r, c, Buffer.from('red play'), { premade: 'play', color: '#ff0000', outline: '#000000', width: 0 }, 1)
+  assert.equal(looks()[1].color, '#ff0000')
+  assert.equal(String(a.assets.get(states()[1].path)), 'red play')
+  assert.equal(looks()[0].color, '#ffffff')
+  assert.throws(() => setKeyImage(a, pi, r, c, iconPng('lock'), 2), /no state 3/)
 })

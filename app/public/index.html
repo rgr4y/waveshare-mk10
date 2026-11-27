@@ -128,7 +128,7 @@
         <button id="btn-run-pick" type="button" hidden>Choose…</button>
         </details>
         <details id="key-states-grp" class="grp" data-grp="key-states" open hidden>
-        <summary><h3>States <span class="muted">(toggles on each press; right-click &gt; Press Key previews)</span></h3></summary>
+        <summary><h3>States <span class="muted">(toggles on each press; double-click or Press Key previews the next; the image and icon buttons set the state shown)</span></h3></summary>
         <dl id="key-states" class="kv"></dl>
         </details>
       </div>
@@ -140,8 +140,8 @@
         <details class="grp" data-grp="page-video" open>
         <summary><h3>Main background</h3></summary>
         <dl id="pg-video" class="kv"></dl>
-        <button id="btn-pg-video" type="button">Replace video…</button>
-        <p class="hint">Or drop a video on the background. Transcoded to 640×256 h264 via ffmpeg.</p>
+        <button id="btn-pg-video" type="button">Replace video or image…</button>
+        <p class="hint">Or drop a video or image on the background. Transcoded to 640×256 h264 via ffmpeg; an image becomes a still 1 s loop.</p>
         </details>
         <details class="grp" data-grp="page-panel" open>
         <summary><h3>Info panel</h3></summary>
@@ -171,7 +171,7 @@
         </div>
         <p class="hint">The device scales the video to this box; the panel is 896×304 and the keys cover x 0–640, y 0–256.</p>
         </details>
-        <button id="btn-video" type="button">Replace video…</button>
+        <button id="btn-video" type="button">Replace video or image…</button>
         <p class="hint">The file is transcoded to 640×256 h264 (25 fps, no audio) via ffmpeg. This can take a while.</p>
       </div>
 

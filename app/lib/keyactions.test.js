@@ -56,6 +56,15 @@ test('planKeyAction: Studio run keys (openFile + mk10studioRun)', () => {
   assert.deepEqual(plan('shortcut', ' Morning '), { run: 'shortcut', target: 'Morning', type: 'runShortcut' })
   assert.match(plan('shortcut', '').skip, /not a Shortcut name/)
   assert.match(plan('rm', '/x/go.sh').skip, /unknown run kind/)
+  // background keys: only a Studio-made MainScreen asset (it goes into a device shell line)
+  assert.deepEqual(plan('background', '/theme/MK10/MainScreen/ab-12.mp4'), { run: 'background', target: '/theme/MK10/MainScreen/ab-12.mp4', type: 'swapBackground' })
+  assert.match(plan('background', '').skip, /choose an image or video/)
+  assert.match(plan('background', '/theme/MK10/MainScreen/x.mp4;reboot').skip, /not a background asset/)
+  assert.deepEqual(plan('freeze', ''), { run: 'freeze', target: '', type: 'freezeBackground' })
+  // toggles are keyboard_switch keys (the device steps their state images); the frame has no path
+  const sw = { type: 'keyboard_switch', mk10studioRun: 'freeze', description: 'Keyboard (switch)' }
+  assert.deepEqual(planKeyAction(press(sw), { stat }), { run: 'freeze', target: '', type: 'freezeBackground' })
+  assert.equal(planKeyAction(press({ type: 'keyboard_switch' }), { stat }), null) // plain toggle: device-only
   // plain openFile still refuses scripts
   assert.match(planKeyAction(press({ type: 'openFile', path: '/x/go.sh' }), { stat }).skip, /refusing/)
   assert.equal(planKeyAction(press({ type: 'openFile', mk10studioRun: 'app', path: '/Applications/Notes.app' }), { stat, sinceOpenMs: 10 }).drop, true)
