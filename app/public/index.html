@@ -63,6 +63,7 @@
         <label class="inline"><input id="panel-snap" type="checkbox" checked> Snap</label>
         <label class="inline" title="Grid in px; hold Option while dragging to ignore it"><input id="panel-grid" type="number" min="2" max="40" step="1" value="8"> px</label>
         <label class="inline"><input id="panel-zoom" type="checkbox"> Zoom</label>
+        <button id="btn-panel-add" type="button">Add object…</button>
       </div>
       <div id="panel" class="panel" hidden>
         <div id="bg" class="bg" title="Background video">
@@ -159,6 +160,7 @@
         <details class="grp" data-grp="page-panel" open>
         <summary><h3>Info panel</h3></summary>
         <dl id="pg-panel" class="kv"></dl>
+        <div class="row-buttons"><button id="btn-page-panel-add" type="button">Add object…</button></div>
         </details>
         <details class="grp" data-grp="page-json" open>
         <summary><h3>Raw JSON <span class="muted">(the whole page: canvas and every item)</span></h3></summary>
@@ -173,7 +175,7 @@
           <label class="field"><span>X</span><input id="panel-x" type="number" min="0" max="239" step="1"></label>
           <label class="field"><span>Y</span><input id="panel-y" type="number" min="0" max="295" step="1"></label>
         </div>
-        <dl id="panel-info" class="kv"></dl>
+        <dl id="panel-fields" class="kv"></dl>
         <p id="panel-arc-hint" class="hint" hidden>The device draws this arc static; pushed values don't move it.</p>
         <div class="row-buttons"><button id="btn-panel-delete" type="button">Delete</button></div>
       </div>
@@ -245,6 +247,11 @@
     <input id="new-key-q" type="search" placeholder="Add a key: type to filter actions" spellcheck="false" autocomplete="off" aria-controls="new-key-list">
     <ul id="new-key-list" role="listbox"></ul>
     <p class="hint palette-foot"><span id="new-key-slot"></span> · ↑↓ choose · Enter adds · Esc closes</p>
+  </dialog>
+
+  <dialog id="new-obj-dlg" class="palette">
+    <ul id="new-obj-list" role="listbox"></ul>
+    <p class="hint palette-foot">Adds to the info panel, centred and on top · Esc closes</p>
   </dialog>
 
   <dialog id="icon-dlg" class="palette icon-dlg">
@@ -370,6 +377,7 @@
   <template id="tpl-digit"><img class="digit" alt="" draggable="false"></template>
   <template id="tpl-sec-text"><div class="sec sec-text"></div></template>
   <template id="tpl-sec-ring"><div class="sec sec-ring"><span class="ring-label"></span></div></template>
+  <template id="tpl-sec-bar"><div class="sec sec-bar"></div></template>
   <template id="tpl-sec-box"><div class="sec sec-box"><span class="box-type"></span><span class="box-name"></span></div></template>
 
   <template id="tpl-kv"><div class="kv-row"><dt></dt><dd></dd></div></template>
@@ -386,6 +394,12 @@
   <template id="tpl-ms-startLoop"><span class="ms-row">Repeat <input class="ms-count" type="number" min="1" step="1" aria-label="Repeat count"> times:</span></template>
   <template id="tpl-ms-stopLoop"><span class="ms-row muted">End repeat</span></template>
   <template id="tpl-ms-other"><span class="ms-row muted"></span></template>
+  <template id="tpl-pf-number"><div class="kv-row"><dt></dt><dd><input type="number" step="1"></dd></div></template>
+  <template id="tpl-pf-name"><div class="kv-row"><dt></dt><dd><input type="text" list="data-names" spellcheck="false" autocomplete="off"></dd></div></template>
+  <template id="tpl-pf-flag"><div class="kv-row"><dt></dt><dd><label class="inline"><input type="checkbox"> Show live value</label></dd></div></template>
+  <template id="tpl-pf-color"><div class="kv-row"><dt></dt><dd class="pf-pair"><input type="color"><input type="number" min="0" max="255" step="1" class="pf-alpha" title="Alpha 0-255" aria-label="Alpha"></dd></div></template>
+  <template id="tpl-pf-font"><div class="kv-row"><dt></dt><dd class="pf-pair"><select aria-label="Font"></select><input type="number" min="6" max="300" step="1" class="pf-alpha" title="Size" aria-label="Size"></dd></div></template>
+  <datalist id="data-names"></datalist>
   <template id="tpl-kv-edit"><div class="kv-row"><dt></dt><dd><input type="text" spellcheck="false"></dd></div></template>
 </body>
 </html>

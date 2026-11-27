@@ -615,10 +615,19 @@ function draw(box, items, dx, byZ = false) {
       if (clock) el.dataset.clock = it.systemData
       el.textContent = clock ? clock() : it.text === 'Text' && /usage/i.test(it.systemData ?? '') ? '--%' : (it.text ?? '')
       el.style.fontSize = clock || it.text === '：' ? '48px' : it.text === 'Text' ? '18px' : '14px'
+      if (it.raw?.front_color) el.style.color = cssColor(it.raw.front_color)
     } else if (it.type === '109' || it.type === '101') {
       el = tpl('tpl-sec-ring')
       el.querySelector('.ring-label').textContent = it.systemData ?? ''
       if (it.radius) el.style.width = el.style.height = `${2 * it.radius * (it.scale || 1)}px`
+    } else if (it.type === '102') {
+      // bar: front_color fill over back_color, drawn half full (the device fills it from the pushed value)
+      el = tpl('tpl-sec-bar')
+      const [f, b] = [cssColor(it.raw?.front_color), cssColor(it.raw?.back_color)]
+      el.style.background = `linear-gradient(to right, ${f} 50%, ${b} 50%)`
+      el.style.width = `${it.w ?? 80}px`
+      el.style.height = `${it.h ?? 12}px`
+      el.style.borderRadius = `${it.raw?.corner_radius ?? 0}px`
     } else {
       el = tpl('tpl-sec-box')
       el.querySelector('.box-type').textContent = `type ${it.type}`
@@ -871,6 +880,117 @@ async function applyRawEditor() {
   else loadRaw()
 }
 
+// ---- info panel object fields (the same names as lib/panel.js PANEL_FIELDS; values are strings)
+const PANEL_FIELDS = {
+  113: ['text_str', 'system_data_flag', 'system_data_name', 'text_font', 'front_color'],
+  111: ['system_data_name', 'displayNum', 'displayType', 'paths', 'text_font', 'w', 'h'],
+  102: ['system_data_name', 'w', 'h', 'front_color', 'back_color', 'corner_radius'],
+  101: ['system_data_name', 'radius', 'scale', 'margin', 'front_color', 'back_color'],
+  109: ['system_data_name', 'radius', 'scale', 'gradientColor1', 'gradientColor2', 'gradientColor3'],
+  114: ['w', 'h'],
+}
+const PF_LABEL = { text_str: 'Text', system_data_flag: 'Source', system_data_name: 'Data name', text_font: 'Font', front_color: 'Color', back_color: 'Back color', displayNum: 'Digits',
+  displayType: 'Type (0 text, 1 glyphs)', paths: 'Glyph folder', w: 'Width', h: 'Height', corner_radius: 'Corner radius', radius: 'Radius', scale: 'Scale', margin: 'Margin' }
+const isColorField = (k) => k.endsWith('_color') || k.startsWith('gradientColor')
+
+// "r=255,g=0,b=0,a=250" <-> {hex, a}
+function parseColor(v) {
+  const m = Object.fromEntries(String(v ?? '').split(',').map((p) => p.split('=')))
+  const h = (n) => Math.min(255, Math.max(0, Number(n) || 0)).toString(16).padStart(2, '0')
+  return { hex: `#${h(m.r)}${h(m.g)}${h(m.b)}`, a: m.a === undefined ? 255 : Math.min(255, Math.max(0, Number(m.a) || 0)) }
+}
+const cssColor = (v) => { const c = parseColor(v); return `rgb(${parseInt(c.hex.slice(1, 3), 16)} ${parseInt(c.hex.slice(3, 5), 16)} ${parseInt(c.hex.slice(5, 7), 16)} / ${(c.a / 255).toFixed(2)})` }
+const fmtColor = (hex, a) => `r=${parseInt(hex.slice(1, 3), 16)},g=${parseInt(hex.slice(3, 5), 16)},b=${parseInt(hex.slice(5, 7), 16)},a=${a}`
+
+let dataNameList = null // [] until the first fetch lands
+function fillDataNames() {
+  if (dataNameList) return
+  dataNameList = []
+  window.mk10.dataNames().then((l) => {
+    dataNameList = l
+    $('data-names').replaceChildren(...l.map((n) => { const o = tpl('tpl-option'); o.value = n; return o }))
+  }).catch(() => { dataNameList = null })
+}
+
+// text_font is "Family,size,..." (Qt QFont string): edit family and size, keep the rest
+function setFontPart(raw, i, v) {
+  const p = String(raw ?? 'Arial,24,-1,5,50,0,0,0,0,0').split(',')
+  p[i] = String(v)
+  return p.join(',')
+}
+
+function panelFieldRow(it, k) {
+  const v = it.raw?.[k] ?? ''
+  const set = (val) => run(window.mk10.panelSet(ui.page, it.index, { [k]: val }))
+  let row
+  if (k === 'system_data_flag') {
+    row = tpl('tpl-pf-flag')
+    const cb = row.querySelector('input')
+    cb.checked = v === '1'
+    cb.addEventListener('change', () => set(cb.checked ? '1' : '0'))
+  } else if (isColorField(k)) {
+    row = tpl('tpl-pf-color')
+    const [col, alpha] = row.querySelectorAll('input')
+    const c = parseColor(v)
+    col.value = c.hex
+    alpha.value = c.a
+    const commit = () => set(fmtColor(col.value, Math.min(255, Math.max(0, Math.round(Number(alpha.value)) || 0))))
+    col.addEventListener('change', commit)
+    alpha.addEventListener('change', commit)
+  } else if (k === 'text_font') {
+    row = tpl('tpl-pf-font')
+    const [sel, size] = [row.querySelector('select'), row.querySelector('input')]
+    const parts = String(v).split(',')
+    fillFontSelect(parts[0], sel)
+    size.value = parts[1] ?? 24
+    sel.addEventListener('change', () => set(setFontPart(v, 0, sel.value)))
+    size.addEventListener('change', () => set(setFontPart(v, 1, Math.min(300, Math.max(6, Math.round(Number(size.value)) || 24)))))
+  } else {
+    const kind = k === 'system_data_name' ? 'tpl-pf-name' : ['text_str', 'paths'].includes(k) ? 'tpl-kv-edit' : 'tpl-pf-number'
+    row = tpl(kind)
+    const input = row.querySelector('input')
+    input.value = v
+    if (kind === 'tpl-pf-number') input.step = k === 'scale' ? '0.05' : '1'
+    input.addEventListener('change', () => {
+      if (kind !== 'tpl-pf-number') return set(input.value)
+      if (input.value !== '' && Number.isFinite(Number(input.value))) set(input.value)
+    })
+  }
+  row.querySelector('dt').textContent = PF_LABEL[k] ?? k
+  return row
+}
+
+// rebuilt on item or type change only, never under a focused input (the summary refreshes after every edit)
+function renderPanelFields(it, bg) {
+  const dl = $('panel-fields')
+  const key = `${ui.page}:${it.index}:${it.type}`
+  if (dl.dataset.key === key && dl.contains(document.activeElement)) return
+  dl.dataset.key = key
+  fillDataNames()
+  dl.replaceChildren(...(bg ? [] : (PANEL_FIELDS[it.type] ?? []).map((k) => panelFieldRow(it, k))))
+}
+
+const PANEL_OBJECTS = [['text', 'Text', 'static'], ['data', 'Data value', 'live number'], ['clock', 'Clock', 'hour or minute'], ['bar', 'Bar', 'follows a value'], ['ring', 'Ring', 'follows a value']]
+function openNewObject() {
+  const dlg = $('new-obj-dlg')
+  if (dlg.open || !ui.summary?.pages?.length) return
+  $('new-obj-list').replaceChildren(...PANEL_OBJECTS.map(([kind, label, note]) => {
+    const li = tpl('tpl-palette-item')
+    li.querySelector('.pal-label').textContent = label
+    li.querySelector('.pal-group').textContent = note
+    li.addEventListener('click', async () => {
+      dlg.close()
+      try {
+        const index = await window.mk10.panelAdd(ui.page, kind)
+        await onChange({ kind: 'panelAdd' }) // the summary must hold the new item before it is selected
+        select({ kind: 'panel', index })
+      } catch (e) { setStatus({ msg: e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ''), error: true }) }
+    })
+    return li
+  }))
+  dlg.showModal()
+}
+
 function renderPanelInspector(it) {
   const bg = isPanelBg(it)
   $('panel-title').textContent = bg ? 'Panel background' : (WIDGET_NAMES[it.type] ?? `type ${it.type}`)
@@ -879,15 +999,7 @@ function renderPanelInspector(it) {
     el.disabled = bg
     if (el !== document.activeElement) el.value = v
   }
-  const info = [['data name', it.systemData || '(none)']]
-  if (it.type === '113') info.push(['text', it.flag === '1' ? 'live value' : (it.text ?? '')])
-  $('panel-info').replaceChildren(...info.flatMap(([k, v]) => {
-    const dt = document.createElement('dt')
-    const dd = document.createElement('dd')
-    dt.textContent = k
-    dd.textContent = v
-    return [dt, dd]
-  }))
+  renderPanelFields(it, bg)
   $('panel-arc-hint').hidden = it.type !== '109'
 }
 
@@ -1702,6 +1814,9 @@ async function init() {
     }
   })
   $('new-key-dlg').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close() })
+  $('new-obj-dlg').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close() })
+  $('btn-panel-add').addEventListener('click', openNewObject)
+  $('btn-page-panel-add').addEventListener('click', openNewObject)
 
   await onChange({ kind: 'init' })
 }

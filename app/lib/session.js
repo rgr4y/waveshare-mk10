@@ -16,7 +16,7 @@ import { Device } from './device.js'
 import { BG_ASSET_RE } from './keyactions.js'
 import { packV1, V1_RELOAD } from './proto.js'
 import { DEVICE_FONT_DIR } from './fonts.js'
-import { isPanelItem, movePanelItem, deletePanelItem, setPanelZ, alignPos } from './panel.js'
+import { isPanelItem, movePanelItem, deletePanelItem, setPanelZ, alignPos, addPanelItem, setPanelItem, dataNames } from './panel.js'
 import { readMacro, setKeyMacro } from './macro.js'
 
 const run = promisify(execFile)
@@ -50,7 +50,7 @@ export const DEFAULT_SSH = { host: 'root@10.0.1.48', remote: DEFAULT_REMOTE }
 export const DEFAULT_PUSH = { mode: 'auto', port: null, ...DEFAULT_SSH }
 const CONFIG = '/mnt/SDCARD/config.json'
 
-const KEY_OPS = new Set(['keyCut', 'keyPaste', 'keyDelete', 'keyRaw', 'pageRaw', 'keyNew', 'keyMove', 'folderDelete', 'undo', 'panelMove', 'panelDelete', 'panelZ', 'panelAlign'])
+const KEY_OPS = new Set(['keyCut', 'keyPaste', 'keyDelete', 'keyRaw', 'pageRaw', 'keyNew', 'keyMove', 'folderDelete', 'undo', 'panelMove', 'panelDelete', 'panelZ', 'panelAlign', 'panelAdd', 'panelSet'])
 const num = (v) => (v === undefined || v === '' ? undefined : Number(v))
 
 // Multi-state keys (e.g. keyboard_switch, a toggle): item jsonData holds the per-state image, title and
@@ -180,6 +180,7 @@ export class Session extends EventEmitter {
           paths: it.paths || undefined,
           frameDelays: it.frameDelays || undefined,
           text: it.text_str,
+          raw: it.backgroundType === 'secondary' ? { ...it } : undefined, // Inspector fields
           systemData: it.system_data_name,
           digits: num(it.displayNum),
           font: it.text_font || undefined,
@@ -490,6 +491,19 @@ kill -USR2 $P`}`
 
   panelZ(page, index, dir) {
     return this.panelOp('panelZ', true, () => setPanelZ(this.theme, page, index, dir))
+  }
+
+  panelAdd(page, kind) {
+    return this.panelOp('panelAdd', true, () => addPanelItem(this.theme, page, kind))
+  }
+
+  panelSet(page, index, fields) {
+    this.panelOp('panelSet', true, () => setPanelItem(this.theme, page, index, fields))
+  }
+
+  dataNames() {
+    this.need()
+    return dataNames(this.theme)
   }
 
   panelAlign(page, index, how, size) {

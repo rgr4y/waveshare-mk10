@@ -190,7 +190,8 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 /* secondary 240x296 panel at x=656 */
 .secondary { position: absolute; left: 656px; top: 0; width: 240px; height: 296px; overflow: hidden; background: #0b0d11; touch-action: none; }
 .sec { position: absolute; cursor: default; }
-.sec[data-selected=true] { outline: 2px solid var(--accent); outline-offset: -1px; }
+/* two-tone (white inside, dark outside) so it shows on any panel background, including the blue stock one */
+.sec[data-selected=true] { outline: 2px solid #fff; outline-offset: -1px; box-shadow: 0 0 0 1px #000, inset 0 0 0 1px #000; }
 .sec[data-selected=true]:not([data-bg=true]) { cursor: move; }
 /* align bar above the panel; it keeps its space while hidden so the panel doesn't jump */
 .panel-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); visibility: hidden; }
@@ -301,6 +302,9 @@ body.rpc { display: flex; flex-direction: column; height: 100vh; margin: 0; over
 .palette li { display: flex; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-2) var(--sp-4); cursor: pointer; }
 .palette li[aria-selected="true"] { background: var(--accent); color: #fff; }
 .palette .pal-group { opacity: .6; font-size: 12px; }
+.pf-pair { display: flex; gap: var(--sp-1); }
+.kv dd .pf-alpha { width: 56px; flex: none; }
+.kv dd input[type=color] { width: 40px; flex: none; padding: 0; }
 .palette-foot { margin: 0; padding: var(--sp-2) var(--sp-4); border-top: 1px solid var(--line); }
 
 /* key title look: font, size, style, position, color, show/underline */

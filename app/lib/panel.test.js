@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { decodeTheme, listKeys } from './theme.js'
-import { movePanelItem, deletePanelItem, setPanelZ, alignPos } from './panel.js'
+import { movePanelItem, deletePanelItem, setPanelZ, alignPos, isPanelItem, PANEL_KINDS, addPanelItem, setPanelItem, dataNames } from './panel.js'
 import { Session } from './session.js'
 
 const REAL = new URL('../../img/stock/defaultTheme.Theme', import.meta.url).pathname
@@ -94,4 +94,51 @@ test('Session: panelMove undoes, a non-panel edit clears undo, panelBegin groups
   s.undo()
   assert.equal(items(s.theme)[i].x, '700')
   assert.throws(() => s.panelAlign(0, idx(s.theme, 0, '115'), 'left', { w: 1, h: 1 }), /no panel item/)
+})
+
+test('addPanelItem adds each kind centred, on top, with a unique id', { skip }, () => {
+  const t = decodeTheme(load())
+  for (const kind of PANEL_KINDS) {
+    const ids = items(t).map((it) => it.id)
+    const zs = panel(t).map((it) => Number(it.z))
+    const i = addPanelItem(t, 0, kind)
+    const it = items(t)[i]
+    assert.ok(isPanelItem(it), kind)
+    assert.ok(!ids.includes(it.id), `${kind} id ${it.id}`)
+    assert.ok(Number(it.z) > Math.max(...zs), `${kind} z`)
+    assert.ok(Number(it.x) >= 656 && Number(it.x) <= 895 && Number(it.y) >= 0 && Number(it.y) <= 295, `${kind} at ${it.x},${it.y}`)
+    assert.equal(it.backupX, String(Number(it.x) - 656))
+    assert.equal(typeof it.x, 'string')
+  }
+  assert.throws(() => addPanelItem(t, 0, 'nope'), /unknown panel object/)
+})
+
+test('setPanelItem writes strings and rejects other fields atomically', { skip }, () => {
+  const t = decodeTheme(load())
+  const i = addPanelItem(t, 0, 'bar')
+  setPanelItem(t, 0, i, { w: 42 })
+  assert.equal(items(t)[i].w, '42')
+  const before = JSON.stringify(items(t)[i])
+  assert.throws(() => setPanelItem(t, 0, i, { w: 7, x: 5 }), /x can't be edited on a type 102 item/)
+  assert.throws(() => setPanelItem(t, 0, i, { bogus: 1 }), /bogus can't be edited/)
+  assert.equal(JSON.stringify(items(t)[i]), before)
+})
+
+test('dataNames merges vendor stats, clock names and theme names', { skip }, () => {
+  const names = dataNames(decodeTheme(load()), ['mine'])
+  for (const n of ['CPU Usage', 'hour', 'avg_dB', 'mine']) assert.ok(names.includes(n), n)
+  assert.ok(!names.includes('randomNumbers'))
+  assert.equal(new Set(names).size, names.length)
+})
+
+test('Session panelAdd/panelSet are undoable', { skip }, () => {
+  const s = new Session()
+  s.theme = decodeTheme(load())
+  const n = items(s.theme).length
+  const i = s.panelAdd(0, 'ring')
+  s.panelSet(0, i, { radius: 50 })
+  assert.equal(items(s.theme)[i].radius, '50')
+  s.undo()
+  s.undo()
+  assert.equal(items(s.theme).length, n)
 })
