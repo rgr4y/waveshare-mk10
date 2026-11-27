@@ -1370,3 +1370,11 @@ Verification
 
 - Outcome: the `--install` flag on `package.mjs` replaces `/Applications/MK10 Studio.app` with the fresh build (`rm`, then `ditto`, which keeps the signature).
 - Verified: lint is clean. The package run itself was not run here; Rob runs the build.
+
+## 2026-11-27 — Info panel editor: design and device test
+
+- Outcome: design for editing the 240x296 info panel per page (select, drag, nudge, align, snap, z order, add objects, background crop, custom data sources) in `docs/superpowers/specs/2026-11-27-info-panel-editor-design.md`. Approach A (edit in place in the main canvas) chosen by Rob. Not built yet; awaiting design approval, then the implementation plan.
+- Device test (Phase 0, through lenny): x/y is the top-left for panel items; draw order is the `z` field; a 240x296 PNG works as the background; custom data names are requested by the device and show pushed values; bar (102) and ring (101) follow values, the 109 arc does not; an empty folder shows a blank panel. Written up in `docs/theme-format.md` ("Info panel geometry and data"), capture `docs/screenshots/panel-probe-fb11.png`.
+- Device restored: `mk10studio.Theme`, `config.json` and `/data/file_info.json` sha-identical to the pre-test backup; test themes and probe PNGs removed.
+- Synced `app/` (no node_modules) to lenny `~/workspace/waveshare-mk10/app`.
+- Follow-up: the Mac got "No route to host" for 10.0.1.48 while lenny reached it; Studio's ssh push from the Mac will fail until that's sorted.

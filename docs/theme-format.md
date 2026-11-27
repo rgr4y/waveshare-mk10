@@ -41,7 +41,7 @@ page 0 (`a64a0235-...` = currentPage). Pages 6, 9, 10 have no items.
 
 Canvas layout (derived from x/y/maxWidth values): 896x304 virtual canvas. Key grid + main screen
 occupy x 0..640, y 0..256 (5 cols x 2 rows of 128 px: `col` 0-4, `row` 0-1, `x`=col*128, `y`=row*128).
-The info panel (secondary screen) occupies x 656..896, 240x296 (guess from type-114 `maxWidth/Height` 240x296 and item x of 656+).
+The info panel (secondary screen) occupies x 656..896, 240x296 (verified 2026-11-27, see "Info panel geometry and data").
 
 Common item keys: `id`, `type`, `x`,`y`,`z` (z=-2 for main bg video), `scale`, `rotate`, `lock`
 (always "1"), `backgroundType` (`main` | `secondary` | `child`; absent for keys), `backupX`/`backupY`
@@ -249,6 +249,29 @@ config.json restored byte-identical to backup (sha 99def778...) via stop / scp /
 - After a V1 reload the device sends unsolicited V1 frames. Two are cmd 15 (SEND_JSON) `{"wifiState":N}`. One is cmd 15 with the contract: `deviceRequestSystemData` lists the keys the current page wants, here `date, hour, CPU Usage, GPU Usage, RAM Usage, minute`, plus `deviceRequestSystemDataShowUnit: true` and `themePageSwitch: true`. A V1 cmd 13 (`DEVICE_ProactiveEscalationCMD`) also appeared, as a Tagged-Value Map with `type: keyState, row, col, pressed`, followed by the key's action (`pageSwitch`). That suggests the MK20-style key events exist on MK10 too. Unclear whether a physical press caused it.
 - Tool: `tools/mkv1.py`.
 - Studio (2026-11-25): `lib/stats.js` sends the vendor key names (`CPU Usage`, `GPU Usage`, `RAM Usage`, `CPU Model`, `RAM … Memory`, `Disk …`; full list from the strings in ScreenKeyMacOS, whose stats come from a bundled btop). Verified from lenny with `cli.js stats`: the main page's CPU and RAM rings showed the pushed `8%`/`31%` within a second, framebuffer grab fb0/fb11. Text widgets with no value pushed show their placeholder (`Text`).
+
+### Info panel geometry and data (verified on MK10, 2026-11-27)
+
+Test: page 0's panel items replaced by probes on a 240x296 grid PNG (8 px fine, 40 px coarse lines), pushed
+by scp, loaded with a V1 reload from lenny, `fb11` grabbed. Capture: `screenshots/panel-probe-fb11.png`
+(2x). Device restored afterwards: theme, `config.json` and `/data/file_info.json` sha-identical to backup,
+probe assets removed from `/data/image/240x296/ApplicationIcon/`.
+
+- **x/y = top-left corner** of the item's box for 113 text, 102 bar, 101 ring and 109 arc (panel x = x - 656).
+  For 113 the box is the text's line box, so the glyphs start a little below y (font ascent padding).
+- 102 bar: exactly `w` x `h` at x/y.
+- 101 ring: diameter = 2 x `radius` x `scale` (radius 100, scale 0.4 = 80 px).
+- 109 arc: diameter = 2 x `radius` (26 = 52 px) at scale 1.
+- **Draw order = the `z` field**, not array order (swapping `z` on two overlapping 114 images swapped them).
+- A plain 240x296 **PNG** works as the type 114 background (`/image/240x296/ApplicationIcon/<name>.png`).
+- **Custom data names work**: a 113 bound to `studio_test` (`system_data_flag` 1) appeared in the device's
+  cmd 15 `deviceRequestSystemData` list and showed the pushed value. The device acks pushed keys it did not ask
+  for and ignores them.
+- `system_data_flag` 0 = static text (`text_str` shown, `system_data_name` ignored); 1 = bound.
+- 102 bar and 101 ring **follow pushed values**; `50` and `20%` both parse. 109 arc **does not move**
+  (25 and 90 drew the same full arc).
+- **Folder with no panel items: blank panel** (black), both when the theme starts on it and when opened
+  from its parent's openPage key (Rob pressed it). The parent's panel is not inherited.
 
 ## Action catalogue (controlData types), 2026-11-24
 
