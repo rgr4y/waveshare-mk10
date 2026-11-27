@@ -853,3 +853,115 @@ Verification
   - Ring arcs: capture what the vendor app sends (needs a working host-link capture) or disassemble the gauge code.
   - Untick check for live stats.
   - Mac browser opening for key actions.
+
+## 2026-11-25 — Studio UI fixes, page JSON, Linux quit
+
+- Outcome:
+  - Settings header (with Done) stays visible when scrolled, and a backdrop click closes settings (`6fa55bc`).
+  - Checkboxes renamed "Send this computer's stats…" and "Run key actions on this computer" (`c48b3af`).
+  - GPU Usage sends `0%` when there is no reading, so the widget doesn't show "Text" (`126472c`).
+  - pageSwitch `jumpToPage` is an editable int with a dropdown of top-level pages (0-5); other values are rejected (`6d016e1`).
+  - Linux: closing the window quits through `before-quit` while the window still exists. This fixes 'Object has been destroyed' (`6f85d9d`).
+  - Page Inspector shows the whole page (canvas and every item) as JSON, editable in the Monaco dialog (`268cde5`).
+    - Allowed: editing, adding or removing items.
+    - Blocked: changing `pageName` or `parentPageName`, duplicate key slots, image paths not in the theme, and field type changes.
+    - Orphaned assets are dropped.
+  - Synced the whole `app/` folder to lenny `~/workspace/waveshare-mk10/app` (not a git checkout).
+- Changed: `lib/theme.js` (`pageRaw`, `setPageRaw`, `jumpToPage` editable), `lib/session.js` (`pageRaw` op), `lib/stats.js`, `main.js`, `public/{app.js,index.html,styles.css}`, `lib/theme.test.js`, `app/README.md`.
+- Verification:
+  - Lint clean. Lib tests 35/35.
+  - Checked in the running app via CDP: scrolled settings still show Done, and a backdrop click closes them. The jump dropdown and a page JSON edit worked, the identity guard rejected a `pageName` change, and the preview updated.
+  - Page JSON round trip is byte-identical.
+  - GPU 0% is covered by a test. It was not seen on the device, because the old Studio on lenny held the port.
+  - Not verified: the close-window quit fix with a real click on lenny (no display).
+- Follow-up:
+  - Linux settings still show the stand-in "Granted" for Permissions and "Mac" wording in Key capture. Rob was asked whether to hide them; no answer yet.
+  - Creating items from scratch: see the next entry.
+
+## 2026-11-25 — New keys from scratch: action picker
+
+- Outcome: clicking an empty, widget-free key slot opens a command-palette picker (filter input, list of action types with their group, arrow keys + Enter, Esc or backdrop closes). Picking one creates a plain key there.
+  - `createKey` builds a type 115 item with stock-key fields and controlData from `lib/action-templates.json`. It has no image (`path` ""; the device's `/data/static/icon/dark` has only a few icons), and its title is the action label. Slot fields and the widget check reuse `pasteKey`. Undo covers it.
+  - Not offered: `keyboard_switch` (needs jsonData States), `openPage` (needs a new folder page). `oneLevelUp` only on folder pages (pageName `parentPage`, as in the stock theme).
+  - Filter matches every word against label, group and type; label hits rank first.
+- Changed: `lib/theme.js` (`newKeyTypes`, `createKey`), `lib/session.js`, `main.js`, `preload.cjs`, `public/{app.js,index.html,styles.css}`, `lib/theme.test.js`, `app/README.md`.
+- Verification: lint clean, lib tests 36/36 (new createKey test: types offered, slot fields, controlData round trip, codec round trip, refusals). In the app via CDP: an empty-slot click opened the picker focused on the filter; "web" ranked Open website first; Enter created the key, closed the picker and selected it. Not pushed to the device yet.
+- Follow-up: a new key on the device itself (push and press it); an empty-slot click now always opens the picker (right-click still gives Paste).
+
+## 2026-11-25 — Key title look in the Inspector
+
+- Outcome: under Title, the key Inspector edits font family (datalist of device fonts plus Microsoft YaHei and Arial), size, style, position, color, and the Show title / Show image / Underline toggles. `setKeyTitleParam` validates each value and writes `titleParam` as compact JSON with sorted keys, matching the vendor's format.
+  - Allowed values come from `/data/KeyboardDevice` strings: TitleAlignment `top` / `middle` / `bottom`; style names Regular, Italic, Bold Italic, plus "" and "Bold" as used in stock themes.
+  - Preview fix: the middle position was keyed on `center`, which the device never writes; it is now `middle`.
+- Changed: `lib/theme.js`, `lib/session.js`, `main.js`, `preload.cjs`, `public/{app.js,index.html,styles.css}`, `lib/theme.test.js`, `app/README.md`.
+- Verification: lint clean, lib tests 37/37 (new test: edits, key order, bad values rejected, codec round trip). CDP in the app: the fields fill from the key; changing position, size, color and style updated the preview (title moved to the middle, 32px, yellow, bold).
+- Not verified: how the device draws `middle` and the style names (needs a push).
+
+## 2026-11-25 — English action descriptions
+
+- Outcome: opening a theme replaces the vendor's Chinese default action descriptions (`description` / `parentDescription` in controlData) with English, e.g. 页面切换 to "Page switching". This counts as an unsaved edit and is logged. Only the 11 exact default strings found in the themes bundled with ScreenKeyMacOS are replaced; other text is left alone. The `openPage`, `oneLevelUp` and `openWeb` templates are now in English too, so new keys get English.
+- Changed: `lib/theme.js` (`englishDescriptions`), `lib/session.js` (open), `main.js` (log line), `lib/action-templates.json`, `lib/theme.test.js`.
+- Verification: lib tests 38/38 (new test: no Han characters left in descriptions afterwards, second run changes nothing, codec round trip), lint clean. Not checked on the device; descriptions are labels the vendor app shows, not something the device acts on (assumed, not verified).
+
+## 2026-11-25 — Font picker with system fonts; push copies missing fonts
+
+- Outcome:
+  - Picking a font in the title picker no longer hides the other fonts. The browser datalist filtered its suggestions by the current value, so after picking Arial Black it was the only one left. The picker is now a `<select>` with two groups: "On the device" (the device fonts as last copied, or Arial and Microsoft YaHei before the first copy) and "This computer (copied on push)". A font that is in neither list shows under "Not found".
+  - System fonts are scanned once from the font directories (macOS: System, Library, ~/Library; Linux: fontconfig defaults). Only the header, table directory and name/OS/2 tables are read: 1361 files and 641 families in 0.3 s on the Mac.
+  - ssh push: for every family the theme uses (titleParam `FontFamily`, text widget `text_font`) that isn't on the device, the matching local font files are copied with scp to `/usr/share/fonts` before the keyboard-device restart. They also go into the local device-font cache for the preview and the next push. Before the device fonts have been copied, a file counts as present when the device's font dir already has a file of that name. A USB (stock firmware) push logs a warning instead.
+- Changed: `lib/fonts.js` (`fontInfoFile`, `systemFonts`, `fontInfo` split into table helpers), `lib/theme.js` (`fontFamilies`), `lib/session.js` (`fonts` push option), `main.js` (`missingFonts`, `cacheFonts`, `systemFonts` IPC), `preload.cjs`, `public/{app.js,index.html}`, tests, `app/README.md`.
+- Verification: lib tests 40/40, including ranged reads matching whole-file parsing for a .ttf and a .ttc, and `fontFamilies` on the stock theme. Lint clean. In the app via CDP: the picker showed 91 device and 625 computer fonts; picking Arial Black kept both lists, and the preview switched to it.
+- Not verified: an actual push that copies a font (I didn't push to Rob's device unasked), and whether Qt on the device picks up a font that only exists as a .ttc face other than the first.
+
+## 2026-11-25 — Rename folders in the page Inspector
+
+- Outcome: a folder page's Inspector has a "Folder name" field. A folder's name is the title of the `openPage` key that opens it; the folder's `pageName` is a UUID that the key links to, so it stays as it is. Editing the field sets that key's title, and the page list and the key update. The field is disabled when no key opens the folder.
+- Changed: `public/{app.js,index.html}`.
+- Verification: lint clean. In the app via CDP: a folder showed its name (HEH); renaming it updated the Inspector heading and the page list.
+
+## 2026-11-25 — Delete a folder from the page list
+
+- Outcome: right-clicking a folder in the page list shows "Delete Folder…". After a confirm dialog (it says how many nested folders go too), the folder is deleted along with every folder nested in it, the `openPage` keys that open them, and any assets nothing else references. If the deleted folder was the page shown at start (`main.currentPage`), its parent takes over. Cmd+Z undoes it (same snapshot undo as key cut/paste/delete). Then the parent page is selected. Top-level pages are refused, because pageSwitch keys number them.
+- Changed: `lib/theme.js` (`deleteFolder`), `lib/session.js`, `main.js` (`pageMenu`), `preload.cjs`, `public/app.js` (context menu; page index clamped after a page goes away; `select` event can pick a page), `lib/theme.test.js`.
+- Verification: lib tests 41/41 (new test: folder, nested folders and openers gone, currentPage moves to the parent, top-level refused, codec round trip). Lint clean. Not clicked in the app: the menu is native and would pop up on Rob's screen, so the menu, dialog and parent selection still need a manual check.
+
+## 2026-11-25 — Fix: push font check read text widget fonts wrong
+
+- Root cause: a text widget's `text_font` is a `QFont::toString()` string (`Arial,80,-1,5,75,0,0,0,0,0`: family, point size, pixel size, style hint, weight, …). `fontFamilies` took the whole string as the family name, so the push log said "font Arial,80,…: not on the device or this computer". The preview already split it at the first comma.
+- Fix: `fontFamilies` keeps only the part before the first comma of `text_font`. On the stock theme it now returns Arial, Microsoft Tai Le, Microsoft YaHei and Microsoft PhagsPa.
+- Verification: lib tests 41/41 (the fontFamilies test now fails on any comma in a family name), lint clean.
+
+## 2026-11-25 — Quiet paste/undo no-ops; one push log line per copied file
+
+- Outcome:
+  - Cmd+V with no Studio key on the clipboard, and Cmd+Z with nothing to undo, now only show a status line ("Nothing to paste: …", "Nothing to undo"). Before, they went through `task` as errors, and Electron printed "Error occurred in handler for 'mk10:keyOp'" to the terminal.
+  - ssh push logs one line per file as it lands: `copied font X.ttf (120 KB, 0.4 s) -> host:/usr/share/fonts/X.ttf`, then the same for the theme. Fonts are now copied one scp at a time so each gets its own line.
+- Changed: `main.js` (keyOp paste/undo), `lib/session.js` (`canUndo`, `pushSsh` copy log).
+- Verification: lint clean, lib tests 41/41. Not run: the paste no-op in the app (it would need Rob's clipboard overwritten) and an ssh push.
+
+## 2026-11-25 — Fix: folders opened from a sibling folder couldn't be renamed
+
+- Root cause: the renderer's `opener()` looked for the `openPage` key only on the folder's parent page. In Rob's "Next 2/5 … 5/5" chain, the key that opens each later folder sits on the previous folder (13 opens 14, 14 opens 15, …), so those folders showed "No key opens this folder", were listed as "Folder", and couldn't be renamed.
+- Fix: `opener()` checks the parent page first, then every page, and returns the page the key is on. Rename writes the title there, and "opened by" names that page. `deleteFolder` already searched every page.
+- Verification: lint clean. In the app via CDP on Rob's theme, all four chained folders now find their opener (13@10, 14@13, 15@14, 16@15); renaming folder 15 changed the key on page 14. Folders 2, 4, 5 and 12 really have no opener key anywhere.
+
+## 2026-11-25 — Premade line-art icons and "Choose icon…"
+
+- Outcome:
+  - `app/icons/`: 14 white line-art icons as SVG source with rendered 128×128 PNGs: back, camera, file, folder, globe, keyboard, lock, microphone, mouse, music, pages, speaker, text, toggle. `npm run icons` re-renders them with rsvg-convert.
+  - The key Inspector has "Choose icon…" next to "Replace image…". It opens a grid of the icons, and a click sets one as the key's image. Using the same icon on several keys stores the image once. Hidden for multi-state keys, like Replace image.
+  - New keys from the action picker start with their type's icon (an `icon` field per type in `action-templates.json`), e.g. Speaker volume gets the speaker.
+- Changed: `icons/*`, `lib/theme.js` (`listIcons`, `iconPng`, `setKeyIcon`; `createKey` uses the template icon), `lib/action-templates.json`, `lib/session.js`, `main.js`, `preload.cjs`, `public/{app.js,index.html,styles.css}`, `package.json` (`icons` script), `lib/theme.test.js`, `app/README.md`.
+- Verification: lib tests 42/42 (createKey icon plus dedupe, setKeyIcon reuse, bad name refused), lint clean. In the app via CDP: the grid showed all 14 icons loaded at 128px; picking speaker closed the dialog and changed the key's image. Not pushed to the device.
+
+## 2026-11-25 — New key title default: 16 px, top
+
+- Outcome: keys made from the action picker (and any key that gets title settings without having a `titleParam`) now default to a 16 px title at the top instead of 24 px at the bottom. Existing keys are unchanged.
+- Changed: `lib/theme.js` (`TITLE_PARAM`), `lib/theme.test.js`.
+- Verification: lib tests 42/42 (createKey asserts size 16 and top), lint clean.
+
+## 2026-11-25 — Icons centred for top titles
+
+- Outcome: the icons had been drawn high to leave room for a bottom title. Titles now default to the top, so each icon's drawn area is centred across and placed with its centre at y = 70 (a little below the middle, clear of a 16 px top title). Done with a `<g transform="translate(dx dy)">` per SVG, using the shift measured from each PNG's bounding box (`magick -format %@`), then re-rendered. Keys that already use an icon keep the old image until the icon is chosen again.
+- Changed: `app/icons/*.svg`, `app/icons/*.png`.
+- Verification: contact sheet of all 14 checked; the lowest edge (file) is at y ≈ 112 of 128.

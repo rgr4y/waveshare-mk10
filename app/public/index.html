@@ -64,7 +64,19 @@
         <h2>Key <span id="key-pos" class="muted"></span></h2>
         <div class="thumb-row"><img id="key-thumb" class="thumb" alt=""></div>
         <label class="field"><span>Title</span><input id="key-title" type="text" autocomplete="off"></label>
-        <button id="btn-key-image" type="button">Replace image…</button>
+        <div id="key-title-style" class="title-style">
+          <select id="tp-family" data-tp="FontFamily" title="Font. Fonts from this computer are copied to the device on an ssh push" aria-label="Font"></select>
+          <input data-tp="FontSize" type="number" min="6" max="96" step="1" title="Font size (px)" aria-label="Font size">
+          <select data-tp="FontStyle" title="Style" aria-label="Style"><option value="">Regular</option><option>Bold</option><option>Italic</option><option>Bold Italic</option></select>
+          <select data-tp="TitleAlignment" title="Position" aria-label="Position"><option value="top">Top</option><option value="middle">Middle</option><option value="bottom">Bottom</option></select>
+          <input data-tp="TitleColor" type="color" title="Color" aria-label="Color">
+          <div class="tp-checks">
+            <label class="inline"><input data-tp="ShowTitle" type="checkbox"> Title</label>
+            <label class="inline"><input data-tp="ShowImage" type="checkbox"> Image</label>
+            <label class="inline"><input data-tp="FontUnderline" type="checkbox"> Underline</label>
+          </div>
+        </div>
+        <div class="row-buttons"><button id="btn-key-image" type="button">Replace image…</button><button id="btn-key-icon" type="button">Choose icon…</button></div>
         <div class="field"><span>Sound</span><div class="row-buttons"><span id="key-sound" class="muted"></span><button id="btn-key-sound" type="button">Choose…</button><button id="btn-key-sound-play" type="button" title="Play here">Play</button><button id="btn-key-sound-clear" type="button">Clear</button></div></div>
         <h3>Action <span class="muted">(values editable; type fixed)</span></h3>
         <dl id="key-action" class="kv"></dl>
@@ -74,6 +86,7 @@
 
       <div id="insp-page" class="insp-section" hidden>
         <h2 id="pg-title"></h2>
+        <label id="pg-name-field" class="field" hidden><span>Folder name <span class="muted">(the title of the key that opens it)</span></span><input id="pg-name" type="text" autocomplete="off"></label>
         <dl id="pg-info" class="kv"></dl>
         <h3>Main background</h3>
         <dl id="pg-video" class="kv"></dl>
@@ -81,6 +94,9 @@
         <p class="hint">Or drop a video on the background. Transcoded to 640×256 h264 via ffmpeg.</p>
         <h3>Info panel</h3>
         <dl id="pg-panel" class="kv"></dl>
+        <h3>Raw JSON <span class="muted">(the whole page: canvas and every item)</span></h3>
+        <textarea id="page-json" class="raw-json" readonly title="Click to edit"></textarea>
+        <div class="row-buttons"><button id="btn-page-raw-edit" type="button">Edit…</button></div>
       </div>
 
       <div id="insp-video" class="insp-section" hidden>
@@ -124,10 +140,21 @@
   </dialog>
 
   <dialog id="raw-dlg" class="settings raw-dlg">
-    <header class="settings-head"><h2>Key JSON <span id="raw-dlg-key" class="muted"></span></h2><span class="muted">Cmd+Enter applies · Esc cancels</span></header>
+    <header class="settings-head"><h2><span id="raw-dlg-what">Key</span> JSON <span id="raw-dlg-key" class="muted"></span></h2><span class="muted">Cmd+Enter applies · Esc cancels</span></header>
     <div id="raw-editor" class="raw-editor"></div>
     <p id="raw-dlg-err" class="hint raw-err" hidden></p>
     <div class="dlg-actions row-buttons"><button id="raw-dlg-cancel" type="button">Cancel</button><button id="raw-dlg-apply" type="button" class="primary">Apply</button></div>
+  </dialog>
+
+  <dialog id="new-key-dlg" class="palette">
+    <input id="new-key-q" type="search" placeholder="Add a key: type to filter actions" spellcheck="false" autocomplete="off" aria-controls="new-key-list">
+    <ul id="new-key-list" role="listbox"></ul>
+    <p class="hint palette-foot"><span id="new-key-slot"></span> · ↑↓ choose · Enter adds · Esc closes</p>
+  </dialog>
+
+  <dialog id="icon-dlg" class="palette icon-dlg">
+    <ul id="icon-grid" class="icon-grid"></ul>
+    <p class="hint palette-foot">Line-art icons; the key's title still shows over them · Esc closes</p>
   </dialog>
 
   <dialog id="settings-dlg" class="settings">
@@ -229,6 +256,9 @@
   <template id="tpl-kv"><div class="kv-row"><dt></dt><dd></dd></div></template>
   <template id="tpl-kv-select"><div class="kv-row"><dt></dt><dd><select></select></dd></div></template>
   <template id="tpl-option"><option></option></template>
+  <template id="tpl-optgroup"><optgroup></optgroup></template>
+  <template id="tpl-palette-item"><li role="option"><span class="pal-label"></span><span class="pal-group"></span></li></template>
+  <template id="tpl-icon-item"><li><button type="button" class="icon-btn"><img alt="" draggable="false"><span></span></button></li></template>
   <template id="tpl-toast"><div class="toast" title="Click to dismiss"></div></template>
   <template id="tpl-kv-edit"><div class="kv-row"><dt></dt><dd><input type="text" spellcheck="false"></dd></div></template>
 </body>

@@ -10,6 +10,7 @@ import {
   decodeTheme, encodeTheme, formatQtJson, decodeControlData, encodeControlData,
   pages, listKeys, getItem, setKeyTitle, setKeyImage, setKeySound, setBackgroundVideo,
   editableActionFields, setKeyActionField, copyKey, pasteKey, removeKey, parseKeyClip, keyRaw, setKeyRaw,
+  pageRaw, setPageRaw, newKeyTypes, createKey, setKeyTitleParam, englishDescriptions, fontFamilies, deleteFolder, listIcons, setKeyIcon,
 } from './theme.js'
 
 // Pristine stock theme (ScreenKeyMacOS v1.1 bundle, captured 2026-11-24 before an accidental vendor-app save); sha in SHA256SUMS.txt
@@ -134,6 +135,27 @@ test('real theme: action field edit changes only that value, keeps type/order, s
   assert.throws(() => setKeyActionField(t, pi, Number(it.row), Number(it.col), 'nope', 'x'), /not editable/)
 })
 
+test('real theme: pageSwitch jumpToPage is an int 0..top-level pages-1', { skip }, () => {
+  const t = decodeTheme(load())
+  let found
+  t.json.pages.forEach((p, pi) => (p.items ?? []).forEach((it) => {
+    if (!found && it.controlData && decodeControlData(it.controlData).type === 'pageSwitch') found = { pi, it }
+  }))
+  assert.ok(found, 'stock theme has a pageSwitch key')
+  const { pi, it } = found
+  const at = [t, pi, Number(it.row), Number(it.col)]
+  assert.ok(editableActionFields(decodeControlData(it.controlData)).includes('jumpToPage'))
+  assert.ok(!editableActionFields(decodeControlData(it.controlData)).includes('pageSwitchMode'))
+  const top = t.json.pages.filter((p) => !p.parentPageName).length
+  setKeyActionField(...at, 'jumpToPage', String(top - 1))
+  const re = decodeControlData(decodeTheme(encodeTheme(t)).json.pages[pi].items.find((x) => x.row === it.row && x.col === it.col && x.controlData).controlData)
+  const f = re.fields.find(([k]) => k === 'jumpToPage')[1]
+  assert.equal(f.type, 2)
+  assert.equal(f.value, top - 1)
+  assert.throws(() => setKeyActionField(...at, 'jumpToPage', String(top)), /must be 0-/)
+  assert.throws(() => setKeyActionField(...at, 'jumpToPage', 'x'), /must be 0-/)
+})
+
 test('real theme: openPage pageName must name an existing page', { skip }, () => {
   const t = decodeTheme(load())
   let found
@@ -250,4 +272,134 @@ test('real theme: setKeySound adds, dedupes, suffixes, clears and survives a rou
   assert.equal(getItem(t, 0, row, col).soundFile, '')
   assert.equal(t.assets.has('/sound/Boom_Sound_.wav'), false) // orphan dropped
   assert.equal(t.assets.has('/sound/Boom_Sound_-2.wav'), true) // still used by the other key
+})
+
+test('real theme: page JSON round-trips byte-identical, edits items, keeps identity and slots', { skip }, () => {
+  const raw = load()
+  const t = decodeTheme(raw)
+  const pi = t.json.pages.findIndex((p) => (p.items ?? []).some((it) => it.type === '115'))
+  const pr = pageRaw(t, pi)
+  setPageRaw(t, pi, structuredClone(pr))
+  assert.ok(encodeTheme(t).equals(raw), 'unchanged page JSON writes the same bytes')
+  const edit = structuredClone(pr)
+  const k = edit.items.find((it) => it.type === '115')
+  k.title = 'via page JSON'
+  setPageRaw(t, pi, edit)
+  const back = decodeTheme(encodeTheme(t)).json.pages[pi].items.find((it) => it.type === '115' && it.row === k.row && it.col === k.col)
+  assert.equal(back.title, 'via page JSON')
+  assert.throws(() => setPageRaw(t, pi, { ...pr, pageName: 'other' }), /pageName must stay/)
+  assert.throws(() => setPageRaw(t, pi, { ...pr, items: 'x' }), /items must be a list/)
+  assert.throws(() => setPageRaw(t, pi, { ...pr, canvas: 'x' }), /canvas must stay/)
+  assert.throws(() => setPageRaw(t, pi, { ...pr, items: [...pr.items, { ...k }] }), /two keys at row/)
+  assert.throws(() => setPageRaw(t, pi, { ...pr, items: [...pr.items, { type: '114', path: '/theme/nope.png' }] }), /not in this theme/)
+  assert.throws(() => setPageRaw(t, pi, { ...pr, items: [{ type: 115 }] }), /must be a string/)
+})
+
+test('real theme: createKey makes a plain key of each offered type in an empty slot', { skip }, () => {
+  const a = decodeTheme(load())
+  const types = newKeyTypes(a, 0).map((t) => t.type)
+  assert.ok(types.includes('openWeb') && !types.includes('openPage') && !types.includes('keyboard_switch'))
+  assert.ok(!types.includes('oneLevelUp')) // page 0 is top level
+  const folder = a.json.pages.findIndex((p) => p.parentPageName)
+  assert.ok(newKeyTypes(a, folder).some((t) => t.type === 'oneLevelUp'))
+
+  const pi = a.json.pages.findIndex((p, i) => i < 6 && [0, 1].some((r) => [0, 1, 2, 3, 4].some((c) => !getItem(a, i, r, c))))
+  const [r, c] = [0, 1].flatMap((r) => [0, 1, 2, 3, 4].map((c) => [r, c])).find(([r, c]) => !getItem(a, pi, r, c))
+  createKey(a, pi, r, c, 'openWeb')
+  const it = getItem(a, pi, r, c)
+  assert.equal(it.title, 'Open website')
+  assert.equal(JSON.parse(it.titleParam).FontSize, 16)
+  assert.equal(JSON.parse(it.titleParam).TitleAlignment, 'top')
+  assert.equal(it.x, String(c * 128))
+  const cd = decodeControlData(it.controlData)
+  assert.equal(cd.fields.find(([k]) => k === 'type')[1].value, 'openWeb')
+  assert.equal(encodeControlData(cd), it.controlData)
+  setKeyActionField(a, pi, r, c, 'Url', 'https://example.com/')
+  assert.throws(() => createKey(a, pi, r, c, 'openWeb'), /already holds a key/)
+  // a type with a default icon gets it as its image; a second key reuses the same asset
+  const free = [0, 1].flatMap((r) => [0, 1, 2, 3, 4].map((c) => [r, c])).filter(([r, c]) => !getItem(a, pi, r, c))
+  if (free.length >= 2) {
+    const n = a.assets.size
+    createKey(a, pi, ...free[0], 'Loudspeaker')
+    createKey(a, pi, ...free[1], 'Loudspeaker')
+    const k1 = getItem(a, pi, ...free[0])
+    assert.ok(a.assets.get(k1.path)?.subarray(1, 4).toString() === 'PNG')
+    assert.equal(getItem(a, pi, ...free[1]).path, k1.path)
+    assert.equal(a.assets.size, n + 1)
+  }
+  assert.throws(() => createKey(a, pi, r, c === 4 ? 3 : 4, 'openPage'), /can't create/)
+  // the theme still round-trips through the codec
+  const b = decodeTheme(encodeTheme(a))
+  assert.equal(decodeControlData(getItem(b, pi, r, c).controlData).fields.find(([k]) => k === 'Url')[1].value, 'https://example.com/')
+})
+
+test('real theme: setKeyTitleParam edits the title look and keeps the vendor key order', { skip }, () => {
+  const a = decodeTheme(load())
+  const k = listKeys(a, 0)[0]
+  setKeyTitleParam(a, 0, k.row, k.col, { FontSize: 30, TitleAlignment: 'middle', FontStyle: 'Bold Italic', TitleColor: '#ff8800', ShowImage: false })
+  const s = getItem(a, 0, k.row, k.col).titleParam
+  const tp = JSON.parse(s)
+  assert.deepEqual(Object.keys(tp), [...Object.keys(tp)].sort())
+  assert.equal(tp.FontSize, 30)
+  assert.equal(tp.TitleAlignment, 'middle')
+  assert.equal(tp.ShowImage, false)
+  assert.ok(!s.includes(' '.repeat(2)) && !s.includes('\n'))
+  for (const bad of [{ FontSize: 5 }, { FontSize: '30' }, { TitleAlignment: 'center' }, { FontStyle: 'Heavy' }, { TitleColor: 'red' }, { ShowTitle: 1 }, { Nope: 1 }]) {
+    assert.throws(() => setKeyTitleParam(a, 0, k.row, k.col, bad))
+  }
+  assert.equal(JSON.parse(getItem(decodeTheme(encodeTheme(a)), 0, k.row, k.col).titleParam).TitleColor, '#ff8800')
+})
+
+test('real theme: englishDescriptions replaces the vendor Chinese default descriptions only', { skip }, () => {
+  const a = decodeTheme(load())
+  const zh = /\p{Script=Han}/u
+  const descs = (t) => t.json.pages.flatMap((p) => p.items ?? []).filter((i) => i.controlData)
+    .flatMap((i) => decodeControlData(i.controlData).fields.filter(([k]) => /escription$/.test(k)).map(([, v]) => v.value))
+  assert.ok(descs(a).some((v) => zh.test(v)))
+  assert.ok(englishDescriptions(a) > 0)
+  assert.ok(!descs(a).some((v) => zh.test(v)), descs(a).filter((v) => zh.test(v)).join())
+  assert.ok(descs(a).includes('Page switching'))
+  assert.equal(englishDescriptions(a), 0)
+  decodeTheme(encodeTheme(a))
+})
+
+test('real theme: fontFamilies lists title and text widget fonts', { skip }, () => {
+  const f = fontFamilies(decodeTheme(load()))
+  for (const x of ['Arial', 'Microsoft YaHei']) assert.ok(f.includes(x), f.join())
+  assert.ok(!f.some((x) => x.includes(',')), f.join(' | ')) // text_font is a QFont string; family only
+})
+
+test('real theme: deleteFolder removes the folder, nested folders, opener keys and orphan assets', { skip }, () => {
+  const a = decodeTheme(load())
+  const pages = a.json.pages
+  const opensName = (name) => a.json.pages.flatMap((p) => p.items ?? []).filter((i) => i.controlData &&
+    decodeControlData(i.controlData).fields.some(([k, v]) => k === 'pageName' && v.value === name))
+  const fi = pages.findIndex((p) => p.parentPageName && opensName(p.pageName).length)
+  const f = pages[fi]
+  const parent = pages.findIndex((p) => p.pageName === f.parentPageName)
+  const openers = () => opensName(f.pageName)
+  assert.ok(openers().length > 0)
+  const n = pages.length
+  const nAssets = a.assets.size
+  a.json.main.currentPage = f.pageName
+  const gone = deleteFolder(a, fi)
+  assert.equal(a.json.pages.length, n - gone.length)
+  assert.ok(!a.json.pages.some((p) => gone.includes(p.pageName) || gone.includes(p.parentPageName)))
+  assert.equal(openers().length, 0)
+  assert.equal(a.json.main.currentPage, pages[parent].pageName)
+  assert.ok(a.assets.size <= nAssets)
+  assert.throws(() => deleteFolder(a, a.json.pages.findIndex((p) => !p.parentPageName)), /only folder/)
+  decodeTheme(encodeTheme(a))
+})
+
+test('real theme: setKeyIcon sets a premade icon, reusing its asset', { skip }, () => {
+  const a = decodeTheme(load())
+  assert.ok(listIcons().includes('speaker'))
+  const [k1, k2] = listKeys(a, 0)
+  setKeyIcon(a, 0, k1.row, k1.col, 'globe')
+  const n = a.assets.size
+  setKeyIcon(a, 0, k2.row, k2.col, 'globe')
+  assert.equal(getItem(a, 0, k2.row, k2.col).path, getItem(a, 0, k1.row, k1.col).path)
+  assert.ok(a.assets.size <= n)
+  assert.throws(() => setKeyIcon(a, 0, k1.row, k1.col, '../x'), /no icon/)
 })

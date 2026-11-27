@@ -2,19 +2,21 @@
 // Every mutation goes through here so all front ends see the same state ('change' event).
 import { EventEmitter } from 'node:events'
 import { basename } from 'node:path'
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile, stat, writeFile } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import {
   decodeTheme, encodeTheme, decodeControlData, editableActionFields,
-  setKeyTitle, setKeyImage, setKeySound, setBackgroundVideo, setKeyActionField,
-  copyKey, pasteKey, removeKey, parseKeyClip, keyRaw, setKeyRaw,
+  setKeyTitle, setKeyTitleParam, setKeyImage, setKeySound, setBackgroundVideo, setKeyActionField,
+  copyKey, pasteKey, removeKey, parseKeyClip, keyRaw, setKeyRaw, pageRaw, setPageRaw, newKeyTypes, createKey, setKeyIcon, englishDescriptions, fontFamilies, deleteFolder,
 } from './theme.js'
 import { toKeyPng, toDeviceMp4, toDeviceWav } from './media.js'
 import { Device } from './device.js'
+import { DEVICE_FONT_DIR } from './fonts.js'
 
 const run = promisify(execFile)
 const TIMEOUT = 60_000
+const mb = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.ceil(n / 1e3)} KB`)
 
 export const DEFAULT_REMOTE = '/data/theme/MK10/mk10studio.Theme'
 export const DEFAULT_SSH = { host: 'root@10.0.1.48', remote: DEFAULT_REMOTE }
@@ -22,7 +24,7 @@ export const DEFAULT_SSH = { host: 'root@10.0.1.48', remote: DEFAULT_REMOTE }
 export const DEFAULT_PUSH = { mode: 'auto', port: null, ...DEFAULT_SSH }
 const CONFIG = '/mnt/SDCARD/config.json'
 
-const KEY_OPS = new Set(['keyCut', 'keyPaste', 'keyDelete', 'keyRaw', 'undo'])
+const KEY_OPS = new Set(['keyCut', 'keyPaste', 'keyDelete', 'keyRaw', 'pageRaw', 'keyNew', 'folderDelete', 'undo'])
 const num = (v) => (v === undefined || v === '' ? undefined : Number(v))
 
 // Multi-state keys (e.g. keyboard_switch, a toggle): item jsonData holds the per-state image, title and
@@ -66,8 +68,11 @@ export class Session extends EventEmitter {
   async open(file) {
     this.theme = decodeTheme(await readFile(file))
     this.file = file
-    this.dirty = false
-    this.edits = this.pushedEdits = 0
+    // the vendor's Chinese default descriptions become English; that counts as an unsaved edit
+    this.translated = englishDescriptions(this.theme)
+    this.dirty = this.translated > 0
+    this.edits = this.translated > 0 ? 1 : 0
+    this.pushedEdits = 0
     this.undoStack = []
     this.emit('change', { kind: 'open' })
     return this.summary()
@@ -180,6 +185,23 @@ export class Session extends EventEmitter {
     this.touch('keyRaw')
   }
 
+  pageRaw(page) {
+    this.need()
+    return pageRaw(this.theme, page)
+  }
+
+  setPageRaw(page, raw) {
+    this.need()
+    this.snapshot()
+    try {
+      setPageRaw(this.theme, page, raw) // throws before changing anything on bad input
+    } catch (e) {
+      this.undoStack.pop()
+      throw e
+    }
+    this.touch('pageRaw')
+  }
+
   cutKey(page, row, col) {
     const text = this.copyKey(page, row, col)
     this.deleteKey(page, row, col, 'keyCut')
@@ -212,6 +234,46 @@ export class Session extends EventEmitter {
     return warnings
   }
 
+  fontFamilies() {
+    this.need()
+    return fontFamilies(this.theme)
+  }
+
+  deleteFolder(page) {
+    this.need()
+    this.snapshot()
+    let gone
+    try {
+      gone = deleteFolder(this.theme, page)
+    } catch (e) {
+      this.undoStack.pop()
+      throw e
+    }
+    this.touch('folderDelete')
+    return gone
+  }
+
+  newKeyTypes(page) {
+    this.need()
+    return newKeyTypes(this.theme, page)
+  }
+
+  createKey(page, row, col, type) {
+    this.need()
+    this.snapshot()
+    try {
+      createKey(this.theme, page, row, col, type)
+    } catch (e) {
+      this.undoStack.pop()
+      throw e
+    }
+    this.touch('keyNew')
+  }
+
+  get canUndo() {
+    return this.undoStack.length > 0
+  }
+
   undo() {
     const s = this.undoStack.pop()
     if (!s) return false
@@ -227,6 +289,12 @@ export class Session extends EventEmitter {
     this.touch('keyTitle')
   }
 
+  setKeyTitleParam(page, row, col, patch) {
+    this.need()
+    setKeyTitleParam(this.theme, page, row, col, patch)
+    this.touch('keyTitle')
+  }
+
   setKeyActionField(page, row, col, field, value) {
     this.need()
     setKeyActionField(this.theme, page, row, col, field, value)
@@ -238,6 +306,13 @@ export class Session extends EventEmitter {
     this.need()
     const png = typeof input === 'string' ? await toKeyPng(input) : input
     const key = setKeyImage(this.theme, page, row, col, png)
+    this.touch('keyImage')
+    return key
+  }
+
+  setKeyIcon(page, row, col, name) {
+    this.need()
+    const key = setKeyIcon(this.theme, page, row, col, name)
     this.touch('keyImage')
     return key
   }
@@ -346,8 +421,10 @@ export class Session extends EventEmitter {
   // setFileCRC to a NEW file, V1 reload onto it, then delete older mk10studio pushes. The active
   // theme is never deleted or half-written: a failed push leaves the previous one in place.
   // ~10 s for 12 MB. Never sends getInfo (it blanks the panel).
-  async pushSerial({ port, remote } = DEFAULT_PUSH, log = () => {}) {
+  async pushSerial({ port, remote, fonts } = DEFAULT_PUSH, log = () => {}) {
     this.need()
+    const files = (await fonts?.(() => {})) ?? []
+    if (files.length) log(`warning: the stock firmware can't take fonts over USB; the device draws ${files.map((f) => basename(f)).join(', ')} text in its default font`)
     const base = remote.replace(/\.Theme$/, '')
     const target = `${base}-${Date.now()}.Theme`
     const buf = encodeTheme(this.theme)
@@ -429,12 +506,22 @@ export class Session extends EventEmitter {
 
   // Verified recipe (docs/theme-format.md, Device verification): copy theme, point
   // config.json defaultTheme at it, restart KeyboardDevice. LilAlpine only (needs ssh).
-  async pushSsh({ host, remote } = DEFAULT_SSH, log = () => {}) {
+  // o.fonts (optional, async): local font files the device lacks; copied into its font dir before the
+  // restart, since the app reads its fonts at start
+  async pushSsh({ host, remote, fonts } = DEFAULT_SSH, log = () => {}) {
     this.need()
+    // one line per file copied, as it lands
+    const copy = async (src, dest, what) => {
+      const t = Date.now()
+      await run('scp', ['-q', '-o', 'ConnectTimeout=5', src, `${host}:${dest}`], { timeout: TIMEOUT })
+      log(`copied ${what} (${mb((await stat(src)).size)}, ${((Date.now() - t) / 1000).toFixed(1)} s) -> ${host}:${dest}`)
+    }
+    const files = (await fonts?.(log)) ?? []
+    if (files.length) log(`fonts: ${files.length} file${files.length > 1 ? 's' : ''} the device lacks`)
+    for (const f of files) await copy(f, `${DEVICE_FONT_DIR}/${basename(f)}`, `font ${basename(f)}`)
     const tmp = `${process.env.TMPDIR ?? '/tmp/'}mk10studio-push.Theme`
     await writeFile(tmp, encodeTheme(this.theme))
-    log(`scp -> ${host}:${remote}`)
-    await run('scp', ['-q', '-o', 'ConnectTimeout=5', tmp, `${host}:${remote}`], { timeout: TIMEOUT })
+    await copy(tmp, remote, `theme ${basename(remote)}`)
     const { stdout } = await run('ssh', ['-o', 'ConnectTimeout=5', host, `cat ${CONFIG}`], { timeout: TIMEOUT })
     const cfg = JSON.parse(stdout)
     if (cfg.defaultTheme !== remote) {

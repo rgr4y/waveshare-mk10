@@ -1,14 +1,15 @@
 // Electron main: owns the single Session; all edits (UI, MCP) go through it.
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, net, protocol, shell, systemPreferences, Tray } from 'electron'
-import { readFile, writeFile, mkdir } from 'node:fs/promises'
+import { copyFile, readFile, writeFile, mkdir } from 'node:fs/promises'
 import { createWriteStream, existsSync, mkdirSync, statSync, watch } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
-import { execFileSync, spawn } from 'node:child_process'
+import { execFile, execFileSync, spawn } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 import { createInterface } from 'node:readline'
 import { Session, DEFAULT_SSH } from './lib/session.js'
+import { listIcons } from './lib/theme.js'
 import { hidToQmk, isModifier } from './lib/qmk.js'
-import { fontManifest, syncDeviceFonts } from './lib/fonts.js'
+import { fontManifest, syncDeviceFonts, systemFonts, DEVICE_FONT_DIR } from './lib/fonts.js'
 import { wire } from './lib/device.js'
 import { planKeyAction, OPEN_GRACE_MS } from './lib/keyactions.js'
 import { collectStats, readContract, sampleHost, ALL_STATS } from './lib/stats.js'
@@ -77,6 +78,7 @@ async function task(label, fn) {
 // ---- actions (shared by IPC and menu)
 async function openPath(file) {
   const s = await task(`Open ${basename(file)}`, () => session.open(file))
+  if (session.translated) log(`open: ${session.translated} Chinese default descriptions changed to English (unsaved)`)
   settings.lastFile = file
   await saveSettings()
   return s
@@ -159,7 +161,44 @@ async function setBackgroundVideo(page, file) {
   return task('Transcoding video (640x256 h264, can take a while)', () => session.setBackgroundVideo(page, file))
 }
 
-const pushOpts = () => ({ mode: settings.pushMode ?? 'auto', port: process.env.MK10_PORT || null, ...settings.ssh })
+// this computer's fonts, scanned once (header reads only: ~0.3 s for 1000 files)
+let sysFontsP = null
+const sysFonts = () => (sysFontsP ??= systemFonts())
+
+// Local font files for the families the theme uses that the device lacks. Device families come from the
+// copied device fonts; before the first copy, a file whose name is already in the device's font dir
+// counts as present. Copied files also go into the device-font cache, so the editor and the next push
+// know about them.
+async function missingFonts(log) {
+  const onDevice = new Set(fonts.map((f) => f.family))
+  const names = fonts.length ? null : new Set((await new Promise((resolve) => execFile('ssh', ['-o', 'ConnectTimeout=5', settings.ssh.host, `ls ${DEVICE_FONT_DIR}`], { timeout: 15000 },
+    (err, out) => resolve(err ? [] : out.split('\n'))))).map((n) => n.trim().toLowerCase()))
+  const sys = await sysFonts()
+  const out = new Set()
+  for (const fam of session.fontFamilies()) {
+    if (onDevice.has(fam)) continue
+    const files = sys.filter((f) => f.family === fam).map((f) => f.path).filter((p) => !names?.has(basename(p).toLowerCase()))
+    if (!files.length && !names) log(`font ${fam}: not on the device or this computer; the device uses its default font`)
+    for (const f of files) out.add(f)
+  }
+  return [...out]
+}
+async function cacheFonts(files) {
+  if (!files.length) return
+  await mkdir(fontDir(), { recursive: true })
+  for (const f of files) await copyFile(f, join(fontDir(), basename(f)))
+  fonts = await fontManifest(fontDir())
+  send('fonts', fonts)
+}
+
+const pushOpts = () => ({
+  mode: settings.pushMode ?? 'auto', port: process.env.MK10_PORT || null, ...settings.ssh,
+  fonts: async (log) => {
+    const files = await missingFonts(log)
+    if (files.length && fonts.length) cacheFonts(files).catch((e) => log(`font cache: ${e.message}`))
+    return files
+  },
+})
 
 async function push() {
   if (!session.theme) return null
@@ -401,11 +440,15 @@ async function keyOp(op, page, row, col) {
     session.cutKey(page, row, col)
   })
   if (op === 'delete') return task(`Delete key ${slot(row, col)}`, () => session.deleteKey(page, row, col))
-  if (op === 'undo') return task('Undo', () => { if (!session.undo()) throw new Error('nothing to undo') })
+  // nothing to undo or paste is a no-op with a status line, not an error
+  if (op === 'undo') {
+    if (!session.canUndo) return status('Nothing to undo')
+    return task('Undo', () => { session.undo() })
+  }
   if (op === 'paste') {
+    const text = await clipboard.readText() // Electron 45: the clipboard API is async
+    if (!session.canPaste(text)) return status('Nothing to paste: the clipboard holds no MK10 Studio key')
     return task(`Paste key ${slot(row, col)}`, async () => {
-      const text = await clipboard.readText() // Electron 45: the clipboard API is async
-      if (!session.canPaste(text)) throw new Error('the clipboard holds no MK10 Studio key')
       for (const w of session.pasteKey(page, row, col, text)) log(`paste: ${w}`)
     })
   }
@@ -424,6 +467,28 @@ async function keyMenu(page, row, col, hasKey) {
     { type: 'separator' },
     { label: 'Press Key', enabled: hasKey, click: () => send('press', { page, row, col }) },
   ]).popup({ window: win })
+}
+
+// Right-click on a folder in the page list
+function pageMenu(page) {
+  const pages = session.summary().pages ?? []
+  const p = pages[page]
+  if (p?.parentIndex === undefined) return
+  const nested = (q) => pages.filter((c) => c.parentIndex === q.index).flatMap((c) => [c, ...nested(c)])
+  const sub = nested(p).length
+  const del = async () => {
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'warning', buttons: ['Delete', 'Cancel'], defaultId: 1, cancelId: 1,
+      message: 'Delete this folder?',
+      detail: `Deletes the folder${sub ? ` and the ${sub} folder${sub > 1 ? 's' : ''} inside it` : ''}, every key on ${sub ? 'them' : 'it'}, and the key that opens it. Cmd+Z undoes it.`,
+    })
+    if (response !== 0) return
+    const parentName = pages[p.parentIndex].name
+    await task('Delete folder', async () => session.deleteFolder(page)).catch(() => {}) // reported via status
+    const parent = (session.summary().pages ?? []).findIndex((q) => q.name === parentName)
+    if (parent >= 0) send('select', { page: parent, kind: 'page' })
+  }
+  Menu.buildFromTemplate([{ label: 'Delete Folder…', click: del }]).popup({ window: win })
 }
 
 const NATIVE_EDIT = new Set(['undo', 'redo', 'cut', 'copy', 'paste', 'delete'])
@@ -447,18 +512,27 @@ function registerIpc() {
   h('asset', asset)
   h('frames', frames)
   h('setKeyTitle', (p, r, c, t) => session.setKeyTitle(p, r, c, t))
+  h('setKeyTitleParam', (p, r, c, patch) => session.setKeyTitleParam(p, r, c, patch))
   h('setKeyActionField', (p, r, c, f, v) => session.setKeyActionField(p, r, c, f, v))
   h('setKeyImage', setKeyImage)
+  h('icons', () => listIcons())
+  h('setKeyIcon', (p, r, c, name) => session.setKeyIcon(p, r, c, name))
   h('setKeySound', setKeySound)
   h('setBackgroundVideo', setBackgroundVideo)
   h('push', push)
   h('pull', pull)
   h('setLevel', (method, level) => session.setLevel(method, level))
   h('fonts', () => fonts)
+  h('systemFonts', async () => [...new Set((await sysFonts()).map((f) => f.family))].sort())
   h('syncFonts', syncFonts)
   h('keyOp', keyOp)
+  h('pageMenu', pageMenu)
   h('keyRaw', (p, r, c) => session.keyRaw(p, r, c))
   h('setKeyRaw', (p, r, c, raw) => task(`Edit key ${slot(r, c)} JSON`, async () => session.setKeyRaw(p, r, c, raw)))
+  h('pageRaw', (p) => session.pageRaw(p))
+  h('newKeyTypes', (p) => session.newKeyTypes(p))
+  h('createKey', (p, row, col, type) => task(`New key ${slot(row, col)}`, async () => session.createKey(p, row, col, type)))
+  h('setPageRaw', (p, raw) => task('Edit page JSON', async () => session.setPageRaw(p, raw)))
   h('openCapture', openCapture)
   h('saveCaptureLog', async (text) => {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
@@ -565,7 +639,10 @@ function createWindow() {
     },
   })
   win.on('close', (e) => {
-    if (app.isQuitting || win.forceClose || !MAC) return // Linux (test runs on lenny): no tray, close quits
+    if (app.isQuitting || win.forceClose) return
+    // Linux (test runs on lenny): no tray, so close means quit. Quit while the window still exists:
+    // before-quit's unsaved-changes prompt needs it (closing first crashed with "Object has been destroyed").
+    if (!MAC) { e.preventDefault(); app.quit(); return }
     e.preventDefault() // resident app: hide to tray; theme and MCP stay alive
     win.hide()
     app.dock?.hide()
@@ -666,7 +743,7 @@ app.whenReady().then(async () => {
 
 app.on('before-quit', (e) => {
   const { dirty, unpushed } = session
-  if (!app.isQuitting && (dirty || unpushed) && win && !win.forceClose) {
+  if (!app.isQuitting && (dirty || unpushed) && win && !win.isDestroyed() && !win.forceClose) {
     if (!win.isVisible()) showWindow()
     const buttons = ['Cancel', ...(unpushed ? ['Push to Device…'] : []), dirty ? 'Discard changes' : 'Quit anyway']
     const r = dialog.showMessageBoxSync(win, {

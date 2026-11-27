@@ -38,7 +38,8 @@
     10,
     "keyboard"
    ]
-  ]
+  ],
+  "icon": "keyboard"
  },
  "keyboard_switch": {
   "group": "Keyboard & mouse",
@@ -69,7 +70,8 @@
     10,
     "keyboard_switch"
    ]
-  ]
+  ],
+  "icon": "toggle"
  },
  "qmk_mouse": {
   "group": "Keyboard & mouse",
@@ -130,7 +132,8 @@
     10,
     "qmk_mouse"
    ]
-  ]
+  ],
+  "icon": "mouse"
  },
  "qmk_string": {
   "group": "Keyboard & mouse",
@@ -166,7 +169,8 @@
     10,
     "qmk_string"
    ]
-  ]
+  ],
+  "icon": "keyboard"
  },
  "text": {
   "group": "Keyboard & mouse",
@@ -212,7 +216,8 @@
     10,
     "text"
    ]
-  ]
+  ],
+  "icon": "text"
  },
  "password": {
   "group": "Keyboard & mouse",
@@ -258,7 +263,8 @@
     10,
     "password"
    ]
-  ]
+  ],
+  "icon": "lock"
  },
  "openDir": {
   "group": "Files & web",
@@ -294,7 +300,8 @@
     10,
     "openDir"
    ]
-  ]
+  ],
+  "icon": "folder"
  },
  "openFile": {
   "group": "Files & web",
@@ -330,7 +337,8 @@
     10,
     "openFile"
    ]
-  ]
+  ],
+  "icon": "file"
  },
  "Loudspeaker": {
   "group": "Sound",
@@ -381,7 +389,8 @@
     2,
     0
    ]
-  ]
+  ],
+  "icon": "speaker"
  },
  "pageSwitch": {
   "group": "Pages",
@@ -422,7 +431,8 @@
     10,
     "pageSwitch"
    ]
-  ]
+  ],
+  "icon": "pages"
  },
  "Microphone": {
   "group": "Sound",
@@ -473,7 +483,8 @@
     2,
     0
    ]
-  ]
+  ],
+  "icon": "microphone"
  },
  "screenshot": {
   "group": "Tools",
@@ -509,7 +520,8 @@
     10,
     "screenshot"
    ]
-  ]
+  ],
+  "icon": "camera"
  },
  "playMusic": {
   "group": "Tools",
@@ -555,7 +567,8 @@
     10,
     "playMusic"
    ]
-  ]
+  ],
+  "icon": "music"
  },
  "deviceVolume": {
   "group": "MK10 device",
@@ -596,7 +609,8 @@
     10,
     "deviceVolume"
    ]
-  ]
+  ],
+  "icon": "speaker"
  },
  "openPage": {
   "group": "Pages",
@@ -605,7 +619,7 @@
    [
     "description",
     10,
-    "创建文件夹"
+    "Create folder"
    ],
    [
     "iconPath",
@@ -620,14 +634,15 @@
    [
     "parentDescription",
     10,
-    "页面切换"
+    "Page switching"
    ],
    [
     "type",
     10,
     "openPage"
    ]
-  ]
+  ],
+  "icon": "folder"
  },
  "oneLevelUp": {
   "group": "Pages",
@@ -636,7 +651,7 @@
    [
     "description",
     10,
-    "返回到上一层"
+    "Back to previous level"
    ],
    [
     "iconPath",
@@ -651,14 +666,15 @@
    [
     "parentDescription",
     10,
-    "页面切换"
+    "Page switching"
    ],
    [
     "type",
     10,
     "oneLevelUp"
    ]
-  ]
+  ],
+  "icon": "back"
  },
  "openWeb": {
   "group": "Files & web",
@@ -672,7 +688,7 @@
    [
     "description",
     10,
-    "打开网页"
+    "Open web page"
    ],
    [
     "iconPath",
@@ -682,13 +698,14 @@
    [
     "parentDescription",
     10,
-    "系统文件控制"
+    "System file control"
    ],
    [
     "type",
     10,
     "openWeb"
    ]
-  ]
+  ],
+  "icon": "globe"
  }
 }

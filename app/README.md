@@ -32,6 +32,28 @@ The first-run dialog offers it, ticked by default (with Start at login). Enable 
 default 47110, bound to 127.0.0.1. The URL and the `claude mcp add` command show when on. Edits made via
 MCP appear live in the UI.
 
+### New keys
+Click an empty slot to open the action picker: type to filter (label, group or type), arrow keys
+choose, Enter adds, Esc closes. The new key gets its type's icon and its title is the action's label; set the
+action's fields, title and image in the Inspector. Fields come from `lib/action-templates.json`.
+Not offered yet: Hotkey (toggle) and Open folder page (they need states or a new folder page);
+Back (up one level) only on folder pages. Cmd+Z undoes it.
+
+### Title look
+Under the key's Title: font (the device's fonts, then this computer's), size (6-96), style
+(Regular, Bold, Italic, Bold Italic), position (Top, Middle, Bottom), color, and Title / Image /
+Underline toggles. Stored in the item's `titleParam`. Position values are the ones the device daemon
+knows (`top`, `middle`, `bottom`).
+An ssh push first copies this computer's font files for any family the theme uses (key titles, text
+widgets) that the device lacks into the device's `/usr/share/fonts`; the restart loads them. The stock
+firmware (USB push) can't take fonts: the push log warns and the device draws that text in its default.
+
+### Icons
+"Choose icon…" (next to Replace image) sets one of the premade line-art icons in `icons/` as the key's
+image; new keys from the action picker start with their type's icon (`icon` in
+`lib/action-templates.json`). The SVGs are the source: after editing or adding one, `npm run icons`
+renders the 128×128 PNGs (needs `rsvg-convert`, Homebrew `librsvg`). Same icon on several keys = one asset.
+
 ### Key clipboard
 Right-click a key (or an empty slot) for Cut, Copy, Paste and Delete Key. With no text field focused,
 Cmd+X / Cmd+C / Cmd+V act on the selected key or slot, Backspace/Delete clears it, and Cmd+Z undoes the
@@ -65,6 +87,13 @@ fields yet (sound, opacity, title styling, int/bool action fields, toggle states
 (`["name", {"type": 10|2|1|8, "null": 0, "value": ...}]`: string, int, bool, map), jsonData and
 titleParam as parsed JSON. Apply validates types and new image paths, keeps the key's slot, and is
 undoable (Cmd+Z) like cut and paste.
+
+The page Inspector (click a page in the list) has the same for the whole page: canvas and every item,
+keys in the same format with their slot fields. Items can be edited, added or removed. pageName and
+parentPageName must stay (openPage keys and folders point at them), two keys can't share a slot, and
+new image paths must exist in the theme. Assets nothing uses any more are dropped. Undoable.
+
+A pageSwitch key's Jump to page is a dropdown of the top-level pages (0-5).
 
 Right-click > Press Key follows a navigation key in the editor: openPage opens its folder, oneLevelUp
 goes to the parent, pageSwitch (pageSwitchMode 0) goes to top-level page `jumpToPage`. Other actions run

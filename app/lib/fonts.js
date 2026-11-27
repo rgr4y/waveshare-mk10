@@ -3,7 +3,8 @@
 // editor under the family names the font declares, so key titles and clocks render like the device.
 // The fonts come from the user's own device and are not shipped with the app.
 import { spawn } from 'node:child_process'
-import { mkdir, readdir, readFile, rename, rm } from 'node:fs/promises'
+import { mkdir, open, readdir, readFile, rename, rm } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 export const DEVICE_FONT_DIR = '/usr/share/fonts'
@@ -13,14 +14,44 @@ const FONT_RE = /\.(ttf|otf|ttc)$/i
 // of a TrueType/OpenType file; for a .ttc, its first face.
 export function fontInfo(buf) {
   const off = buf.toString('latin1', 0, 4) === 'ttcf' ? buf.readUInt32BE(12) : 0
-  const tables = {}
-  for (let i = 0, n = buf.readUInt16BE(off + 4); i < n; i++) {
-    const r = off + 12 + i * 16
-    tables[buf.toString('latin1', r, r + 4)] = buf.readUInt32BE(r + 8)
+  const n = buf.readUInt16BE(off + 4)
+  const t = tableDir(buf.subarray(off + 12, off + 12 + n * 16))
+  const table = (tag) => t[tag] && buf.subarray(t[tag].at, t[tag].at + t[tag].len)
+  return infoFromTables(table('name'), table('OS/2'))
+}
+
+// Same, reading only the header, table directory, name and OS/2 tables (system fonts run to GBs)
+export async function fontInfoFile(path) {
+  const fh = await open(path)
+  try {
+    const rd = async (pos, len) => {
+      const b = Buffer.alloc(len)
+      const { bytesRead } = await fh.read(b, 0, len, pos)
+      if (bytesRead < len) throw new Error('short font file')
+      return b
+    }
+    const head = await rd(0, 16)
+    const off = head.toString('latin1', 0, 4) === 'ttcf' ? head.readUInt32BE(12) : 0
+    const n = (await rd(off + 4, 2)).readUInt16BE(0)
+    const t = tableDir(await rd(off + 12, n * 16))
+    const table = (tag) => t[tag] && rd(t[tag].at, t[tag].len)
+    return infoFromTables(await table('name'), await table('OS/2'))
+  } finally {
+    await fh.close()
   }
+}
+
+// table directory records (tag, checksum, offset, length) -> {tag: {at, len}}
+function tableDir(dir) {
+  const tables = {}
+  for (let r = 0; r + 16 <= dir.length; r += 16) tables[dir.toString('latin1', r, r + 4)] = { at: dir.readUInt32BE(r + 8), len: dir.readUInt32BE(r + 12) }
+  return tables
+}
+
+function infoFromTables(buf, os2) {
   const families = new Set()
-  const t = tables.name
-  if (t !== undefined) {
+  const t = 0
+  if (buf) {
     const count = buf.readUInt16BE(t + 2)
     const strings = t + buf.readUInt16BE(t + 4)
     const recs = Array.from({ length: count }, (_, i) => {
@@ -39,11 +70,10 @@ export function fontInfo(buf) {
       if (r) families.add(text(r).trim())
     }
   }
-  const os2 = tables['OS/2']
   return {
     families: [...families].filter(Boolean),
-    weight: os2 === undefined ? 400 : buf.readUInt16BE(os2 + 4),
-    italic: os2 === undefined ? false : !!(buf.readUInt16BE(os2 + 62) & 1),
+    weight: os2 ? os2.readUInt16BE(4) : 400,
+    italic: os2 ? !!(os2.readUInt16BE(62) & 1) : false,
   }
 }
 
@@ -95,4 +125,26 @@ export async function syncDeviceFonts(host, dir, { log = () => {}, timeout = 180
   await rename(tmp, dir)
   log(`fonts: ${new Set(m.map((x) => x.file)).size} files, ${new Set(m.map((x) => x.family)).size} families`)
   return m
+}
+
+// Font directories of this computer (fontconfig's defaults on Linux)
+const SYSTEM_FONT_DIRS = process.platform === 'darwin'
+  ? ['/System/Library/Fonts', '/Library/Fonts', join(homedir(), 'Library/Fonts')]
+  : ['/usr/share/fonts', '/usr/local/share/fonts', join(homedir(), '.local/share/fonts'), join(homedir(), '.fonts')]
+
+// [{path, family, weight, style}] for every readable font file under dirs (recursive)
+export async function systemFonts(dirs = SYSTEM_FONT_DIRS) {
+  const out = []
+  for (const dir of dirs) {
+    let files
+    try { files = (await readdir(dir, { recursive: true })).filter((f) => FONT_RE.test(f)) } catch { continue }
+    for (const f of files) {
+      const path = join(dir, f)
+      try {
+        const { families, weight, italic } = await fontInfoFile(path)
+        for (const family of families) out.push({ path, family, weight, style: italic ? 'italic' : 'normal' })
+      } catch { /* not a font we can read */ }
+    }
+  }
+  return out
 }

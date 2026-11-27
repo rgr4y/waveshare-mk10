@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
-import { fontInfo } from './fonts.js'
+import { fontInfo, fontInfoFile } from './fonts.js'
 
 // macOS system fonts: one plain TrueType, one collection
 const ARIAL_BOLD = '/System/Library/Fonts/Supplemental/Arial Bold.ttf'
@@ -16,4 +16,8 @@ test('fontInfo reads family, weight and italic from a .ttf', { skip: !existsSync
 
 test('fontInfo reads the first face of a .ttc', { skip: !existsSync(HELVETICA) && 'no macOS Helvetica' }, () => {
   assert.ok(fontInfo(readFileSync(HELVETICA)).families.includes('Helvetica'))
+})
+
+test('fontInfoFile (ranged reads) matches fontInfo (whole file)', { skip: !existsSync(HELVETICA) && 'no macOS fonts' }, async () => {
+  for (const f of [ARIAL_BOLD, HELVETICA]) assert.deepEqual(await fontInfoFile(f), fontInfo(readFileSync(f)))
 })

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+  <g transform="translate(4 14)">
+  <!-- speaker: box + cone, two sound waves; centred a little low so a top title fits -->
+  <path d="M20 42h16l24-20v68L36 70H20z"/>
+  <path d="M76 40a22 22 0 0 1 0 32"/>
+  <path d="M88 28a38 38 0 0 1 0 56"/>
+  </g>
+</svg>

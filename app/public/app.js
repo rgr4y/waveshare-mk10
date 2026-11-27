@@ -90,8 +90,16 @@ const videoItem = (p) => (p?.items ?? []).find((i) => i.type === '100' && i.back
 // the raw theme index (checked on the device 2026-11-25: jumpToPage 3 lands on the 4th top-level page).
 // Folders are pages with a parent; a parent key's openPage action names the folder.
 const topPages = () => (ui.summary.pages ?? []).filter((p) => p.parentIndex === undefined)
-const opener = (p) => keyItems(ui.summary.pages?.[p.parentIndex])
-  .find((k) => k.action?.type === 'openPage' && k.action.pageName === p.name)
+// The openPage key that opens folder p, with the index of the page it sits on. Usually on the parent,
+// but a chain of folders ("Next 2/5" -> "Next 3/5") has it on the previous folder, so look everywhere.
+function opener(p) {
+  const pages = ui.summary.pages ?? []
+  for (const q of [pages[p.parentIndex], ...pages].filter(Boolean)) {
+    const k = keyItems(q).find((k) => k.action?.type === 'openPage' && k.action.pageName === p.name)
+    if (k) return { ...k, pageIndex: q.index }
+  }
+  return null
+}
 
 // A multi-state key shows the image and title of its current state; Press Key steps the preview state
 // (editor only, the theme keeps its State).
@@ -165,6 +173,13 @@ function renderPages() {
     li.querySelector('.page-sub').textContent = pageSummary(p)
     li.querySelector('.page-btn').title = `Theme page index ${p.index}${p.parentIndex !== undefined && !opener(p) ? '; no key opens this folder' : ''}`
     li.querySelector('.page-btn').addEventListener('click', () => { ui.page = p.index; ui.sel = { kind: 'page' }; render() })
+    if (p.parentIndex !== undefined) {
+      li.querySelector('.page-btn').addEventListener('contextmenu', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        run(window.mk10.pageMenu(p.index))
+      })
+    }
     li.querySelector('.page-children').replaceChildren(...pages.filter((c) => c.parentIndex === p.index).map(item))
     return li
   }
@@ -210,7 +225,10 @@ function renderKeys() {
       else wireDrop(el, VIDEO_RE, (file) => run(window.mk10.setBackgroundVideo(ui.page, file)))
       // empty slots select too, so a paste has a target
       el.dataset.selected = String(ui.sel?.kind === 'key' && ui.sel.row === row && ui.sel.col === col)
-      el.addEventListener('click', () => select({ kind: 'key', row, col }))
+      el.addEventListener('click', () => {
+        select({ kind: 'key', row, col })
+        if (!it && !cellWidgets(p, row, col).length) openNewKey(row, col)
+      })
       el.addEventListener('contextmenu', (e) => {
         e.preventDefault()
         select({ kind: 'key', row, col })
@@ -358,6 +376,13 @@ function pageOptions(current) {
   return opts
 }
 
+// pageSwitch.jumpToPage: top-level page number 0..n-1 (see topPages)
+function jumpOptions(current) {
+  const opts = topPages().map((p, i) => [String(i), `${i} · ${pageName(p)} (${pageSummary(p)})`])
+  if (!opts.some(([v]) => v === String(current))) opts.unshift([String(current), `${current} (no such page)`])
+  return opts
+}
+
 function fillKv(dl, rows, onEdit, choices = {}) {
   // keep a field the user is typing in: don't rebuild under an active input
   if (dl.contains(document.activeElement) && ['INPUT', 'SELECT'].includes(document.activeElement.tagName)) return
@@ -389,9 +414,13 @@ function renderPageInspector(p) {
   const folder = p.parentIndex !== undefined
   const k = folder ? opener(p) : null
   $('pg-title').textContent = pageName(p)
+  $('pg-name-field').hidden = !folder
+  $('pg-name').disabled = !k
+  $('pg-name').placeholder = k ? '' : 'No key opens this folder'
+  if (document.activeElement !== $('pg-name')) $('pg-name').value = k ? (k.title ?? '') : ''
   fillKv($('pg-info'), [
     ['kind', folder ? `folder in ${pageName(pages[p.parentIndex])}` : 'top-level page'],
-    ...(folder ? [['opened by', k ? `key "${(k.title ?? '').trim()}", row ${k.row} col ${k.col}` : 'no key']] : []),
+    ...(folder ? [['opened by', k ? `key "${(k.title ?? '').trim()}" on ${pageName(pages[k.pageIndex])}, row ${k.row} col ${k.col}` : 'no key']] : []),
     ...(folder ? [] : [['folders', String(pages.filter((c) => c.parentIndex === p.index).length)]]),
     ['keys', String(keyItems(p).length)],
     ['shown at start', p.name === ui.summary.currentPage ? 'yes' : 'no'],
@@ -402,12 +431,25 @@ function renderPageInspector(p) {
   $('btn-pg-video').hidden = !vid
   const img = (p.items ?? []).find((i) => i.type === '114' && i.backgroundType === 'secondary')
   fillKv($('pg-panel'), [['image', img ? base(img.path || img.paths || '(none)') : 'none']])
+  loadPageRaw()
 }
 
 // pretty JSON, but one line per controlData field: ["jumpToPage", {"type":2,"null":0,"value":1}]
 const rawText = (raw) => `{\n${Object.entries(raw).map(([k, v]) => `  ${JSON.stringify(k)}: ${k === 'controlData' && Array.isArray(v)
   ? `[\n${v.map((f) => `    ${JSON.stringify(f)}`).join(',\n')}\n  ]`
   : JSON.stringify(v, null, 2).replace(/\n/g, '\n  ')}`).join(',\n')}\n}`
+
+// page JSON: same layout, each item indented inside "items"
+const pageText = (raw) => `{\n${Object.entries(raw).map(([k, v]) => k === 'items' && Array.isArray(v)
+  ? `  "items": [\n${v.map((it) => `    ${rawText(it).replace(/\n/g, '\n    ')}`).join(',\n')}\n  ]`
+  : `  ${JSON.stringify(k)}: ${JSON.stringify(v, null, 2).replace(/\n/g, '\n  ')}`).join(',\n')}\n}`
+
+async function loadPageRaw() {
+  const page = ui.page
+  const raw = await window.mk10.pageRaw(page).catch(() => null)
+  if (ui.page !== page || ui.sel?.kind !== 'page') return
+  $('page-json').value = raw ? pageText(raw) : ''
+}
 
 async function loadRaw() {
   const ta = $('raw-json')
@@ -425,16 +467,60 @@ const loadMonaco = () => (monacoP ??= new Promise((resolve, reject) => {
   window.require(['vs/editor/editor.main'], () => resolve(window.monaco), (e) => { monacoP = null; reject(e) })
 }))
 
+// ---- new-key palette: click an empty slot, filter the action types, Enter adds the key
+const palette = { types: [], shown: [], at: 0, row: 0, col: 0, page: 0 }
+async function openNewKey(row, col) {
+  const dlg = $('new-key-dlg')
+  if (dlg.open) return
+  palette.types = await window.mk10.newKeyTypes(ui.page).catch(() => [])
+  Object.assign(palette, { row, col, page: ui.page })
+  $('new-key-slot').textContent = `r${row} c${col} · ${pageName(curPage())}`
+  $('new-key-q').value = ''
+  filterNewKey()
+  dlg.showModal()
+}
+const labelHits = (t, words) => words.filter((w) => t.label.toLowerCase().includes(w)).length
+function filterNewKey() {
+  const words = $('new-key-q').value.toLowerCase().split(/\s+/).filter(Boolean)
+  palette.shown = palette.types.filter((t) => {
+    const hay = `${t.label} ${t.group} ${t.type}`.toLowerCase()
+    return words.every((w) => hay.includes(w))
+  }).sort((a, b) => labelHits(b, words) - labelHits(a, words)) // label matches first; sort is stable
+  palette.at = 0
+  $('new-key-list').replaceChildren(...palette.shown.map((t, i) => {
+    const li = tpl('tpl-palette-item')
+    li.querySelector('.pal-label').textContent = t.label
+    li.querySelector('.pal-group').textContent = t.group
+    li.addEventListener('click', () => pickNewKey(i))
+    li.addEventListener('mousemove', () => { if (palette.at !== i) { palette.at = i; markNewKey() } })
+    return li
+  }))
+  markNewKey()
+}
+function markNewKey() {
+  ;[...$('new-key-list').children].forEach((li, i) => li.setAttribute('aria-selected', String(i === palette.at)))
+  $('new-key-list').children[palette.at]?.scrollIntoView({ block: 'nearest' })
+}
+function pickNewKey(i = palette.at) {
+  const t = palette.shown[i]
+  if (!t) return
+  $('new-key-dlg').close()
+  run(window.mk10.createKey(palette.page, palette.row, palette.col, t.type))
+}
+
 let rawEd = null
-async function openRawEditor() {
+// what: 'key' (the selected key) or 'page' (the whole current page)
+async function openRawEditor(what = 'key') {
   const sel = ui.sel
-  if (sel?.kind !== 'key' || $('raw-dlg').open) return
+  if ((what === 'key' && sel?.kind !== 'key') || $('raw-dlg').open) return
   const page = ui.page
-  const raw = await window.mk10.keyRaw(page, sel.row, sel.col).catch(() => null)
+  const raw = await (what === 'page' ? window.mk10.pageRaw(page) : window.mk10.keyRaw(page, sel.row, sel.col)).catch(() => null)
   if (!raw) return
   const monaco = await loadMonaco()
   const dlg = $('raw-dlg')
-  $('raw-dlg-key').textContent = `r${sel.row} c${sel.col} · ${pageName(curPage())}`
+  dlg.dataset.what = what
+  $('raw-dlg-what').textContent = what === 'page' ? 'Page' : 'Key'
+  $('raw-dlg-key').textContent = what === 'page' ? pageName(curPage()) : `r${sel.row} c${sel.col} · ${pageName(curPage())}`
   $('raw-dlg-err').hidden = true
   dlg.dataset.page = page
   dlg.dataset.row = sel.row
@@ -448,7 +534,7 @@ async function openRawEditor() {
     rawEd.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, applyRawEditor)
     rawEd.onDidChangeModelContent(() => { $('raw-dlg-err').hidden = true })
   }
-  rawEd.setValue(rawText(raw))
+  rawEd.setValue(what === 'page' ? pageText(raw) : rawText(raw))
   rawEd.setScrollPosition({ scrollTop: 0 })
   rawEd.focus()
 }
@@ -465,14 +551,16 @@ async function applyRawEditor() {
     return
   }
   try {
-    await window.mk10.setKeyRaw(Number(dlg.dataset.page), Number(dlg.dataset.row), Number(dlg.dataset.col), raw)
+    if (dlg.dataset.what === 'page') await window.mk10.setPageRaw(Number(dlg.dataset.page), raw)
+    else await window.mk10.setKeyRaw(Number(dlg.dataset.page), Number(dlg.dataset.row), Number(dlg.dataset.col), raw)
   } catch (e) {
     err.textContent = e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
     err.hidden = false // the text stays for fixing
     return
   }
   dlg.close()
-  loadRaw()
+  if (dlg.dataset.what === 'page') loadPageRaw()
+  else loadRaw()
 }
 
 function renderInspector() {
@@ -493,10 +581,19 @@ function renderInspector() {
   if (key) {
     $('key-pos').textContent = `${pageName(p)} · row ${sel.row} col ${sel.col}`
     if (document.activeElement !== $('key-title')) $('key-title').value = key.title ?? ''
+    const tp = key.titleParam ?? {}
+    for (const el of $('key-title-style').querySelectorAll('[data-tp]')) {
+      if (el === document.activeElement) continue
+      const v = tp[el.dataset.tp]
+      if (el.id === 'tp-family') { fillFontSelect(v); continue }
+      if (el.type === 'checkbox') el.checked = v !== false
+      else el.value = v ?? ''
+    }
     const f = face(key)
     fillImg($('key-thumb'), f.path || f.paths, f.path ? null : f.frameDelays)
     $('key-states-h').hidden = $('key-states').hidden = !key.states
     $('btn-key-image').hidden = !!key.states // per-state images; item path is not what the device shows
+    $('btn-key-icon').hidden = !!key.states
     $('key-sound').textContent = key.sound ? base(key.sound) : 'none'
     $('key-sound').title = key.sound ?? ''
     $('btn-key-sound-play').hidden = $('btn-key-sound-clear').hidden = !key.sound
@@ -509,7 +606,7 @@ function renderInspector() {
     loadRaw()
     fillKv($('key-action'), actionRows(key.action), (field, value) =>
       run(window.mk10.setKeyActionField(ui.page, sel.row, sel.col, field, value)),
-    key.action?.type === 'openPage' ? { pageName: pageOptions } : {})
+    key.action?.type === 'openPage' ? { pageName: pageOptions } : key.action?.type === 'pageSwitch' ? { jumpToPage: jumpOptions } : {})
   }
   if (vid) fillKv($('video-info'), [['asset', base(vid.path ?? '(none)')], ['size', '640 × 256']])
 }
@@ -586,8 +683,31 @@ async function onChange(e) {
     // start on the page the device shows
     const ci = s.pages?.findIndex((p) => p.name === s.currentPage) ?? -1
     if (ci >= 0) ui.page = ci
+  } else if (!s.pages?.[ui.page]) {
+    // the page went away (folder deleted); main selects its parent right after
+    ui.page = 0
+    ui.sel = { kind: 'page' }
   }
   await refresh()
+}
+
+// Title font picker: device fonts first, then this computer's (copied to the device on an ssh push).
+// Before the device fonts are copied, its two stock title fonts stand in.
+const fontLists = { device: [], system: [] }
+function fillFontSelect(current) {
+  const sel = $('tp-family')
+  const device = fontLists.device.length ? fontLists.device : ['Arial', 'Microsoft YaHei']
+  const onDevice = new Set(device)
+  const group = (label, names) => {
+    const g = tpl('tpl-optgroup')
+    g.label = label
+    g.replaceChildren(...names.map((n) => { const o = tpl('tpl-option'); o.value = o.textContent = n; return o }))
+    return g
+  }
+  const groups = [group('On the device', device), group('This computer (copied on push)', fontLists.system.filter((n) => !onDevice.has(n)))]
+  if (current && !onDevice.has(current) && !fontLists.system.includes(current)) groups.unshift(group('Not found', [current]))
+  sel.replaceChildren(...groups)
+  sel.value = current ?? ''
 }
 
 // Device fonts (copied from the MK10) override same-named system fonts, so titles and clocks use the
@@ -600,6 +720,7 @@ function registerFonts(list) {
     document.fonts.add(f)
     fontFaces.push(f)
   }
+  fontLists.device = [...new Set((list ?? []).map((f) => f.family))].sort()
   const n = new Set((list ?? []).map((f) => f.file)).size
   $('fonts-info').textContent = n ? `${n} font files from the device` : 'None yet: copied after the first ssh push or pull'
 }
@@ -640,6 +761,7 @@ async function init() {
   }
   $('settings-dlg').addEventListener('close', () => clearInterval(permTimer))
   $('settings-dlg').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) return e.currentTarget.close() // click on the backdrop
     const pane = e.target.closest('[data-pane]')?.dataset.pane
     if (pane) run(pane === 'accessibility' ? window.mk10.requestAccessibility() : window.mk10.openPrivacyPane(pane))
   })
@@ -666,12 +788,15 @@ async function init() {
     })))
   }
   $('raw-json').addEventListener('click', () => run(openRawEditor()))
+  $('page-json').addEventListener('click', () => run(openRawEditor('page')))
+  $('btn-page-raw-edit').addEventListener('click', () => run(openRawEditor('page')))
   $('btn-raw-edit').addEventListener('click', () => run(openRawEditor()))
   $('raw-dlg-apply').addEventListener('click', () => run(applyRawEditor()))
   $('raw-dlg-cancel').addEventListener('click', () => $('raw-dlg').close())
   $('btn-fonts').addEventListener('click', () => run(window.mk10.syncFonts()))
   window.mk10.onFonts(registerFonts)
   registerFonts(await window.mk10.fonts())
+  window.mk10.systemFonts().then((l) => { fontLists.system = l; if (ui.sel?.kind === 'key') render() }).catch(() => {})
   $('mcp-badge').addEventListener('click', openSettings)
   $('reopen-last').checked = cfg.reopenLast !== false
   $('key-actions').checked = cfg.keyActions !== false
@@ -707,10 +832,10 @@ async function init() {
   let changing = Promise.resolve()
   window.mk10.onChange((e) => { changing = onChange(e) })
   window.mk10.onPress(({ page, row, col }) => pressKey(page, row, col))
-  window.mk10.onSelect(async ({ page, row, col }) => {
+  window.mk10.onSelect(async ({ page, row, col, kind }) => {
     await changing.catch(() => {})
     ui.page = page
-    ui.sel = Number.isNaN(row) ? { kind: 'video' } : { kind: 'key', row, col }
+    ui.sel = kind === 'page' ? { kind: 'page' } : Number.isNaN(row) ? { kind: 'video' } : { kind: 'key', row, col }
     render()
   })
 
@@ -721,6 +846,24 @@ async function init() {
   $('btn-key-image').addEventListener('click', () => {
     if (ui.sel?.kind === 'key') run(window.mk10.setKeyImage(ui.page, ui.sel.row, ui.sel.col))
   })
+  $('btn-key-icon').addEventListener('click', async () => {
+    if (ui.sel?.kind !== 'key') return
+    const { row, col } = ui.sel
+    const page = ui.page
+    const names = await window.mk10.icons().catch(() => [])
+    $('icon-grid').replaceChildren(...names.map((n) => {
+      const li = tpl('tpl-icon-item')
+      li.querySelector('img').src = `../icons/${n}.png`
+      li.querySelector('span').textContent = n
+      li.querySelector('button').addEventListener('click', () => {
+        $('icon-dlg').close()
+        run(window.mk10.setKeyIcon(page, row, col, n))
+      })
+      return li
+    }))
+    $('icon-dlg').showModal()
+  })
+  $('icon-dlg').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close() })
   const selKey = () => (ui.sel?.kind === 'key' ? keyAt(curPage(), ui.sel.row, ui.sel.col) : null)
   $('btn-key-sound').addEventListener('click', () => {
     if (selKey()) run(window.mk10.setKeySound(ui.page, ui.sel.row, ui.sel.col))
@@ -734,6 +877,17 @@ async function init() {
   })
   $('btn-video').addEventListener('click', () => run(window.mk10.setBackgroundVideo(ui.page)))
   $('btn-pg-video').addEventListener('click', () => run(window.mk10.setBackgroundVideo(ui.page)))
+  $('pg-name').addEventListener('change', (e) => {
+    const p = curPage()
+    const k = p && opener(p)
+    if (k) run(window.mk10.setKeyTitle(k.pageIndex, k.row, k.col, e.target.value))
+  })
+  $('key-title-style').addEventListener('change', (e) => {
+    const el = e.target
+    if (ui.sel?.kind !== 'key' || !el.dataset.tp) return
+    const v = el.type === 'checkbox' ? el.checked : el.type === 'number' ? Number(el.value) : el.value
+    run(window.mk10.setKeyTitleParam(ui.page, ui.sel.row, ui.sel.col, { [el.dataset.tp]: v }))
+  })
   $('key-title').addEventListener('change', (e) => {
     if (ui.sel?.kind === 'key') run(window.mk10.setKeyTitle(ui.page, ui.sel.row, ui.sel.col, e.target.value))
   })
@@ -773,6 +927,20 @@ async function init() {
     if ((e.key === 'Backspace' || e.key === 'Delete') && !typing() && !document.querySelector('dialog[open]')) keyEdit('delete')
     if (e.key === 'Escape' && document.activeElement?.tagName !== 'INPUT') select(null)
   })
+
+  $('new-key-q').addEventListener('input', filterNewKey)
+  $('new-key-q').addEventListener('keydown', (e) => {
+    const n = palette.shown.length
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      if (n) palette.at = (palette.at + (e.key === 'ArrowDown' ? 1 : n - 1)) % n
+      markNewKey()
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      pickNewKey()
+    }
+  })
+  $('new-key-dlg').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close() })
 
   await onChange({ kind: 'init' })
 }

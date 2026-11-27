@@ -1,6 +1,7 @@
 // ScreenKey .Theme codec + editor helpers. Port of tools/qtheme.py; format: docs/theme-format.md.
 // Layout: QVariantMap header | u32 pad1 | QByteArray JSON | QMap<QString,QByteArray> assets | u32 pad2
 import { randomUUID } from 'node:crypto'
+import { readdirSync, readFileSync } from 'node:fs'
 import { QReader, QWriter, T_BOOL, T_INT, T_MAP, T_STRING } from './qdatastream.js'
 
 const utf8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })
@@ -137,12 +138,85 @@ export function setKeyTitle(theme, pageIndex, row, col, title) {
   needItem(theme, pageIndex, row, col).title = String(title)
 }
 
+// Title look (item titleParam, compact JSON with sorted keys like the vendor writes it). Allowed values
+// from the device daemon's strings (/data/KeyboardDevice): TitleAlignment top / middle / bottom,
+// font style names Regular, Italic, Bold Italic; stock themes use "" and "Bold".
+export const TITLE_STYLES = ['', 'Bold', 'Italic', 'Bold Italic']
+export const TITLE_ALIGNS = ['top', 'middle', 'bottom']
+const TITLE_CHECKS = {
+  FontFamily: (v) => typeof v === 'string' && v.trim() !== '' && v.length <= 100,
+  FontSize: (v) => Number.isInteger(v) && v >= 6 && v <= 96,
+  FontStyle: (v) => TITLE_STYLES.includes(v),
+  FontUnderline: (v) => typeof v === 'boolean',
+  ShowImage: (v) => typeof v === 'boolean',
+  ShowTitle: (v) => typeof v === 'boolean',
+  TitleAlignment: (v) => TITLE_ALIGNS.includes(v),
+  TitleColor: (v) => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v),
+}
+export function setKeyTitleParam(theme, pageIndex, row, col, patch) {
+  const it = needItem(theme, pageIndex, row, col)
+  const tp = JSON.parse(it.titleParam || TITLE_PARAM)
+  for (const [k, v] of Object.entries(patch)) {
+    if (!TITLE_CHECKS[k]) throw new Error(`unknown title setting ${k}`)
+    if (!TITLE_CHECKS[k](v)) throw new Error(`bad ${k}: ${JSON.stringify(v)}`)
+    tp[k] = v
+  }
+  it.titleParam = JSON.stringify(Object.fromEntries(Object.entries(tp).sort(([a], [b]) => (a < b ? -1 : 1))))
+}
+
+// Vendor default action descriptions in Chinese (every one in the themes bundled with ScreenKeyMacOS,
+// checked 2026-11-25) and their English. Only these exact values change; anything else is the user's text.
+const ZH_DESCRIPTIONS = {
+  页面切换: 'Page switching', 创建文件夹: 'Create folder', 返回到上一层: 'Back to previous level',
+  键盘: 'Keyboard', 系统输入控制: 'System input control', 打开网页: 'Open web page', 系统文件控制: 'System file control',
+  操作流: 'Control flow', 编码器: 'Encoder', 系统音频: 'System audio', 系统音量: 'System volume',
+}
+// Replace those defaults in every item's description / parentDescription; returns how many changed
+export function englishDescriptions(theme) {
+  let n = 0
+  for (const it of theme.json.pages.flatMap((p) => p.items ?? [])) {
+    if (!it.controlData) continue
+    const cd = decodeControlData(it.controlData)
+    let hit = false
+    for (const [k, v] of cd.fields) {
+      if ((k === 'description' || k === 'parentDescription') && Object.hasOwn(ZH_DESCRIPTIONS, v.value)) {
+        v.value = ZH_DESCRIPTIONS[v.value]
+        hit = true
+        n++
+      }
+    }
+    if (hit) it.controlData = encodeControlData(cd)
+  }
+  return n
+}
+
+// Font families the theme's items name: key titles (titleParam FontFamily) and text widgets
+// (text_font: a QFont::toString(), "family,pointSize,pixelSize,styleHint,weight,..."), in item fields
+// or JSON inside them
+export function fontFamilies(theme) {
+  const out = new Set()
+  const walk = (o) => {
+    for (const [k, v] of Object.entries(o)) {
+      const fam = typeof v === 'string' && (k === 'FontFamily' ? v : k === 'text_font' ? v.split(',')[0] : '').trim()
+      if (fam) out.add(fam)
+      else if (v && typeof v === 'object') walk(v)
+      else if (typeof v === 'string' && /^[[{]/.test(v)) { try { walk(JSON.parse(v)) } catch { /* not JSON */ } }
+    }
+  }
+  for (const it of theme.json.pages.flatMap((p) => p.items ?? [])) walk(it)
+  return [...out]
+}
+
 // Action (controlData) fields that may be edited: existing QString fields only, never added, removed or
 // reordered (firmware ignores actions with extra/misordered fields). `type` and fields tied to other
 // data (keyString pairs with the int keycode; iconPath/parentDescription are editor metadata) are locked.
 const LOCKED_ACTION_FIELDS = new Set(['type', 'iconPath', 'parentDescription', 'keyString', 'AISoundControlKeyword'])
+// Int fields are locked too, except these, whose range the editor knows
+const INT_ACTION_FIELDS = new Set(['jumpToPage'])
 export const editableActionFields = (cd) =>
-  cd.fields.filter(([k, v]) => v.type === T_STRING && !LOCKED_ACTION_FIELDS.has(k)).map(([k]) => k)
+  cd.fields.filter(([k, v]) => (v.type === T_STRING && !LOCKED_ACTION_FIELDS.has(k)) || (v.type === T_INT && INT_ACTION_FIELDS.has(k))).map(([k]) => k)
+// pageSwitch.jumpToPage counts top-level pages (no parentPageName) 0..n-1, not raw theme indexes
+export const topLevelPageCount = (theme) => theme.json.pages.filter((p) => !p.parentPageName).length
 
 export function setKeyActionField(theme, pageIndex, row, col, field, value) {
   const it = needItem(theme, pageIndex, row, col)
@@ -151,9 +225,17 @@ export function setKeyActionField(theme, pageIndex, row, col, field, value) {
   if (!editableActionFields(cd).includes(field)) {
     throw new Error(`action field "${field}" is not editable (editable: ${editableActionFields(cd).join(', ') || 'none'})`)
   }
-  const v = String(value)
-  if (field === 'pageName' && !theme.json.pages.some((p) => p.pageName === v)) throw new Error(`no page named "${v}"`)
-  cd.fields.find(([k]) => k === field)[1].value = v
+  const slot = cd.fields.find(([k]) => k === field)[1]
+  if (slot.type === T_INT) {
+    const n = Number(value)
+    const top = topLevelPageCount(theme)
+    if (field === 'jumpToPage' && !(Number.isInteger(n) && n >= 0 && n < top)) throw new Error(`jumpToPage must be 0-${top - 1}, got ${value}`)
+    slot.value = n
+  } else {
+    const v = String(value)
+    if (field === 'pageName' && !theme.json.pages.some((p) => p.pageName === v)) throw new Error(`no page named "${v}"`)
+    slot.value = v
+  }
   it.controlData = encodeControlData(cd)
 }
 
@@ -269,11 +351,10 @@ function checkVariants(fields, at = 'controlData') {
   }
 }
 
-export function keyRaw(theme, pageIndex, row, col) {
-  const it = needItem(theme, pageIndex, row, col)
+// one item as JSON: controlData decoded to its fields, JSON-in-string fields parsed
+function itemToRaw(it) {
   const out = {}
   for (const [k, v] of Object.entries(it)) {
-    if (SLOT_FIELDS.includes(k)) continue
     if (k === 'controlData' && v) {
       try {
         const { fields } = decodeControlData(v)
@@ -289,19 +370,32 @@ export function keyRaw(theme, pageIndex, row, col) {
   return out
 }
 
-export function setKeyRaw(theme, pageIndex, row, col, raw) {
-  const it = needItem(theme, pageIndex, row, col)
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('the key must be a JSON object')
+// the reverse; throws on anything the theme can't hold (item fields are strings)
+function itemFromRaw(raw, at) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error(`${at} must be a JSON object`)
   const next = {}
   for (const [k, v] of Object.entries(raw)) {
-    if (SLOT_FIELDS.includes(k)) throw new Error(`${k} is the key's slot; move keys with cut and paste`)
     if (k === 'controlData' && Array.isArray(v)) {
-      checkVariants(v)
+      checkVariants(v, `${at} controlData`)
       next[k] = encodeControlData({ fields: v })
     } else if (JSON_STRING_FIELDS.includes(k) && v && typeof v === 'object') next[k] = JSON.stringify(v)
     else if (typeof v === 'string') next[k] = v
-    else throw new Error(`${k} must be a string (item fields are strings in the theme)`)
+    else throw new Error(`${at}: ${k} must be a string (item fields are strings in the theme)`)
   }
+  return next
+}
+
+export function keyRaw(theme, pageIndex, row, col) {
+  const raw = itemToRaw(needItem(theme, pageIndex, row, col))
+  for (const k of SLOT_FIELDS) delete raw[k]
+  return raw
+}
+
+export function setKeyRaw(theme, pageIndex, row, col, raw) {
+  const it = needItem(theme, pageIndex, row, col)
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('the key must be a JSON object')
+  for (const k of Object.keys(raw)) if (SLOT_FIELDS.includes(k)) throw new Error(`${k} is the key's slot; move keys with cut and paste`)
+  const next = itemFromRaw(raw, 'the key')
   if (next.type !== '115') throw new Error('type must stay "115" (a key)')
   // a path the key didn't have before must exist in the theme (device built-ins it already used are kept)
   const refs = (x) => [...Object.values(x).filter(assetRef), ...stateRefs(x)]
@@ -314,6 +408,45 @@ export function setKeyRaw(theme, pageIndex, row, col, raw) {
   for (const k of Object.keys(old)) if (SLOT_FIELDS.includes(k) || k in next) it[k] = SLOT_FIELDS.includes(k) ? old[k] : next[k]
   for (const k of Object.keys(next)) if (!(k in it)) it[k] = next[k]
   dropItemOrphans(theme, old)
+}
+
+// ---- raw page editing: the whole page (canvas, pageName, every item) as JSON, items as in keyRaw but
+// with their slot fields. pageName and parentPageName are the page's identity (openPage keys and folders
+// point at them) and must stay; items can be edited, added or removed.
+export function pageRaw(theme, pageIndex) {
+  const p = page(theme, pageIndex)
+  return Object.fromEntries(Object.entries(p).map(([k, v]) => [k, k === 'items' ? (v ?? []).map(itemToRaw) : v]))
+}
+
+export function setPageRaw(theme, pageIndex, raw) {
+  const p = page(theme, pageIndex)
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('the page must be a JSON object')
+  for (const k of ['pageName', 'parentPageName']) {
+    if (raw[k] !== p[k]) throw new Error(`${k} must stay ${JSON.stringify(p[k] ?? null)}: other pages and keys point at it`)
+  }
+  if (!Array.isArray(raw.items)) throw new Error('items must be a list')
+  for (const [k, v] of Object.entries(raw)) {
+    if (k === 'items' || !(k in p)) continue
+    const kind = (x) => (Array.isArray(x) ? 'array' : x === null ? 'null' : typeof x)
+    if (kind(v) !== kind(p[k])) throw new Error(`${k} must stay a${kind(p[k]) === 'object' || kind(p[k]) === 'array' ? 'n' : ''} ${kind(p[k])}`)
+  }
+  const items = raw.items.map((r, i) => itemFromRaw(r, `item ${i}`))
+  const slots = new Set()
+  for (const it of items.filter(isKey)) {
+    const slot = `${Number(it.row)},${Number(it.col)}`
+    if (slots.has(slot)) throw new Error(`two keys at row ${it.row} col ${it.col}`)
+    slots.add(slot)
+  }
+  // a path the page didn't use before must exist in the theme (device built-ins it already used are kept)
+  const refs = (x) => [...Object.values(x).filter(assetRef), ...stateRefs(x)]
+  const had = new Set((p.items ?? []).flatMap(refs))
+  const missing = [...new Set(items.flatMap(refs))].filter((r) => !had.has(r) && !assetsUnder(theme, r).length)
+  if (missing.length) throw new Error(`not in this theme: ${missing.join(', ')}`)
+  const old = p.items ?? []
+  const fields = { ...raw, items }
+  for (const k of Object.keys(p)) if (!(k in fields)) delete p[k]
+  Object.assign(p, fields)
+  for (const it of old) dropItemOrphans(theme, it)
 }
 
 // asset keys an item field points at: the exact file, or every file under a `paths` directory
@@ -400,4 +533,95 @@ export function pasteKey(theme, pageIndex, row, col, clip) {
   else p.items.push(item)
   if (old) dropItemOrphans(theme, old)
   return warnings
+}
+
+// ---- new keys from scratch: lib/action-templates.json holds each action type's controlData fields
+// (vendor defaults). Left out: keyboard_switch (needs jsonData States) and openPage (needs a new
+// folder page); oneLevelUp only on a folder page (one with parentPageName).
+const ACTION_TEMPLATES = JSON.parse(readFileSync(new URL('./action-templates.json', import.meta.url), 'utf8'))
+const NOT_CREATABLE = new Set(['keyboard_switch', 'openPage'])
+const TITLE_PARAM = '{"FontFamily":"Microsoft YaHei","FontSize":16,"FontStyle":"","FontUnderline":false,"ShowImage":true,"ShowTitle":true,"TitleAlignment":"top","TitleColor":"#ffffff"}' // new keys: 16 px title at the top (Rob, 2026-11-25)
+
+// [{type, group, label}] the palette offers on this page
+export function newKeyTypes(theme, pageIndex) {
+  const folder = !!page(theme, pageIndex).parentPageName
+  return Object.entries(ACTION_TEMPLATES)
+    .filter(([t]) => !NOT_CREATABLE.has(t) && (t !== 'oneLevelUp' || folder))
+    .map(([type, { group, label }]) => ({ type, group, label }))
+}
+
+// A plain type 115 key of action `type` in an empty slot; the title is the action's label.
+// Fields match a stock key; slot fields and the widget check come from pasteKey.
+export function createKey(theme, pageIndex, row, col, type) {
+  if (!newKeyTypes(theme, pageIndex).some((t) => t.type === type)) throw new Error(`can't create a ${type} key on this page`)
+  if (getItem(theme, pageIndex, row, col)) throw new Error(`r${row} c${col} already holds a key`)
+  const t = ACTION_TEMPLATES[type]
+  const fields = t.fields.map(([name, qtype, value]) => [name, { type: qtype, null: 0, value: name === 'pageName' && type === 'oneLevelUp' ? 'parentPage' : value }])
+  const item = {
+    type: '115', controlData: encodeControlData({ fields }), title: t.label, titleParam: TITLE_PARAM,
+    path: '', paths: '', soundFile: '', lock: '1', opacity: '100', rotate: '0', scale: '1', z: '1',
+    maxWidth: '896', maxHeight: '304', scaledWidthTo: '128', scaledHeightTo: '128',
+  }
+  // default image: the template's line-art icon
+  const assets = {}
+  if (t.icon) {
+    const png = iconPng(t.icon)
+    item.path = [...theme.assets].find(([, b]) => b.equals(png))?.[0] ?? `/image/MK10/cache/${randomUUID()}.png`
+    assets[item.path] = png.toString('base64')
+  }
+  return pasteKey(theme, pageIndex, row, col, { mk10studio: 'key', v: 1, item, assets })
+}
+
+// ---- premade key icons: app/icons/<name>.svg (white line art, 128x128) rendered to <name>.png
+// (`npm run icons`); the PNG is what goes into the theme
+const ICON_DIR = new URL('../icons/', import.meta.url)
+export const listIcons = () => readdirSync(ICON_DIR).filter((f) => f.endsWith('.png')).map((f) => f.slice(0, -4)).sort()
+export function iconPng(name) {
+  if (!listIcons().includes(name)) throw new Error(`no icon named ${name}`)
+  return readFileSync(new URL(`${name}.png`, ICON_DIR))
+}
+
+// Set a premade icon as the key's image; an asset with the same bytes is reused
+export function setKeyIcon(theme, pageIndex, row, col, name) {
+  const png = iconPng(name)
+  const it = needItem(theme, pageIndex, row, col)
+  const have = [...theme.assets].find(([, b]) => b.equals(png))?.[0]
+  if (!have) return setKeyImage(theme, pageIndex, row, col, png)
+  const [oldPath, oldDir] = [it.path, it.paths]
+  it.path = have
+  if ('paths' in it) it.paths = ''
+  delete it.frameDelays
+  dropIfOrphan(theme, oldPath, false)
+  dropIfOrphan(theme, oldDir, true)
+  return have
+}
+
+// Delete folder page pageIndex with every folder nested in it, and the openPage keys that open them.
+// Assets nothing else references go too. A deleted page shown at start hands that over to the
+// parent. Top-level pages are refused (pageSwitch keys number them). Returns the pageNames deleted.
+export function deleteFolder(theme, pageIndex) {
+  const p = page(theme, pageIndex)
+  if (!p.parentPageName) throw new Error('only folder pages can be deleted')
+  const gone = new Set([p.pageName])
+  for (let grew = true; grew;) {
+    grew = false
+    for (const q of theme.json.pages) if (gone.has(q.parentPageName) && !gone.has(q.pageName)) { gone.add(q.pageName); grew = true }
+  }
+  const opens = (it) => {
+    if (!isKey(it) || !it.controlData) return false
+    const cd = decodeControlData(it.controlData)
+    return cd.type === 'openPage' && gone.has(cd.fields.find(([k]) => k === 'pageName')?.[1].value)
+  }
+  const dropped = theme.json.pages.filter((q) => gone.has(q.pageName)).flatMap((q) => q.items ?? [])
+  theme.json.pages = theme.json.pages.filter((q) => !gone.has(q.pageName))
+  for (const q of theme.json.pages) {
+    const keep = (q.items ?? []).filter((it) => !opens(it))
+    if (keep.length !== (q.items ?? []).length) {
+      dropped.push(...q.items.filter((it) => opens(it)))
+      q.items = keep
+    }
+  }
+  if (gone.has(theme.json.main?.currentPage)) theme.json.main.currentPage = p.parentPageName
+  for (const it of dropped) dropItemOrphans(theme, it)
+  return [...gone]
 }

@@ -14,7 +14,8 @@
     "test": "node --test lib/",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "cli": "ELECTRON_RUN_AS_NODE=1 electron cli.js"
+    "cli": "ELECTRON_RUN_AS_NODE=1 electron cli.js",
+    "icons": "for f in icons/*.svg; do rsvg-convert -w 128 -h 128 \"$f\" -o \"${f%.svg}.png\" && echo \"rendered ${f%.svg}.png\"; done"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
