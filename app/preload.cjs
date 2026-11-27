@@ -83,6 +83,7 @@ contextBridge.exposeInMainWorld('mk10', {
   onSelect: on('select'),
   onPress: on('press'),
   onBgState: on('bgState'),
+  onStats: on('stats'),
   bgState: call('bgState'),
   onMcp: on('mcp'),
   onOpenSettings: on('openSettings'),

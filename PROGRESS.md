@@ -1378,3 +1378,17 @@ Verification
 - Device restored: `mk10studio.Theme`, `config.json` and `/data/file_info.json` sha-identical to the pre-test backup; test themes and probe PNGs removed.
 - Synced `app/` (no node_modules) to lenny `~/workspace/waveshare-mk10/app`.
 - Follow-up: the Mac got "No route to host" for 10.0.1.48 while lenny reached it; Studio's ssh push from the Mac will fail until that's sorted.
+
+## 2026-11-27: Studio info panel text matches the device
+
+- Outcome: panel text (type 113) in Studio now has the device's size and position. The stock clock's colon sits between the digits, as on the MK10 (Rob confirmed in the dev app).
+- Root cause: Studio ignored `text_font` and `scale` for 113 items. It drew fixed 48/18/14 px bold Arial with `line-height: 1`. The device draws a `QGraphicsTextItem`: px = point size x `scale`, family/weight/italic from `text_font`, top-left origin, no document margin, baseline at y + ascent. The colon (U+FF1A) is not in Arial. The device takes it from Microsoft New Tai Lue; Chrome took it from PingFang.
+- Changed: `app/public/app.js` (113 font from `text_font` x `scale`, fallback chain Arial, New Tai Lue, YaHei), `app/public/styles.css` (`text-box: trim-both text`, so the box is Qt's ascent-to-descent line box; dropped the text shadow), `docs/theme-format.md` (rules and evidence).
+- Verification: rendered the same items with PySide6 and the device fonts. Page 0 of `mk10studio.Theme` matched fb11 pixel for pixel. Tested 68-100 dpi and margin 0/4: 72 dpi with margin 0 matched best. A Qt render of the stock colon in each candidate font: only New Tai Lue bold reproduced the device ink box. `npm test` 64 pass, eslint clean.
+- Device: a page-switch attempt by theme copy failed at scp (the ssh connection through lenny closed), so nothing was loaded. Rob switched to the default theme by hand for the capture. Checked afterwards: no `_colon*.Theme` copies on the device; config.json still points at `mk10studio.Theme`.
+- Not checked: type 111 clock digits on the panel; fallback for other missing glyphs (only U+FF1A and Han covered).
+- Follow-up same day: the panel preview shows live data. Main collects one stats sample per tick (CPU usage is a delta, so it can't be sampled twice). It sends every key to the renderer (`mk10:stats`) and the contract's keys to the device. Bound 113 texts (`system_data_flag` 1) show the value and update each second. Checked: `collectStats` gives `37% 33% 58%` for CPU/GPU/RAM; lint and 64 tests pass. Not seen in the UI by me: the screenshot instance can't load state while Rob's dev instance holds the profile lock.
+- Bound panel texts that Studio has no value for (`Cpu温度`, `avg_dB`, `平均分贝`, `日期`, `时间`, ...) show a dummy of about the right width (`45°C`, `40 dB`, `2026-01-01`, `12:00`, else `42%`/`42`) for alignment. These are not the device's formats (Rob: dummy data is fine).
+- Panel align bar: Left/Center/Right/Top/Middle/Bottom text buttons replaced by filled SVG icons (bar against an edge or centre line, after Rob's reference), with titles and aria-labels. Icons checked in a QtSvg render.
+- Forward/Back z-order buttons are stacked-diamond icons (filled layer on top = Forward, filled layer underneath = Back), after Rob's reference.
+- Align and Forward/Back icon buttons moved after "Add object…" in the panel bar (the right-aligned bar from 583fed4 was reverted: not what Rob meant). The bar's click handler now only reacts to align/z buttons; before, "Add object…" with a panel item selected also sent an align call with no direction.

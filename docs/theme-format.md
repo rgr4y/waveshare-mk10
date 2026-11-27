@@ -259,6 +259,14 @@ probe assets removed from `/data/image/240x296/ApplicationIcon/`.
 
 - **x/y = top-left corner** of the item's box for 113 text, 102 bar, 101 ring and 109 arc (panel x = x - 656).
   For 113 the box is the text's line box, so the glyphs start a little below y (font ascent padding).
+- **113 text size and line box (verified 2026-11-27, fb11 vs a PySide6 render with the device fonts):** KeyboardDevice
+  draws a `QGraphicsTextItem`. Pixel size = `text_font` point size x `scale` (1 pt = 1 px; `Arial,72,...` at scale
+  0.3 = 21.6 px). Family, weight and italic come from `text_font`. The scale origin is the top-left corner. There is
+  no document margin, so the baseline is at y + the ascent of the font that drew the glyph. Qt's render matched the
+  fb11 capture of page 0 pixel for pixel.
+- **Glyph fallback:** the stock clock's colon is U+FF1A `：`, which Arial lacks. The device takes it from Microsoft
+  New Tai Lue (ink at x 112..122, y 28..60 on stock page 0, which only that font reproduced). The line ascent is New
+  Tai Lue's (1899/2048, Arial's is 1854). Device fonts with U+FF1A: msyh, msyi, ntailu/ntailub, taile/taileb.
 - 102 bar: exactly `w` x `h` at x/y.
 - 101 ring: diameter = 2 x `radius` x `scale` (radius 100, scale 0.4 = 80 px).
 - 109 arc: diameter = 2 x `radius` (26 = 52 px) at scale 1.

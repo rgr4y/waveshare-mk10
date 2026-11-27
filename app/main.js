@@ -403,9 +403,13 @@ function onContract(m) {
 }
 function pushStats() {
   sampleHost() // async; feeds the next tick
+  // one sample per tick (CPU usage is a delta since the last call): all of it to the editor preview,
+  // the keys the page asked for to the device
+  const all = collectStats(ALL_STATS, { showUnit: statsContract?.showUnit ?? true })
+  send('stats', all)
   const dev = session.held
   if (!settings.liveStats || !dev?.isOpen || session.pushing) return
-  const vals = collectStats(statsContract?.keys ?? ALL_STATS, { showUnit: statsContract?.showUnit ?? true })
+  const vals = statsContract ? Object.fromEntries(statsContract.keys.filter((k) => k in all).map((k) => [k, all[k]])) : all
   if (Object.keys(vals).length) dev.sendSystemData(vals).catch(() => {}) // port gone: syncPort reopens it
 }
 

@@ -532,6 +532,10 @@ function renderBackground() {
   })
 }
 
+let stats = {} // live data key -> string, from the main process once a second
+// keys Studio doesn't fill get a dummy of about the right width, for lining things up (not device formats)
+const DUMMY = [[/usage|使用率|percent/i, '42%'], [/温度|temp/i, '45°C'], [/db|分贝/i, '40 dB'], [/日期|date/i, '2026-01-01'], [/时间|time/i, '12:00']]
+const statText = (k) => stats[k] ?? DUMMY.find(([re]) => re.test(k))?.[1] ?? '42'
 const CLOCK = { hour: () => String(new Date().getHours()).padStart(2, '0'), minute: () => String(new Date().getMinutes()).padStart(2, '0'), second: () => String(new Date().getSeconds()).padStart(2, '0') }
 
 // widgets: every item that is neither a key (115) nor the background video. backgroundType "child"
@@ -613,8 +617,19 @@ function draw(box, items, dx, byZ = false) {
       el = tpl('tpl-sec-text')
       const clock = it.text === 'Text' ? CLOCK[it.systemData] : null
       if (clock) el.dataset.clock = it.systemData
-      el.textContent = clock ? clock() : it.text === 'Text' && /usage/i.test(it.systemData ?? '') ? '--%' : (it.text ?? '')
-      el.style.fontSize = clock || it.text === '：' ? '48px' : it.text === 'Text' ? '18px' : '14px'
+      // bound to live data: this computer's stats, the same values the device gets (onStats ticks them)
+      const stat = !clock && it.flag === '1' ? it.systemData : null
+      if (stat) el.dataset.stat = stat
+      el.textContent = clock ? clock() : stat ? statText(stat) : (it.text ?? '')
+      // The device draws a QGraphicsTextItem: text_font at 1 pt = 1 px, scaled by `scale` from its top-left,
+      // baseline at y + ascent. Matched pixel for pixel against fb11 on 2026-11-27 (docs/theme-format.md).
+      const [family, pt, px, , weight, italic] = (it.font ?? '').split(',')
+      // glyphs the font lacks: the device's Qt took the stock clock's fullwidth colon (U+FF1A, not in
+      // Arial) from Microsoft New Tai Lue (fb11 ink matched, 2026-11-27); Han text needs YaHei
+      el.style.fontFamily = `"${family || 'Arial'}", Arial, "Microsoft New Tai Lue", "Microsoft YaHei", sans-serif`
+      el.style.fontWeight = qtWeight(weight)
+      el.style.fontStyle = italic === '1' ? 'italic' : 'normal'
+      el.style.fontSize = `${(Number(pt) > 0 ? Number(pt) : Number(px) > 0 ? Number(px) : 12) * (it.scale || 1)}px`
       if (it.raw?.front_color) el.style.color = cssColor(it.raw.front_color)
     } else if (it.type === '109' || it.type === '101') {
       el = tpl('tpl-sec-ring')
@@ -1342,7 +1357,7 @@ function wirePanel() {
 
   // align bar
   $('panel-bar').addEventListener('click', (e) => {
-    const b = e.target.closest('button')
+    const b = e.target.closest('[data-align], [data-z]')
     const index = ui.sel?.index
     if (!b || ui.sel?.kind !== 'panel' || isPanelBg(selPanel())) return
     if (b.dataset.z) return void run(window.mk10.panelZ(ui.page, index, b.dataset.z))
@@ -1643,6 +1658,10 @@ async function init() {
     if (ui.summary) render()
   }
   window.mk10.onBgState(onBg)
+  window.mk10.onStats((v) => {
+    stats = v
+    document.querySelectorAll('[data-stat]').forEach((el) => { if (stats[el.dataset.stat] != null) el.textContent = stats[el.dataset.stat] })
+  })
   window.mk10.bgState().then(onBg, () => {})
   window.mk10.onLog(addLog)
   // a select sent right after an open must land after that open's page reset, not before it
