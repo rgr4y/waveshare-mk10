@@ -137,7 +137,7 @@ test('session: panel ops are undoable and a key title edit clears the stack', { 
     - 114: `w`, `h`
   - `setPanelItem(theme, pageIndex, index, fields: Record<string, string|number>) -> void`: rejects names not in `PANEL_FIELDS[type]` (`<name> can't be edited on a type <t> item`), stores `String(v)`.
 - Produces (`Session`/IPC): `panelAdd(page, kind) -> index`, `panelSet(page, index, fields)`, `dataNames() -> string[]` (= `ALL_STATS` + `hour`, `minute`, `date` + every `system_data_name` in the theme + Task 6 custom names, sorted, unique, no `randomNumbers`). Kinds `panelAdd`, `panelSet` join `KEY_OPS`.
-- Templates (from stock items, `docs/theme-format.md` field sets): `text` = 113 flag 0 `text_str` "Text", Arial 24 white; `data` = 113 flag 1 `CPU Usage`; `clock` = 111 `displayType` 0, `displayNum` 2, `system_data_name` `hour`, `w` 96 `h` 64, `text_font` Microsoft YaHei; `bar` = page 5's 102 (80x12); `ring` = page 1's 101 (radius 100, scale 0.4).
+- Templates (from stock items, `docs/theme-format.md` field sets): `text` = 113 flag 0 `text_str` "Text", Arial 24 white; `data` = 113 flag 1 `CPU Usage`; `clock` = 111 `displayType` 0, `displayNum` 2, `system_data_name` `hour`, `w` 96 `h` 64, `text_font` Microsoft YaHei; `bar` = stock page 8's 102 (80x12); `ring` = page 1's 101 (radius 100, scale 0.4).
 
 - [ ] **Step 1: Failing tests:** `addPanelItem` for each kind returns an index whose item `isPanelItem`, has a unique id, z above every other panel item, and lies inside the panel; `setPanelItem` writes strings and rejects `x` and unknown fields; `dataNames` contains `CPU Usage`, `hour`, `avg_dB` (stock page) and not `randomNumbers`.
 - [ ] **Step 2:** Run, expect FAIL. **Step 3:** implement. **Step 4:** `npm test && npm run lint` pass.
