@@ -388,6 +388,7 @@ export class Session extends EventEmitter {
   }
 
   // Keep the serial port open (on) so the device's unsolicited messages arrive, or release it.
+  // V1 frames from the held port are re-emitted as 'v1' (key events, page contracts).
   // Returns whether a Device is held. Not found or busy (a push holds it) returns false; the
   // caller retries.
   async holdDevice(on) {
@@ -403,8 +404,10 @@ export class Session extends EventEmitter {
     const dev = new Device()
     dev.on('error', () => {}) // a port error ends in 'close', which drops it below
     dev.on('close', () => { if (this.held === dev) this.held = null })
+    dev.on('v1', (m) => this.emit('v1', m))
     await dev.open(path)
     this.held = dev
+    this.heldAt = Date.now()
     return true
   }
 

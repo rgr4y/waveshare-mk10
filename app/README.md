@@ -3,7 +3,7 @@
 Electron host for the Waveshare MK10 key panel (ScreenKey replacement).
 
 - `lib/` core library (QDataStream, .Theme codec, serial framing, device). `npm test`, `npm run lint`.
-- `npm run cli -- <cmd>` for theme info/roundtrip and device calls (`MK10_PORT` overrides port detection).
+- `npm run cli -- <cmd>` for theme info/roundtrip, device calls and `keys` (prints what each key press would do; opens nothing) (`MK10_PORT` overrides port detection).
 - Format docs: `../docs/theme-format.md`.
 
 ## Usage
@@ -96,6 +96,15 @@ appended to `/tmp/mk10.log`. **Save log…** writes the same lines to a file you
   status (polled every 2 s while Settings is open) and Open buttons for the Accessibility, Screen
   Recording and Automation panes in System Settings. Nothing is requested at startup. The Accessibility
   button triggers the system prompt at most once per session, then opens the pane.
+- **Key actions** (Settings > Key actions, on by default): when a key is pressed, the device sends
+  its action (V1 cmd 13) and Studio runs the Mac-side ones. Open website runs http and https URLs
+  only. Open folder and Open file need an absolute path or `~/`, and Open file refuses scripts,
+  apps and executables (Open folder refuses `.app` and other bundles). Presses queued while the port
+  was closed arrive in a burst when it opens; actions in the first second after opening are
+  dropped (logged as "ignored N press(es)"). Keyboard, macro and page keys run on the device. Typing text and passwords,
+  sound devices, screenshots and music show "not supported yet". Each run or refusal goes to
+  Activity, and refusals also show a toast. While this is on, Studio holds the USB serial port
+  (retrying every 2 s), which locks the vendor app out. The rules are in `lib/keyactions.js`.
 - **JSON RPC window**: Settings > Developer. A separate window lists the old-style V1 frames the device sends (key events with the key's action, page contracts), decoded, and every JSON-RPC message Studio
   sends to KeyboardDevice over USB serial, and every reply, as formatted JSON in a read-only Monaco
   view (Follow, Wrap, Clear). It replays the last 500 messages when it opens. Long strings, such as

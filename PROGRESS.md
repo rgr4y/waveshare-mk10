@@ -809,3 +809,29 @@ Verification
   - Phase 3b page tracking: unique per-page keycodes versus a V1 cmd 13 listen with `mkv1.py`. The 3b/3c bead list still needs Rob's verdicts.
   - Device leftovers in `/data/theme/MK10`: `mk10test.Theme`, `mk10ctl.Theme`, `mk10studio-1795571497354.Theme`, plus test WAVs in `/tmp` (deletion not yet approved).
   - Small items: drop an audio file onto a key, MCP `set_key_sound`, folder names in the sidebar, slider icons, Monaco 0.58 later, gauges, clock size, repo remote (secrets check first).
+
+## 2026-11-25 — Phase 3b: key actions on the Mac
+
+- Outcome
+  - `f48ee91`: Studio runs host-side key actions. The device sends each press as V1 cmd 13 with the key's action map, so no page tracking or theme lookup is needed. `lib/keyactions.js` decides: Open website (http/https only, `shell.openExternal`), Open folder and Open file (absolute or `~/` paths, `shell.openPath`). Open file refuses scripts, apps and executables; Open folder refuses `.app` and other bundles. Press only; the release frame is ignored. Text, password, Loudspeaker/Microphone, screenshot, playMusic and ControlFlow log "not supported yet". Device-run types (keyboard, qmk_*, page keys) are left alone.
+  - Settings > Key actions, **on by default**. While on, Studio holds the USB serial port from launch (one 2 s loop now covers this and the JSON RPC window), so ScreenKeyMacOS and the CLI tools (`mkv1.py`, `pushfile.py`) see the port as busy until it's unticked.
+  - Replay guard: presses queued while the port was closed arrive in one burst when it opens (seen 2026-11-24). Key actions in the first second after the port opens are dropped and counted in Activity.
+  - Docs: README, scope (3b listener done, rest listed), validation items (`3991d3b` and this commit).
+- Verification
+  - Lint clean, 29 tests pass (planner: press/release, URL and path rules, bundle refusal, replay drop).
+  - End to end through a socat pty pair: a real `Device` decodes a cmd 13 frame split across two writes; the planner returns the openWeb run on press and nothing on release.
+  - Not tested: the main-process glue (`session` 'v1' to `onKeyEvent` to `shell.open*`) with a real key press; the replay guard against a real burst. Both are in the validation doc. Text typing was deliberately not tried: it would type into whatever has focus.
+- Follow-up
+  - Rob's openWeb keys now open their URL on every press (the HEH folder's sound keys are openWeb + soundFile). Untick Settings > Key actions or change those keys' action if that's unwanted.
+  - Text and password typing: try the device's `keyboardInput` JSON method first (untested), Accessibility as fallback.
+  - Missing toasts during Rob's serial push: still unexplained; they work in a fresh instance.
+  - Capture openApp and shell-command actions from the vendor app so their fields are known.
+
+
+## 2026-11-25 — GD32 key UART captured; presses injectable
+
+- Outcome: KeyboardDevice's `/dev/ttyS1` link to the GD32 key MCU is decoded (docs/gd32-uart.md). Key frames are 13 bytes, `aa 55 <sum> 06 f9 16 <pressed> <row> <col> 00 00 f5 5f`. Presses can now be injected in software.
+- LilAlpine (not pushed): `1a58a71` opt-in `mk10-gd32-relay` service + perl relay + `mk10-gd32-inject`, `394b77c` ioctl fix, `1d44f47` `mk10-gd32-inject key <row> <col> [tap|press|release]`. Installed on the device; relay is running now (not in any runlevel).
+- Verification: Rob's captured press frames match the computed checksum. Injected row 1 col 4 (pageSwitch): the screen woke and the page changed. lenny (`/dev/ttyACM0`) received V1 cmd 15 plus V1 cmd 13 press and release, the same as a real press.
+- MK10 is now on lenny (`/dev/ttyACM0`; lenny `ttyUSB1` is the UPS, never touch it). lenny's panel backlight set to 0 (was 7041/21333; resets on reboot).
+- Follow-up: run Studio's key-action glue against injected presses; find out what the daemon's cmd `0x05` sweep after a page change does.

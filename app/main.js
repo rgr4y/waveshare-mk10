@@ -10,6 +10,7 @@ import { Session, DEFAULT_SSH } from './lib/session.js'
 import { hidToQmk, isModifier } from './lib/qmk.js'
 import { fontManifest, syncDeviceFonts } from './lib/fonts.js'
 import { wire } from './lib/device.js'
+import { planKeyAction, OPEN_GRACE_MS } from './lib/keyactions.js'
 
 // device fonts, copied from the MK10 over ssh, served to the renderer as mk10font://f/<file>
 protocol.registerSchemesAsPrivileged([{ scheme: 'mk10font', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }])
@@ -33,7 +34,7 @@ const session = new Session()
 let win = null
 let mcp = null
 let tray = null
-let settings = { lastFile: null, reopenLast: true, onboarded: false, mcp: { enabled: false, port: 47110 }, ssh: { ...DEFAULT_SSH } }
+let settings = { lastFile: null, reopenLast: true, onboarded: false, keyActions: true, mcp: { enabled: false, port: 47110 }, ssh: { ...DEFAULT_SSH } }
 let settingsFile
 
 // ---- settings
@@ -301,15 +302,44 @@ function openCapture() {
   w.loadFile(join(import.meta.dirname, 'public', 'capture.html'))
 }
 
+// ---- serial port hold. Studio keeps the port open while key actions are on or the JSON RPC
+// window is open, so the device's own messages arrive (retried every 2 s: unplugged, or busy).
+// Pushes and levels reuse the held port. Holding it locks the vendor app out of the port.
+const wantPort = () => (settings.keyActions && !SHOT) || !!(rpcWin && !rpcWin.isDestroyed())
+let portWanted = false
+function syncPort() {
+  const want = wantPort()
+  if (want) session.holdDevice(true).catch(() => {}) // busy or gone: the next tick retries
+  else if (portWanted) session.holdDevice(false).catch(() => {})
+  portWanted = want
+}
+
+// ---- key actions (Phase 3b): the device reports each press with the key's action (V1 cmd 13);
+// the Mac runs the host-side ones. lib/keyactions.js decides what runs.
+let replayed = 0 // presses dropped since the port last opened (queued while it was closed)
+function onKeyEvent(m) {
+  if (m.v1 !== 13 || !settings.keyActions) return
+  const plan = planKeyAction(m.payload, { sinceOpenMs: Date.now() - (session.heldAt ?? 0) })
+  if (!plan) return
+  if (plan.drop) {
+    if (!replayed++) setTimeout(() => { log(`key: ignored ${replayed} press(es) queued while the port was closed`); replayed = 0 }, OPEN_GRACE_MS)
+    return
+  }
+  if (plan.skip) {
+    log(`key: ${plan.skip}`)
+    return status(`Key: ${plan.skip}`, { error: true })
+  }
+  log(`key: ${plan.type} ${plan.target}`)
+  const done = plan.run === 'url' ? shell.openExternal(plan.target)
+    : shell.openPath(plan.target).then((err) => { if (err) throw new Error(err) })
+  done.catch((e) => { log(`key: ${plan.type} failed: ${e.message}`); status(`Key: ${plan.type} failed: ${e.message}`, { error: true }) })
+}
+
 // ---- developer: JSON-RPC window. Shows every message Studio's serial Device sends or gets.
-// While it is open Studio holds the port (retried every 2 s: unplug, busy), so the device's own
-// messages stream too; pushes and levels reuse the held port. Holding it locks out the vendor app.
 // Long strings (saveToFile base64 chunks) are cut so the log stays readable.
 const RPC_KEEP = 500
 const rpcLog = [] // last RPC_KEEP entries, replayed when the window opens
 let rpcWin = null
-let rpcHold = null // retry timer while the window is open
-const holdPort = () => session.holdDevice(true).catch(() => {}) // busy or gone: next tick retries
 const clip = (v) => typeof v === 'string' && v.length > 200 ? `${v.slice(0, 80)}… (${v.length} chars)`
   : Array.isArray(v) ? v.map(clip) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, clip(x)])) : v
 wire.on('msg', (e) => {
@@ -329,13 +359,11 @@ function setRpcWindow(on) {
   const w = rpcWin
   w.webContents.once('did-finish-load', () => {
     w.webContents.send('mk10:rpc', rpcLog)
-    holdPort()
-    rpcHold = setInterval(holdPort, 2000)
+    syncPort()
   })
   w.on('closed', () => {
     rpcWin = null
-    clearInterval(rpcHold)
-    session.holdDevice(false).catch(() => {})
+    syncPort()
     if (app.isQuitting || !settings.jsonRpcWindow) return
     settings.jsonRpcWindow = false // closed by hand; left open at quit, it reopens at launch
     saveSettings().catch(() => {})
@@ -390,7 +418,7 @@ const openPane = (pane) => {
 }
 let axPrompted = false // the system "grant access" prompt shows at most once per app session
 
-const PREFS = new Set(['reopenLast', 'onboarded', 'jsonRpcWindow']) // boolean prefs the renderer may set
+const PREFS = new Set(['reopenLast', 'onboarded', 'jsonRpcWindow', 'keyActions']) // boolean prefs the renderer may set
 
 function registerIpc() {
   const h = (name, fn) => ipcMain.handle(`mk10:${name}`, (_e, ...a) => fn(...a))
@@ -445,6 +473,7 @@ function registerIpc() {
     settings[key] = value
     await saveSettings()
     if (key === 'jsonRpcWindow') setRpcWindow(value)
+    if (key === 'keyActions') syncPort()
   })
   h('clearRpc', () => { rpcLog.length = 0 })
   h('setSsh', async (ssh) => {
@@ -596,6 +625,9 @@ app.whenReady().then(async () => {
   createWindow()
   if (!SHOT) createTray()
   if (settings.jsonRpcWindow && !SHOT) setRpcWindow(true)
+  session.on('v1', onKeyEvent)
+  syncPort()
+  setInterval(syncPort, 2000)
   if (DEV) watchPublic()
   win.webContents.once('did-finish-load', async () => {
     const shot = flag('--screenshot')

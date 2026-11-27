@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import { decodeTheme, encodeTheme, pages, listKeys } from './lib/theme.js'
 import { Device } from './lib/device.js'
+import { planKeyAction } from './lib/keyactions.js'
 
 const log = (...a) => console.error('[mk10]', ...a)
 const sha = (b) => createHash('sha256').update(b).digest('hex')
@@ -12,7 +13,8 @@ const usage = `usage: node cli.js <command>
   roundtrip <theme>       decode -> encode, compare sha256
   ports                   list MK10 serial ports (read-only)
   call <method> [json]    call a device method (auto-detects port; MK10_PORT overrides)
-  push <local> <remote>   push a file to the device`
+  push <local> <remote>   push a file to the device
+  keys [seconds]          print each key event and what Studio's key actions would do (opens nothing; default 30, max 55)`
 
 async function openDevice() {
   const dev = new Device()
@@ -67,6 +69,21 @@ const cmds = {
     } finally {
       await dev.close()
     }
+  },
+
+  async keys(seconds = '30') {
+    const ms = Math.min(Number(seconds) || 30, 55) * 1000
+    const dev = await openDevice()
+    const openedAt = Date.now()
+    dev.on('v1', (m) => {
+      if (m.v1 !== 13) return console.log(`v1 ${m.v1} ${m.name}`)
+      const [st, a] = Array.isArray(m.payload) ? m.payload : []
+      const plan = planKeyAction(m.payload, { sinceOpenMs: Date.now() - openedAt })
+      console.log(`r${st?.row}c${st?.col} ${st?.pressed ? 'down' : 'up  '} ${a?.type} -> ${JSON.stringify(plan)}`)
+    })
+    log(`listening ${ms / 1000} s`)
+    await new Promise((r) => setTimeout(r, ms))
+    await dev.close()
   },
 
   async push(local, remote) {

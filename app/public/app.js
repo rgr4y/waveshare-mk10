@@ -674,6 +674,8 @@ async function init() {
   registerFonts(await window.mk10.fonts())
   $('mcp-badge').addEventListener('click', openSettings)
   $('reopen-last').checked = cfg.reopenLast !== false
+  $('key-actions').checked = cfg.keyActions !== false
+  $('key-actions').addEventListener('change', (e) => run(window.mk10.setPref('keyActions', e.target.checked)))
   $('reopen-last').addEventListener('change', (e) => run(window.mk10.setPref('reopenLast', e.target.checked)))
   const showLogin = (l) => {
     $('login-item').checked = !!l.openAtLogin
